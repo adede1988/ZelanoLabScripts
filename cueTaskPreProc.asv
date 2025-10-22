@@ -1,0 +1,1036 @@
+clear
+
+codePre = 'G:\My Drive\GitHub\';
+datPre = { 'R:\Neurology\Zelano_Lab\Lab_Common\Dupi\', ... 
+           'R:\Neurology\Zelano_Lab\Lab_Common\OBEControl\'};
+
+%prefix index for data folder: 
+datPrei = [1,1,1,1,2,2,2,2,2]; 
+
+sessionIDs = {'250818_Dupi_NMH_JH_1', ... %preprocessed
+               '250623_DUPI_NMH_KS_2',... %preprocessed
+              ... '250623_Dupi_NMH_KS_1',... %bad sniffs
+                '250818_Dupi_NMH_JH_2',... %preprocessed
+                '250811_Dupi_NMH_TPB_1',... %preprocessed
+              '230611_OBE_NMH_AZ',... %heavy 60
+                '241017_OBE_NMH_AS',...  %preprocessed
+                '240923_OBE_NMH_HRM',... #preprocessed
+                '250310_OBE_NMH_FS',...
+                '250313_OBE_NMH_CS'};   
+
+%there are multiple respiration channels in many recordings
+%which one is right for each session: 
+rspIDX = [1,1,1,1,1,1,1,1,1]; 
+rspFlip = [1,1,1,1,1,1,1,1,1]; %hard code flip
+
+addpath([codePre 'HpcAccConnectivityProject/helperFuncs'])
+addpath(genpath([codePre 'myFrequentUse']))
+addpath([codePre 'myFrequentUse/export_fig_repo'])
+addpath(genpath('C:\Users\dtf8829\Documents\eeglab2025.0.0'))
+
+addpath([codePre 'fieldtrip-20230118'])
+addpath([codePre 'emotionDecoding'])
+addpath([codePre 'slowBreathing'])
+
+set(0, 'defaultfigurewindowstyle', 'docked')
+ft_defaults
+
+%% 
+
+for sessi = 1:length(sessionIDs)
+%% data load 
+
+    %find behavioral folder: 
+    subFolders = dir([datPre{datPrei(sessi)} sessionIDs{sessi}]);
+    subFolders = subFolders([subFolders.isdir]);
+    idx = cellfun(@(x) contains(x, 'ehavior'), {subFolders.name});
+    idx = find(idx); 
+    if length(idx) ~= 1
+        error('behavioral data folder not uniquely identified!')
+    end
+    behFold = subFolders(idx);
+    datFolders = dir([datPre{datPrei(sessi)} sessionIDs{sessi} ...
+                       '\raw\']);
+
+    idx = cellfun(@(x) contains(x, 'raw_cueTaskOdor'), {datFolders.name});
+    idx = find(idx); 
+    
+    if length(idx) == 2
+        %process when two runs need to be stitched together: 
+
+        %load in both files: 
+        dat1 = load([datFolders(idx(1)).folder '\' ...
+                     datFolders(idx(1)).name  '\' ...
+                     datFolders(idx(1)).name  '.mat']);
+        dat1 = dat1.curDat; 
+        dat2 = load([datFolders(idx(2)).folder '\' ...
+                     datFolders(idx(2)).name  '\' ...
+                     datFolders(idx(2)).name  '.mat']);
+        dat2 = dat2.curDat; 
+
+        %behavioral data loading
+        switch sessionIDs{sessi}
+            case '230611_OBE_NMH_AZ'
+                %find the behavioral files: 
+                behDir = dir([behFold.folder, '\' behFold.name '\olf_cue']);
+                %eliminate echem and imagine files
+                idx = cellfun(@(x) contains(x, 'echem'), {behDir.name});
+                idx = find(idx);
+                behDir(idx) = []; 
+                idx = cellfun(@(x) contains(x, 'imagine'), {behDir.name});
+                idx = find(idx);
+                behDir(idx) = [];
+                idx = cellfun(@(x) contains(x, 'txt'), {behDir.name});
+                idx = find(idx);
+                behDir(idx) = [];
+                idx = cellfun(@(x) contains(x, 'mat'), {behDir.name});
+                idx = find(idx);
+                if length(idx) ~= 3
+                    error('wrong number of behavior files available!')
+                end
+                %load the behavioral files
+                behDat1 = [behDir(idx(1)).folder '\' behDir(idx(1)).name];
+                behDat1 = load(behDat1);
+                behDat2 = [behDir(idx(2)).folder '\' behDir(idx(2)).name];
+                behDat2 = load(behDat2);
+                labs = [behDir(idx(3)).folder '\' behDir(idx(3)).name];
+                labs = load(labs);
+
+                behDat1 = outMat_to_table(behDat1.outMat, labs.datalabel);
+                behDat2 = outMat_to_table(behDat2.outMat, labs.datalabel);
+    
+            case '250310_OBE_NMH_FS'
+                 %find the behavioral files: 
+                behDir = dir([behFold.folder, '\' behFold.name '\olf_cue']);
+                %eliminate echem and imagine files
+                idx = cellfun(@(x) contains(x, 'echem'), {behDir.name});
+                idx = find(idx);
+                behDir(idx) = []; 
+                idx = cellfun(@(x) contains(x, 'imagine'), {behDir.name});
+                idx = find(idx);
+                behDir(idx) = [];
+                idx = cellfun(@(x) contains(x, 'txt'), {behDir.name});
+                idx = find(idx);
+                behDir(idx) = [];
+                idx = cellfun(@(x) contains(x, 'mat'), {behDir.name});
+                idx = find(idx);
+                if length(idx) ~= 2
+                    error('wrong number of behavior files available!')
+                end
+                %load the behavioral files
+                behDat1 = [behDir(idx(1)).folder '\' behDir(idx(1)).name];
+                behDat1 = load(behDat1);
+                behDat2 = [behDir(idx(2)).folder '\' behDir(idx(2)).name];
+                behDat2 = load(behDat2);
+               
+
+                behDat1 = outMat_to_table(behDat1.outMat, behDat1.datalabel);
+                behDat2 = outMat_to_table(behDat2.outMat, behDat2.datalabel);
+
+            otherwise
+
+                %find the behavioral files: 
+                behDir = dir([behFold.folder, '\' behFold.name '\olf_cue']);
+                %eliminate echem and imagine files
+                idx = cellfun(@(x) contains(x, 'echem'), {behDir.name});
+                idx = find(idx);
+                behDir(idx) = []; 
+                idx = cellfun(@(x) contains(x, 'imagine'), {behDir.name});
+                idx = find(idx);
+                behDir(idx) = [];
+                idx = cellfun(@(x) contains(x, 'visual'), {behDir.name});
+                idx = find(idx);
+                behDir(idx) = [];
+                idx = cellfun(@(x) contains(x, 'mat'), {behDir.name});
+                idx = find(idx);
+                behDir(idx) = [];
+                idx = cellfun(@(x) contains(x, 'txt'), {behDir.name});
+                idx = find(idx);
+                if length(idx) ~= 2
+                    error('wrong number of behavior files available!')
+                end
+                %load the behavioral files
+                behDat1 = [behDir(idx(1)).folder '\' behDir(idx(1)).name];
+                behDat1 = readtable(behDat1);
+                behDat2 = [behDir(idx(2)).folder '\' behDir(idx(2)).name];
+                behDat2 = readtable(behDat2);
+        end
+        %check if there is a value greater than 10 in the odor column
+        %recode if necessary
+        if max(behDat1.odor) == 11 || min(behDat1.odor)==2
+            behDat1.odor = behDat1.odor - 1; 
+            behDat2.odor = behDat2.odor - 1; 
+        end
+
+
+
+        %start making the oudDat struct
+        outDat = struct; 
+        outDat.labels = dat1.outLabs;
+        outDat.CSClist = dat1.ncslabels; 
+        outDat.fs = dat1.rawData.fsample; 
+        outDat.sessID = sessionIDs{sessi}; 
+
+        
+        %process the TTL pulses for dat 1: 
+        idx = cellfun(@(x) contains(x, 'event'), outDat.labels);
+        photoDiode = dat1.rawData.trial{1}(idx, :); 
+
+        photoDiode = (photoDiode - mean(photoDiode)) / std(photoDiode);
+    
+
+        downs = find(photoDiode(1:end-1) > -1.5 & photoDiode(2:end)<-1.5);
+        ups = find(photoDiode(1:end-1) < -1.5 & photoDiode(2:end)>-1.5);
+        difVals = ups - downs; %difVals is length of TTL pulses
+        downs(difVals>1500) = []; 
+        ups(difVals>1500) = []; 
+        difVals(difVals>1500) = []; 
+
+        downs(difVals<300) = []; 
+        ups(difVals<300) = []; 
+        difVals(difVals<300) = []; 
+
+        switch sessionIDs{sessi}
+            case '230611_OBE_NMH_AZ'
+       
+            
+
+            case  '241017_OBE_NMH_AS'
+                starti = 1; 
+                for di = 5:length(downs)
+                    if downs(di) - downs(di-4) < 3500
+                        starti = di; 
+                    end
+                end
+                downs(1:starti) = []; 
+                difVals(1:starti) = []; 
+                downs(end-1:end) = []; 
+                difVals(end-1:end) = []; 
+        
+                if length(downs) ~= 40
+                    error('wrong number of TTLs')
+                end
+            otherwise 
+                starti = 1; 
+                for di = 5:length(downs)
+                    if downs(di) - downs(di-4) < 3500
+                        starti = di; 
+                    end
+                end
+                downs(1:starti) = []; 
+                difVals(1:starti) = []; 
+                downs(end-1:end) = []; 
+                difVals(end-1:end) = []; 
+        
+                if length(downs) ~= 60 - sum(arrayfun(@(x) x==999, behDat1.response))
+                    error('wrong number of TTLs')
+                end
+        end
+
+        cueTTLs = downs(difVals < 850);
+        sniffTTLs = downs(difVals > 850 & difVals < 1250);
+        responseTTLs = downs(difVals > 1250); 
+    
+        figure
+        plot(photoDiode)
+        xline(cueTTLs, 'color', 'magenta', 'linewidth', 2)
+        xline(sniffTTLs, 'color', 'green', 'linewidth', 2)
+        
+        if isempty(responseTTLs)
+            TTLs = nan(20, 3); 
+            TTLs(:,1) = cueTTLs; 
+            TTLs(:,2) = sniffTTLs; 
+                TTLs =round(TTLs ./ 4);
+        else
+            try
+                xline(responseTTLs, 'color', 'k', 'linewidth',2)
+                %store all TTLs into one matrix: 
+                %col 1: trialStarts
+                %col 2: sniff 
+                %col 3: buttonPress
+                
+                TTLs = nan(20, 3); 
+                TTLs(:,1) = cueTTLs; 
+                TTLs(:,2) = sniffTTLs; 
+                TTLs(:,3) = responseTTLs;  
+                TTLs =round(TTLs ./ 4);
+            catch 
+                TTLs = nan(20, 3); 
+                ri = 1; 
+                for tt = 1:size(behDat1,1)
+                    if isempty(behDat1.response_str{tt})
+                        TTLs(tt,1) = cueTTLs(tt); 
+                        TTLs(tt,2) = sniffTTLs(tt); 
+                    else
+                        TTLs(tt,1) = cueTTLs(tt); 
+                        TTLs(tt,2) = sniffTTLs(tt); 
+                        TTLs(tt,3) = responseTTLs(ri);
+                        ri = ri+1; 
+                    end
+                end
+                TTLs =round(TTLs ./ 4);
+                warning('missed response TTLs')
+                
+            end
+        end
+
+        %process the TTL pulses for dat 2: 
+        idx = cellfun(@(x) contains(x, 'event'), outDat.labels);
+        photoDiode = dat2.rawData.trial{1}(idx, :); 
+
+        photoDiode = (photoDiode - mean(photoDiode)) / std(photoDiode);
+    
+
+        downs = find(photoDiode(1:end-1) > -1.5 & photoDiode(2:end)<-1.5);
+        ups = find(photoDiode(1:end-1) < -1.5 & photoDiode(2:end)>-1.5);
+        difVals = ups - downs; %difVals is length of TTL pulses
+        downs(difVals>1500) = []; 
+        ups(difVals>1500) = []; 
+        difVals(difVals>1500) = []; 
+
+        downs(difVals<300) = []; 
+        ups(difVals<300) = []; 
+        difVals(difVals<300) = []; 
+
+         switch sessionIDs{sessi}
+            case '230611_OBE_NMH_AZ'
+                downs(1:3) = []; 
+                difVals(1:3) = []; 
+            
+
+            case  '241017_OBE_NMH_AS'
+                starti = 1; 
+                for di = 5:length(downs)
+                    if downs(di) - downs(di-4) < 3500
+                        starti = di; 
+                    end
+                end
+                downs(1:starti) = []; 
+                difVals(1:starti) = []; 
+                downs(end-1:end) = []; 
+                difVals(end-1:end) = []; 
+        
+                if length(downs) ~= 40
+                    error('wrong number of TTLs')
+                end
+            otherwise 
+                starti = 1; 
+                for di = 5:length(downs)
+                    if downs(di) - downs(di-4) < 3500
+                        starti = di; 
+                    end
+                end
+                downs(1:starti) = []; 
+                difVals(1:starti) = []; 
+                downs(end-1:end) = []; 
+                difVals(end-1:end) = []; 
+        
+                if length(downs) ~= 60 - sum(arrayfun(@(x) x==999, behDat2.response))
+                    error('wrong number of TTLs')
+                end
+         end
+
+        cueTTLs = downs(difVals < 850);
+        sniffTTLs = downs(difVals > 850 & difVals < 1250);
+        responseTTLs = downs(difVals > 1250); 
+    
+         figure
+        plot(photoDiode)
+        xline(cueTTLs, 'color', 'magenta', 'linewidth', 2)
+        xline(sniffTTLs, 'color', 'green', 'linewidth', 2)
+          if isempty(responseTTLs)
+            TTLs2 = nan(20, 3); 
+            TTLs2(:,1) = cueTTLs; 
+            TTLs2(:,2) = sniffTTLs; 
+                TTLs2 =round(TTLs2 ./ 4);
+        else
+            try
+                xline(responseTTLs, 'color', 'k', 'linewidth',2)
+                %store all TTLs into one matrix: 
+                %col 1: trialStarts
+                %col 2: sniff 
+                %col 3: buttonPress
+               
+                TTLs2 = nan(20, 3); 
+                TTLs2(:,1) = cueTTLs; 
+                TTLs2(:,2) = sniffTTLs; 
+                TTLs2(:,3) = responseTTLs;  
+                TTLs2 =round(TTLs2 ./ 4);
+            catch 
+                TTLs2 = nan(20, 3); 
+                ri = 1; 
+                for tt = 1:size(behDat1,1)
+                    if isempty(behDat1.response_str{tt})
+                        TTLs2(tt,1) = cueTTLs(tt); 
+                        TTLs2(tt,2) = sniffTTLs(tt); 
+                    else
+                        TTLs2(tt,1) = cueTTLs(tt); 
+                        TTLs2(tt,2) = sniffTTLs(tt); 
+                        TTLs2(tt,3) = responseTTLs(ri);
+                        ri = ri+1; 
+                    end
+                end
+                TTLs2 =round(TTLs2 ./ 4);
+                warning('missed response TTLs')
+                
+            end
+          end
+        
+
+        %combine everything! 
+        L1 = size(dat1.rawData.trial{1},2);
+        TTLs2 = TTLs2 + round(L1/4); 
+
+        TTLs = [TTLs; TTLs2]; 
+        comboDat = [dat1.rawData.trial{1}, ...
+                    dat2.rawData.trial{1}];
+        behDat = [behDat1; behDat2]; 
+
+        idx = cellfun(@(x) contains(x, 'event'), outDat.labels);
+        photoDiode = comboDat(idx, :); 
+
+        figure
+        plot(photoDiode)
+        xline(TTLs(:,1).*4, 'color', 'magenta')
+        xline(TTLs(:,2).*4, 'color', 'green')
+        xline(TTLs(:,3).*4, 'color', 'k')
+        
+        outDat.behDat = behDat; 
+        outDat.data = comboDat;
+        
+    
+    else
+        dat1 = load([datFolders(idx(1)).folder '\' ...
+                     datFolders(idx(1)).name  '\' ...
+                     datFolders(idx(1)).name  '.mat']);
+        dat1 = dat1.curDat; 
+
+
+          %find the behavioral files: 
+        behDir = dir([behFold.folder, '\' behFold.name '\OdorCueTask']);
+        %eliminate echem and imagine files
+        idx = cellfun(@(x) contains(x, 'echem'), {behDir.name});
+        idx = find(idx);
+        behDir(idx) = []; 
+        idx = cellfun(@(x) contains(x, 'imagine'), {behDir.name});
+        idx = find(idx);
+        behDir(idx) = [];
+        idx = cellfun(@(x) contains(x, 'txt'), {behDir.name});
+        idx = find(idx);
+        behDir(idx) = [];
+        idx = cellfun(@(x) contains(x, 'mat'), {behDir.name});
+        idx = find(idx);
+        if length(idx) ~= 2
+            error('wrong number of behavior files available!')
+        end
+        %load the behavioral files
+        behDat1 = [behDir(idx(1)).folder '\' behDir(idx(1)).name];
+        behDat1 = load(behDat1);
+        behDat2 = [behDir(idx(2)).folder '\' behDir(idx(2)).name];
+        behDat2 = load(behDat2);
+        
+        behDat1 = outMat_to_table(behDat1.outMat, behDat1.datalabel);
+        behDat2 = outMat_to_table(behDat2.outMat, behDat2.datalabel);
+
+        %check if there is a value greater than 10 in the odor column
+        %recode if necessary
+        if max(behDat1.odor) == 11 || min(behDat1.odor)==2
+            behDat1.odor = behDat1.odor - 1; 
+            behDat2.odor = behDat2.odor - 1; 
+        end
+
+         %start making the oudDat struct
+        outDat = struct; 
+        outDat.labels = dat1.outLabs;
+        outDat.CSClist = dat1.ncslabels; 
+        outDat.fs = dat1.rawData.fsample; 
+        outDat.sessID = sessionIDs{sessi}; 
+
+        
+        %process the TTL pulses for dat 1: 
+        idx = cellfun(@(x) contains(x, 'event'), outDat.labels);
+        photoDiode = dat1.rawData.trial{1}(idx, :); 
+
+        photoDiode = (photoDiode - mean(photoDiode)) / std(photoDiode);
+    
+
+        downs = find(photoDiode(1:end-1) > -1.5 & photoDiode(2:end)<-1.5);
+        ups = find(photoDiode(1:end-1) < -1.5 & photoDiode(2:end)>-1.5);
+        difVals = ups - downs; %difVals is length of TTL pulses
+        downs(difVals>1500) = []; 
+        ups(difVals>1500) = []; 
+        difVals(difVals>1500) = []; 
+
+        downs(difVals<300) = []; 
+        ups(difVals<300) = []; 
+        difVals(difVals<300) = []; 
+
+        starti = []; 
+        for di = 5:length(downs)
+            if downs(di) - downs(di-4) < 3500
+                starti = [starti di]; 
+            end
+        end
+
+        %find two key starts
+        if length(starti)>1
+            spliti = find(diff(starti)>10);
+            starti1 = starti(spliti); 
+            starti(1:spliti) = []; 
+            if length(starti)>1
+                spliti = find(diff(starti)>10);
+                if isempty(spliti)
+                    starti = [starti1 starti(end)]; 
+                else
+                    error('unknown TTL structure')
+                end
+            else 
+                error('only one run?')
+            end
+        end
+
+        %eliminate pre start 1 TTLs
+        downs(1:starti(1)) = []; 
+        difVals(1:starti(1)) = []; 
+
+        %find last TTL of run 1
+        tmp = diff(downs);
+        [~, splitIDX] = max(tmp);
+
+        %eliminate pre start 2 TTLs
+        downs(splitIDX-1:starti(2)-starti(1)) = []; 
+        difVals(splitIDX-1:starti(2)-starti(1)) = []; 
+
+        %eliminate trailing TTL
+        downs(end-1:end) = []; 
+        difVals(end-1:end) = []; 
+
+        %count missed responses to know how many TTLs there should be
+        
+        s1 = sum(arrayfun(@(x) x==999, behDat1.response));
+        s2 = sum(arrayfun(@(x) x==999, behDat2.response));
+       
+        if length(downs) ~= (120 - s1 - s2)
+            error('wrong number of TTLs')
+        end
+        
+        cueTTLs = downs(difVals < 850);
+        sniffTTLs = downs(difVals > 850 & difVals < 1250);
+        responseTTLs = downs(difVals > 1250); 
+    
+        figure
+        plot(photoDiode)
+        xline(cueTTLs, 'color', 'magenta', 'linewidth', 2)
+        xline(sniffTTLs, 'color', 'green', 'linewidth', 2)
+        xline(responseTTLs, 'color', 'k', 'linewidth',2)
+
+
+        behDat = [behDat1; behDat2];
+        %store all TTLs into one matrix: 
+        %col 1: trialStarts
+        %col 2: sniff 
+        %col 3: buttonPress
+       
+        TTLs = nan(40, 3); 
+        ri = 1; 
+        for tt = 1:40
+            if isempty(behDat.response_str{tt})
+                TTLs(tt,1) = cueTTLs(tt); 
+                TTLs(tt,2) = sniffTTLs(tt); 
+            else
+                TTLs(tt,1) = cueTTLs(tt); 
+                TTLs(tt,2) = sniffTTLs(tt); 
+                TTLs(tt,3) = responseTTLs(ri);
+                ri = ri+1; 
+            end
+        end
+        TTLs =round(TTLs ./ 4);
+
+        outDat.behDat = behDat; 
+        outDat.data = dat1.rawData.trial{1};
+    end
+    
+    %process behavioral data into hit/miss/cr/fa
+    outDat.behDat.type = repmat("hit", 40,1); 
+    idx = find(outDat.behDat.cue==outDat.behDat.odor & ...
+                       strcmp(outDat.behDat.response_str,'No'));
+    outDat.behDat.type(idx) = repmat("miss", length(idx),1); 
+    idx = find(outDat.behDat.cue~=outDat.behDat.odor & ...
+                       strcmp(outDat.behDat.response_str,'No'));
+    outDat.behDat.type(idx) = repmat("cr", length(idx),1); 
+    idx = find(outDat.behDat.cue~=outDat.behDat.odor & ...
+                       strcmp(outDat.behDat.response_str,'Yes'));
+    outDat.behDat.type(idx) = repmat("fa", length(idx),1);  
+    idx = find(cellfun(@(x) isempty(x), outDat.behDat.response_str));
+    outDat.behDat.type(idx) = repmat("skip", length(idx),1);  
+    %downsample the data
+    outDat = downsample_data(outDat, 500);
+
+    clear behDat behDat1 behDat2 behDir behFold cueTTLs dat1 datalabel ...
+        datFolders di difVals downs idx outMat photoDiode responseTTLs ...
+        ri s1 s2 sniffTTLs spliti splitIDX starti starti1 subFolders tmp ...
+        tt ups TTLs2 L1 comboDat dat2 labs
+
+    %% data cleaning
+
+  
+
+   
+
+
+    %cleaning spike noise
+ switch sessionIDs{sessi}
+    case '250904_OBE_NWU_TI'
+        spikeThresh = 50;
+        spikeWin = 11; 
+        hasEEG = true;
+        spikeClean = true; 
+    case '230611_OBE_NMH_AZ'
+        spikeThresh = 20;
+        spikeWin = 5; 
+        hasEEG = false;
+        spikeClean = true;
+        % X: channels x time, fs: sampling rate (Hz)
+        wo = 60/(outDat.fs/2);                 % normalized center freq
+        bw = wo/35;                     % Q=35 ~ 1.7 Hz 3-dB bandwidth at 60 Hz
+        [b,a] = iirnotch(wo, bw);
+        outDat.data(1:8,:) = filtfilt(b, a, double(outDat.data(1:8,:)).').';   % transpose to filter along time
+
+        wo = 120/(outDat.fs/2);                 % normalized center freq
+        bw = wo/35;                     % Q=35 ~ 1.7 Hz 3-dB bandwidth at 120 Hz
+        [b,a] = iirnotch(wo, bw);
+        outDat.data(1:8,:) = filtfilt(b, a, double(outDat.data(1:8,:)).').';   % transpose to filter along time
+
+        wo = 180/(outDat.fs/2);                 % normalized center freq
+        bw = wo/35;                     % Q=35 ~ 1.7 Hz 3-dB bandwidth at 180 Hz
+        [b,a] = iirnotch(wo, bw);
+        outDat.data(1:8,:) = filtfilt(b, a, double(outDat.data(1:8,:)).').';   % transpose to filter along time
+
+
+    case '250623_DUPI_NMH_KS_2'
+        spikeThresh = 15;
+        spikeWin = 11; 
+        hasEEG = true;
+        spikeClean = false; 
+    case '250623_Dupi_NMH_KS_1'
+        spikeThresh = 15;
+        spikeWin = 11; 
+        hasEEG = false;
+        spikeClean = false; 
+    case '250818_Dupi_NMH_JH_2'
+        spikeThresh = 20;
+        spikeWin = 11; 
+        hasEEG = true;
+        spikeClean = true; 
+    case '250818_Dupi_NMH_JH_1'
+        spikeThresh = 20;
+        spikeWin = 11; 
+        hasEEG = true; 
+        spikeClean = true; 
+    case '250908_OBE_NWU_AS'
+        spikeThresh = 20;
+        spikeWin = 11; 
+        hasEEG = true;
+        spikeClean = false; 
+    case '241017_OBE_NMH_AS'
+        spikeThresh = 20;
+        spikeWin = 11; 
+        hasEEG = false;
+        spikeClean = false; 
+    case '250811_Dupi_NMH_TPB_1'
+        spikeThresh = 10;
+        spikeWin = 9; 
+        hasEEG = true;
+        spikeClean = true; 
+    case '240923_OBE_NMH_HRM'
+        spikeThresh = 50;
+        spikeWin = 11; 
+        hasEEG = false;
+        spikeClean = true; 
+    case '250310_OBE_NMH_FS'
+        spikeThresh = 8;
+        spikeWin = 5; 
+        hasEEG = false;
+        spikeClean = true; 
+         % X: channels x time, fs: sampling rate (Hz)
+        wo = 60/(outDat.fs/2);                 % normalized center freq
+        bw = wo/35;                     % Q=35 ~ 1.7 Hz 3-dB bandwidth at 60 Hz
+        [b,a] = iirnotch(wo, bw);
+        outDat.data(1:7,:) = filtfilt(b, a, double(outDat.data(1:7,:)).').';   % transpose to filter along time
+
+        wo = 120/(outDat.fs/2);                 % normalized center freq
+        bw = wo/35;                     % Q=35 ~ 1.7 Hz 3-dB bandwidth at 120 Hz
+        [b,a] = iirnotch(wo, bw);
+        outDat.data(1:7,:) = filtfilt(b, a, double(outDat.data(1:7,:)).').';   % transpose to filter along time
+
+        wo = 180/(outDat.fs/2);                 % normalized center freq
+        bw = wo/35;                     % Q=35 ~ 1.7 Hz 3-dB bandwidth at 180 Hz
+        [b,a] = iirnotch(wo, bw);
+        outDat.data(1:7,:) = filtfilt(b, a, double(outDat.data(1:7,:)).').';   % transpose to filter along time
+
+
+    otherwise
+        spikeThresh = 20;
+        spikeWin = 11; 
+        hasEEG = false;
+end
+
+  idx = cellfun(@(x) contains(x, 'macro'), outDat.labels);
+    macroDat = outDat.data(idx, :); 
+    macOut = zeros([5, size(macroDat, [2,3])]);
+    %do bipolar rereferencing 
+    for chani = 1:5
+        macOut(chani, :, :) = squeeze(macroDat(chani, :) -...
+                                      macroDat(chani+1,:)); 
+    end
+
+
+%% spike cleaning using prominence detector combined with windowed IC removal
+%applied to macro channels only 
+if spikeClean
+    [b,a] = butter(4, [5,150]/(outDat.fs/2), 'bandpass');
+    gammaSig = filtfilt(b,a, macOut')'; 
+    [test, prominence] = detect_spikes(macOut,spikeThresh,...
+        spikeWin,...
+        false, gammaSig); 
+        %ICA is on the macro data without bipolar rereference 
+        %this allows later rereferencing at will
+    out = ica_flag_spikes_targeted(macOut, test, prominence, 'Fs', 500);
+
+   
+    outDat.data(end+1:end+5, :) = out.data_clean; 
+    outDat.labels(end+1:end+5) = {'macBP1', 'macBP2', 'macBP3', ...
+                                                'macBP4', 'macBP5'};
+    outDat.data(end+1, :) = out.mixVector; 
+    outDat.labels{end+1} = "spikeCleanVec";
+    outDat.spikeRemoval = 1; 
+else
+    outDat.data(end+1:end+5, :) = macOut;
+    outDat.labels(end+1:end+5) = {'macBP1', 'macBP2', 'macBP3', ...
+                                                'macBP4', 'macBP5'};
+    outDat.data(end+1, :) = ones(size(outDat.data,2),1); 
+    outDat.labels{end+1} = "spikeCleanVec";
+    outDat.spikeRemoval = 1; 
+
+
+end
+
+clear chani idx macOut macroDat spikeClean spikeThresh spikeWin ...
+    gammaSig a b prominence test 
+%% blink removal using full IC removal across all ephys channels
+if hasEEG
+    %cleaning blinks
+    ephysDat = outDat.data(1:32,:); 
+
+    [out, badChan, blinkIndicator] = blinkRemoveWrapper(ephysDat,...
+                                    outDat.fs);
+
+    outDat.badChans = badChan; 
+    outDat.data(1:32,:) = out; 
+    outDat.data(end+1, :,:) = blinkIndicator; 
+    outDat.labels{end+1} = "blinkIndicator";
+    outDat.blinkRemoval = 1; 
+end
+
+
+ clear hasEEG out badChan blinkIndicator ephysDat
+  
+%% respiration data handling to identify sniffs
+
+    idx = cellfun(@(x) contains(x, 'rsp'), outDat.labels);
+    rspDat = outDat.data(idx, :); 
+    
+  
+    
+    idx = rspIDX(sessi); 
+    rspDat = squeeze(rspDat(idx, :)); 
+    
+    %flip signal
+    rspDat = rspDat .* rspFlip(sessi);
+    
+    
+   
+
+    rspTrial = smoothdata(rspDat, 'gaussian', 300); 
+    test = (rspTrial(30:end) - rspTrial(1:end-29)).^2 .* ...
+    rspTrial(30:end); 
+    test(test<0) = 0; 
+    test(test>10000) = 10000; 
+    test = smoothdata(test, 'gaussian', 500);
+   
+
+
+    %subjectSpecific Thresholds
+    switch sessionIDs{sessi}
+        case '250623_DUPI_NMH_KS_2' 
+            thresh = 3000; 
+            cuedBackBuff = 350; 
+        case '250623_Dupi_NMH_KS_1' 
+            thresh = 5000; 
+            cuedBackBuff = 350; 
+        case '250908_OBE_NWU_AS' 
+            thresh = 3000; 
+            cuedBackBuff = 150; 
+        case '230611_OBE_NMH_AZ' 
+            thresh = 3000; 
+            cuedBackBuff = 150; 
+        case '241017_OBE_NMH_AS' 
+            thresh = 3000; 
+            cuedBackBuff = 150; 
+        case '250811_Dupi_NMH_TPB_1' 
+            thresh = 20; 
+            cuedBackBuff = 150; 
+        case '250904_OBE_NWU_TI' 
+            thresh = 5000; 
+            cuedBackBuff = 100; 
+        case '240923_OBE_NMH_HRM' 
+            thresh = 1000; 
+            cuedBackBuff = 350; 
+        case '250818_Dupi_NMH_JH_1'
+            thresh = 4000; 
+            cuedBackBuff = 350; 
+        case '250818_Dupi_NMH_JH_2'
+            thresh = 4000; 
+            cuedBackBuff = 350; 
+        otherwise
+            thresh = 500;
+            cuedBackBuff = 150; 
+    end
+
+    
+
+    outSniffs = zeros(40, 10); 
+    %col 1: sniff onset index
+    %col 2: trial number
+    %col 3: empty
+    %col 4: off from TTL by
+    %col 5: trial type (hit/miss/cr/fa
+    %col 6: empty 
+    %col 7: adjustment for phase align
+    oi = 1; %index variable for out sniffs
+
+    used = zeros(size(idx)); 
+    for triali = 1:40
+        targets = TTLs(triali, 2);
+        targets(isnan(targets)) = [];
+        targets = sort(targets); 
+        sniffi = 1; 
+        for tt = 1:length(targets)
+            if tt == 1 || tt == length(targets) 
+                %first and last sniff! should be after TTL
+                startSearch = targets(tt) - 30 - cuedBackBuff; 
+                endSearch = targets(tt)+1000 - 30; %search window of 2s
+                val = find(test(startSearch:endSearch-1)<thresh & ... 
+                    test(startSearch+1:endSearch) > thresh, 1);
+                if tt == 1
+                    type = 1; 
+                else
+                    type = 3; 
+                end
+             
+            else
+                %free sniffs! should be before TTL
+                startSearch = targets(tt)- 30 - 1000; %search window of 2s
+                endSearch = targets(tt) -30 + 300; 
+
+                val = find(test(startSearch:endSearch-1)<thresh & ... 
+                    test(startSearch+1:endSearch) > thresh);
+                val(val<16) = 16; 
+                val(val>1285) = 1285; 
+                if length(val)>1
+                    testSpace = test(startSearch:endSearch-1);
+                    sizes = testSpace(val+15) - testSpace(val-15); 
+                    [~, maxSniff] = max(sizes); 
+                    val = val(maxSniff); 
+                end
+                type = 2; 
+            end
+            
+                
+                %was a sniff found? if yes then find overall idx
+                %val is how far from the start search the sniff happened
+            if ~isempty(val)
+                targidx = val + startSearch; 
+              
+                %col 1: sniff onset index
+                outSniffs(oi,1) = targidx; 
+                %col 2: trial number
+                outSniffs(oi,2) = triali; 
+                %col 3: sniff within trial number
+                outSniffs(oi,3) = sniffi; 
+                sniffi = sniffi + 1; 
+                %col 4: off from TTL by
+                if type == 2
+                    outSniffs(oi,4) = - 30 - 1000 +val; 
+                else
+                    outSniffs(oi,4) = val - 30 - cuedBackBuff;
+                end
+                %col 5: corect / incorrect behavior 1 / 0
+                outSniffs(oi,5) = outDat.behDat.type(triali); 
+                %col 6: sniff type 1 = start, 2 = free, 3 = confirm
+                outSniffs(oi,6) = type;
+                oi = oi + 1; 
+            end
+        end
+    end
+
+
+
+
+
+    for triali  = 1:40
+        figure
+        idx = TTLs(triali, 1); 
+        endidx = TTLs(triali,3); 
+        if isnan(endidx)
+            endidx = idx + 7000;
+        end
+        rspTrial = smoothdata(rspDat(idx:endidx), 'gaussian', 300); 
+        testHere = test(idx+30:endidx+30);
+     
+        plot(rspTrial )
+       
+        idx = TTLs(triali,2) - TTLs(triali, 1);
+        idx(isnan(idx)) = []; 
+        xline(idx, 'linewidth', 2)
+        title(triali)
+        curSniffs = outSniffs(outSniffs(:,2) == triali, 1); 
+        if ~isempty(curSniffs)
+            xline(curSniffs - TTLs(triali, 1), ...
+                'color', 'green', 'linewidth', 2); 
+        end
+        yyaxis right
+        plot(testHere)
+
+    end
+
+outDat.sniffInfo = outSniffs; 
+
+clear cuedBackBuff curSniffs endidx endSearch idx oi outSniffs rspDat ...
+    rspTrial sniffi startSearch targets targidx test testHere thresh ...
+    triali tt type used val TTLs
+
+outDat.sniffInfo(outDat.sniffInfo(:,1) == 0, :) = [];
+%% epoch the data! 
+
+%channels X 6 seconds of time X sniffs
+outDat.tim = -2:1/outDat.fs:4; 
+trialDat = zeros(size(outDat.data,1), length(outDat.tim), ...
+    size(outDat.sniffInfo,1));
+
+
+ %subjectSpecific Thresholds
+switch sessionIDs{sessi}
+   
+    case '250904_OBE_NWU_TI' 
+        adjWin = 300;  
+    otherwise
+        adjWin = 500; 
+end
+
+for sniffi = 1:size(outDat.sniffInfo, 1)
+    %loop sniffs
+    startIDX = outDat.sniffInfo(sniffi,1) - 2*outDat.fs; 
+    endIDX = outDat.sniffInfo(sniffi,1) + 4*outDat.fs; 
+    test = outDat.data(:,startIDX:endIDX); 
+    
+    %pull trial respiration data: 
+    idx = cellfun(@(x) contains(x, 'rsp'), outDat.labels);
+    rspDat = test(idx, :); 
+
+
+
+    idx = rspIDX(sessi); 
+    rspDat = squeeze(rspDat(idx, :)); 
+
+    %flip signal
+    rspDat = rspDat .* rspFlip(sessi);
+    figure
+    plot(outDat.tim, rspDat)
+    title(sniffi)
+
+    analytic = hilbert(rspDat); 
+    analytic = smoothdata(analytic, 1, 'gaussian', 500);
+    analytic = lowpass(analytic, 1, outDat.fs); 
+    rspPhase = angle(analytic);
+
+    yyaxis right
+    plot(outDat.tim, rspPhase)
+
+   %detect most likely peak of the sniff: 
+    adjust = find(rspPhase(1:end-1) < 0 & rspPhase(2:end)>0);
+
+    
+    if length(adjust) > 1
+        adjust = adjust(find(adjust>1000, 1));
+    end
+    xline(outDat.tim(adjust))
+    %go backwards to find the onset
+    adjust = adjust - 10;
+    smthRsp = smoothdata(rspDat, 'gaussian', 500); 
+    difVals = smthRsp(adjust-adjWin:adjust-20) - ...
+        smthRsp(adjust-(adjWin-20):adjust);
+    yyaxis left
+    hold on 
+    plot(outDat.tim(adjust-(adjWin-10):adjust-10), difVals*5)
+
+    [~, minidx] = min(difVals); 
+
+    xline(outDat.tim(adjust-(adjWin+20) + minidx))
+    
+
+
+    adjust = round(adjust-520 + minidx - outDat.fs*2);
+    test = outDat.data(:,adjust+startIDX:endIDX+adjust); 
+    outDat.sniffInfo(sniffi, 7) = adjust; 
+    outDat.sniffInfo(sniffi, 8) = outDat.sniffInfo(sniffi, 1) + adjust; 
+
+   
+
+    trialDat(:,:,sniffi) = test;
+
+
+end
+
+idx = cellfun(@(x) contains(x, 'rsp'), outDat.labels);
+rspDat = trialDat(idx, :, :); 
+
+  
+    
+idx = rspIDX(sessi); 
+rspDat = squeeze(rspDat(idx, :, :)); 
+    
+%flip signal
+rspDat = rspDat .* rspFlip(sessi);
+
+figure; imagesc(outDat.tim, [], rspDat')
+
+figure; plot(rspDat)
+
+outDat.trialDat = trialDat; 
+outDat = rmfield(outDat, 'data');
+
+outDat.rspIDX = idx(rspIDX(sessi));
+outDat.rspFlip = rspFlip(sessi); 
+
+ if ~exist([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc'], 'dir')
+         mkdir([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc']);
+ end
+
+ save([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\' ...
+                    sessionIDs{sessi} '_cueTaskPreProc.mat'], ...
+                    'outDat', "-v7.3")
+
+ clear adjust adjWin analytic ans difVals endIDX idx minidx outDat ...
+     rspDat rspPhase smthRsp sniffi startIDX test trialDat
+
+end
+
+
+
+
+
+
+
+
+
