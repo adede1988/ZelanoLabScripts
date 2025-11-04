@@ -8,32 +8,33 @@ datPre = { 'R:\Neurology\Zelano_Lab\Lab_Common\Dupi\', ...
 datPrei = [1,1,1,1,2,2,2,2,2]; 
 
 sessionIDs = {'250818_Dupi_NMH_JH_1', ... %preprocessed
-               '250623_DUPI_NMH_KS_2',... %preprocessed
-               '250623_Dupi_NMH_KS_1',... %preprocessed
-                '250818_Dupi_NMH_JH_2',... %preprocessed
-                '250811_Dupi_NMH_TPB_1',... %preprocessed
-              '230611_OBE_NMH_AZ',... %heavy 60; preprocessed
-                '241017_OBE_NMH_AS',...  %preprocessed
-                '240923_OBE_NMH_HRM',... #preprocessed
-                '250310_OBE_NMH_FS',... #preprocessed
-                '250313_OBE_NMH_CS'};   %preprocessed
+               '250623_DUPI_NMH_KS_2',... 
+               '250623_Dupi_NMH_KS_1',... 
+                '250818_Dupi_NMH_JH_2',... 
+                '250811_Dupi_NMH_TPB_1',... 
+              '230611_OBE_NMH_AZ',... 
+                '241017_OBE_NMH_AS',...  
+                '240923_OBE_NMH_HRM',... 
+                '250310_OBE_NMH_FS',...
+                '250313_OBE_NMH_CS'};  
 
 %there are multiple respiration channels in many recordings
 %which one is right for each session: 
 rspIDX = [1,1,3,1,1,1,1,1,1]; 
 rspFlip = [1,1,-1,1,1,1,1,-1,-1]; %hard code flip
 
-addpath([codePre 'HpcAccConnectivityProject/helperFuncs'])
-addpath(genpath([codePre 'myFrequentUse']))
-addpath([codePre 'myFrequentUse/export_fig_repo'])
+% addpath([codePre 'HpcAccConnectivityProject/helperFuncs'])
+% addpath(genpath([codePre 'myFrequentUse']))
+addpath(genpath([codePre 'ZelanoLabScripts']))
+% addpath([codePre 'myFrequentUse/export_fig_repo'])
 addpath(genpath('C:\Users\dtf8829\Documents\eeglab2025.0.0'))
 
-addpath([codePre 'fieldtrip-20230118'])
-addpath([codePre 'emotionDecoding'])
-addpath([codePre 'slowBreathing'])
+% addpath([codePre 'fieldtrip-20230118'])
+% addpath([codePre 'emotionDecoding'])
+% addpath([codePre 'slowBreathing'])
 
 set(0, 'defaultfigurewindowstyle', 'docked')
-ft_defaults
+% ft_defaults
 
 %% 
 
@@ -72,7 +73,8 @@ for sessi = 1:length(sessionIDs)
         switch sessionIDs{sessi}
             case '230611_OBE_NMH_AZ'
                 %find the behavioral files: 
-                behDir = dir([behFold.folder, '\' behFold.name '\olf_cue']);
+                behDir = dir([behFold.folder, '\' ...
+                              behFold.name '\olf_cue']);
                 %eliminate echem and imagine files
                 idx = cellfun(@(x) contains(x, 'echem'), {behDir.name});
                 idx = find(idx);
@@ -101,7 +103,8 @@ for sessi = 1:length(sessionIDs)
     
             case '250310_OBE_NMH_FS'
                  %find the behavioral files: 
-                behDir = dir([behFold.folder, '\' behFold.name '\olf_cue']);
+                behDir = dir([behFold.folder, '\' ...
+                              behFold.name '\olf_cue']);
                 %eliminate echem and imagine files
                 idx = cellfun(@(x) contains(x, 'echem'), {behDir.name});
                 idx = find(idx);
@@ -124,8 +127,10 @@ for sessi = 1:length(sessionIDs)
                 behDat2 = load(behDat2);
                
 
-                behDat1 = outMat_to_table(behDat1.outMat, behDat1.datalabel);
-                behDat2 = outMat_to_table(behDat2.outMat, behDat2.datalabel);
+                behDat1 = outMat_to_table(behDat1.outMat, ...
+                                          behDat1.datalabel);
+                behDat2 = outMat_to_table(behDat2.outMat, ...
+                                          behDat2.datalabel);
 
             otherwise
 
@@ -222,7 +227,8 @@ for sessi = 1:length(sessionIDs)
                 downs(end-1:end) = []; 
                 difVals(end-1:end) = []; 
         
-                if length(downs) ~= 60 - sum(arrayfun(@(x) x==999, behDat1.response))
+                if length(downs) ~= 60 - sum(arrayfun(@(x) x==999, ...
+                        behDat1.response))
                     error('wrong number of TTLs')
                 end
         end
@@ -325,7 +331,8 @@ for sessi = 1:length(sessionIDs)
                 downs(end-1:end) = []; 
                 difVals(end-1:end) = []; 
         
-                if length(downs) ~= 60 - sum(arrayfun(@(x) x==999, behDat2.response))
+                if length(downs) ~= 60 - sum(arrayfun(@(x) x==999,...
+                                behDat2.response))
                     error('wrong number of TTLs')
                 end
          end
@@ -565,11 +572,27 @@ for sessi = 1:length(sessionIDs)
     outDat.behDat.type(idx) = repmat("skip", length(idx),1);  
     %downsample the data
     outDat = downsample_data(outDat, 500);
+    outDat.task = "cueTask"; 
+    outDat.OGdataDir = [datPre{datPrei(sessi)} sessionIDs{sessi}];
+    tmp = dir([datPre{datPrei(sessi)} sessionIDs{sessi}]);
+    tmp = tmp(cellfun(@(x) contains(x, '.m'), {tmp.name}));
+    tmp = tmp(cellfun(@(x) contains(x, 'LoadData'), {tmp.name}));
+    if size(tmp,1) == 1
+        outDat.loadFile = tmp.name;
+    else 
+        error('load file not identified uniquely')
+    end
+    outDat.preProcScript = 'cueTaskPreProc.m'; 
+    if datPrei(sessi) == 1
+        outDat.type = 'Dupi'; 
+    elseif datPrei(sessi) == 2
+        outDat.type = 'OBE';
+    end
 
     clear behDat behDat1 behDat2 behDir behFold cueTTLs dat1 datalabel ...
         datFolders di difVals downs idx outMat photoDiode responseTTLs ...
-        ri s1 s2 sniffTTLs spliti splitIDX starti starti1 subFolders tmp ...
-        tt ups TTLs2 L1 comboDat dat2 labs
+        ri s1 s2 sniffTTLs spliti splitIDX starti starti1 subFolders ...
+        tmp tt ups TTLs2 L1 comboDat dat2 labs
 
     %% data cleaning
 
@@ -589,46 +612,12 @@ for sessi = 1:length(sessionIDs)
         spikeThresh = 20;
         spikeWin = 5; 
         hasEEG = false;
-        spikeClean = true;
-        % X: channels x time, fs: sampling rate (Hz)
-        wo = 60/(outDat.fs/2);                 % normalized center freq
-        bw = wo/35;                     % Q=35 ~ 1.7 Hz 3-dB bandwidth at 60 Hz
-        [b,a] = iirnotch(wo, bw);
-        outDat.data(1:8,:) = filtfilt(b, a, double(outDat.data(1:8,:)).').';   % transpose to filter along time
-
-        wo = 120/(outDat.fs/2);                 % normalized center freq
-        bw = wo/35;                     % Q=35 ~ 1.7 Hz 3-dB bandwidth at 120 Hz
-        [b,a] = iirnotch(wo, bw);
-        outDat.data(1:8,:) = filtfilt(b, a, double(outDat.data(1:8,:)).').';   % transpose to filter along time
-
-        wo = 180/(outDat.fs/2);                 % normalized center freq
-        bw = wo/35;                     % Q=35 ~ 1.7 Hz 3-dB bandwidth at 180 Hz
-        [b,a] = iirnotch(wo, bw);
-        outDat.data(1:8,:) = filtfilt(b, a, double(outDat.data(1:8,:)).').';   % transpose to filter along time
-
+        spikeClean = true;       
      case '250313_OBE_NMH_CS'
         spikeThresh = 20;
         spikeWin = 5; 
         hasEEG = false;
         spikeClean = false;
-        % % X: channels x time, fs: sampling rate (Hz)
-        % wo = 60/(outDat.fs/2);                 % normalized center freq
-        % bw = wo/35;                     % Q=35 ~ 1.7 Hz 3-dB bandwidth at 60 Hz
-        % [b,a] = iirnotch(wo, bw);
-        % outDat.data(1:8,:) = filtfilt(b, a, double(outDat.data(1:8,:)).').';   % transpose to filter along time
-        % 
-        % wo = 120/(outDat.fs/2);                 % normalized center freq
-        % bw = wo/35;                     % Q=35 ~ 1.7 Hz 3-dB bandwidth at 120 Hz
-        % [b,a] = iirnotch(wo, bw);
-        % outDat.data(1:8,:) = filtfilt(b, a, double(outDat.data(1:8,:)).').';   % transpose to filter along time
-        % 
-        % wo = 180/(outDat.fs/2);                 % normalized center freq
-        % bw = wo/35;                     % Q=35 ~ 1.7 Hz 3-dB bandwidth at 180 Hz
-        % [b,a] = iirnotch(wo, bw);
-        % outDat.data(1:8,:) = filtfilt(b, a, double(outDat.data(1:8,:)).').';   % transpose to filter along time
-
-
-   
     case '250623_DUPI_NMH_KS_2'
         spikeThresh = 15;
         spikeWin = 11; 
@@ -674,22 +663,7 @@ for sessi = 1:length(sessionIDs)
         spikeWin = 5; 
         hasEEG = false;
         spikeClean = true; 
-         % X: channels x time, fs: sampling rate (Hz)
-        wo = 60/(outDat.fs/2);                 % normalized center freq
-        bw = wo/35;                     % Q=35 ~ 1.7 Hz 3-dB bandwidth at 60 Hz
-        [b,a] = iirnotch(wo, bw);
-        outDat.data(1:7,:) = filtfilt(b, a, double(outDat.data(1:7,:)).').';   % transpose to filter along time
-
-        wo = 120/(outDat.fs/2);                 % normalized center freq
-        bw = wo/35;                     % Q=35 ~ 1.7 Hz 3-dB bandwidth at 120 Hz
-        [b,a] = iirnotch(wo, bw);
-        outDat.data(1:7,:) = filtfilt(b, a, double(outDat.data(1:7,:)).').';   % transpose to filter along time
-
-        wo = 180/(outDat.fs/2);                 % normalized center freq
-        bw = wo/35;                     % Q=35 ~ 1.7 Hz 3-dB bandwidth at 180 Hz
-        [b,a] = iirnotch(wo, bw);
-        outDat.data(1:7,:) = filtfilt(b, a, double(outDat.data(1:7,:)).').';   % transpose to filter along time
-
+       
 
     otherwise
         spikeThresh = 20;
@@ -697,15 +671,88 @@ for sessi = 1:length(sessionIDs)
         hasEEG = false;
 end
 
-  idx = cellfun(@(x) contains(x, 'macro'), outDat.labels);
-    macroDat = outDat.data(idx, :); 
-    macOut = zeros([5, size(macroDat, [2,3])]);
-    %do bipolar rereferencing 
-    for chani = 1:5
-        macOut(chani, :, :) = squeeze(macroDat(chani, :) -...
-                                      macroDat(chani+1,:)); 
+idx = cellfun(@(x) contains(x, 'macro'), outDat.labels);
+figure
+macroDat = outDat.data(idx, :); 
+plot(macroDat(1,:))
+hold on 
+for ii = 2:6
+    plot(macroDat(ii,:)+(ii-1)*50)
+end
+title('will need to code channel selection if needed')
+%% bipolar rereferencing 
+macOut = zeros([5, size(macroDat, [2,3])]);
+%do bipolar rereferencing 
+for chani = 1:5
+    macOut(chani, :, :) = squeeze(macroDat(chani, :) -...
+                                  macroDat(chani+1,:)); 
+end
+
+%% EEG channel flagging, interpolation, blink removal, laplacian
+
+if hasEEG
+    standardEEGlocs = readtable([codePre ...
+        'ZelanoLabScripts/myEEGcoords_thetaPhi.csv']);
+
+    %check electrode names
+    for chan = 1:32
+        if ~strcmp(standardEEGlocs.Label(chan), outDat.labels(chan))
+            error('EEG channels not labeled as expected')
+        end
     end
 
+    [badTS, badChans] = ...
+            removeNoiseChansVolt(outDat.data(1:32,:), outDat.fs);
+    chanIDX = 1:32; 
+    if ismember(1, badChans)
+      chanIDX(badChans(2:end)) = [];
+    else
+      chanIDX(badChans) = [];
+      
+    end
+    ephysDat = outDat.data(1:32,:);
+    [out, badChan2, blinkIndicator] = blinkRemoveWrapper(...
+                                                ephysDat(chanIDX,:),...
+                                                outDat.fs);
+
+    badChans = [badChans; chanIDX(badChan2)]; 
+    ephysDat(chanIDX,:) = out; 
+    phi = standardEEGlocs.Phi .*pi ./ 180; 
+    theta = standardEEGlocs.Theta .*pi ./ 180; 
+    X = cos(phi) .* sin(theta);
+    Y = sin(phi) .* sin(theta); 
+    Z = cos(theta); 
+
+    ephysDat = interpolate_perrinX(ephysDat,X,Y,Z,badChans);
+
+    ephysDat = ephysDat - mean(ephysDat,1); 
+
+    dataLap = laplacian_perrinX(ephysDat, X, Y, Z); 
+
+    lbls = string(outDat.labels(1:32));
+    lbls = reshape(lbls, [length(lbls), 1]);
+
+    outDat.eegLocs = table(lbls, 'VariableNames', {'labels'}); 
+    outDat.eegLocs.X = X; 
+    outDat.eegLocs.Y = Y; 
+    outDat.eegLocs.Z = Z; 
+    outDat.eegLocs.theta = theta; 
+    outDat.eegLocs.phi = phi; 
+    outDat.badChans = outDat.labels(badChans); 
+    outDat.dataLap = dataLap; 
+    outDat.data(1:32,:) = ephysDat; 
+    outDat.data(end+1, :,:) = blinkIndicator; 
+    outDat.labels{end+1} = "blinkIndicator";
+    outDat.data(end+1, :,:) = badTS; 
+    outDat.labels{end+1} = "badTS";
+    outDat.EEGInterpolation = 1;
+    outDat.EEGCleaning = 1;
+    outDat.blinkRemoval = 1; 
+
+
+end
+clear X Y Z theta phi ephysDat dataLap blinkIndicator badTS badChans ...
+    chanIDX standardEEGlocs badChan2 out lbls ii chan hasEEG
 
 %% spike cleaning using prominence detector combined with windowed IC removal
 %applied to macro channels only 
@@ -737,25 +784,6 @@ else
 
 end
 
-clear chani idx macOut macroDat spikeClean spikeThresh spikeWin ...
-    gammaSig a b prominence test 
-%% blink removal using full IC removal across all ephys channels
-if hasEEG
-    %cleaning blinks
-    ephysDat = outDat.data(1:32,:); 
-
-    [out, badChan, blinkIndicator] = blinkRemoveWrapper(ephysDat,...
-                                    outDat.fs);
-
-    outDat.badChans = badChan; 
-    outDat.data(1:32,:) = out; 
-    outDat.data(end+1, :,:) = blinkIndicator; 
-    outDat.labels{end+1} = "blinkIndicator";
-    outDat.blinkRemoval = 1; 
-end
-
-
- clear hasEEG out badChan blinkIndicator ephysDat
   
 %% respiration data handling to identify sniffs
 
@@ -934,19 +962,29 @@ end
 
     end
 
-outDat.sniffInfo = outSniffs; 
+     %col 1: sniff onset index
+    %col 2: trial number
+    %col 3: empty
+    %col 4: off from TTL by
+    %col 5: trial type (hit/miss/cr/fa
+    %col 6: empty 
+    %col 7: adjustment for phase align
+if size(outSniffs,1) ~= size(outDat.behDat,1)
+    error('sniff count does not line up with behavioral data')
+end
+outDat.moreThan1 = 0; 
+outDat.behDat.sniffOnset = outSniffs(:,1); 
+outDat.behDat.TTLoffSet = outSniffs(:,4); 
+
+
 
 clear cuedBackBuff curSniffs endidx endSearch idx oi outSniffs rspDat ...
     rspTrial sniffi startSearch targets targidx test testHere thresh ...
     triali tt type used val TTLs
 
-outDat.sniffInfo(outDat.sniffInfo(:,1) == 0, :) = [];
-%% epoch the data! 
+%% adjust sniffs and save
 
-%channels X 6 seconds of time X sniffs
-outDat.tim = -2:1/outDat.fs:4; 
-trialDat = zeros(size(outDat.data,1), length(outDat.tim), ...
-    size(outDat.sniffInfo,1));
+
 
 
  %subjectSpecific Thresholds
@@ -958,10 +996,10 @@ switch sessionIDs{sessi}
         adjWin = 500; 
 end
 
-for sniffi = 1:size(outDat.sniffInfo, 1)
+for sniffi = 1:size(outDat.behDat, 1)
     %loop sniffs
-    startIDX = outDat.sniffInfo(sniffi,1) - 2*outDat.fs; 
-    endIDX = outDat.sniffInfo(sniffi,1) + 4*outDat.fs; 
+    startIDX = outDat.behDat.sniffOnset(sniffi) - 2*outDat.fs; 
+    endIDX = outDat.behDat.sniffOnset(sniffi) + 4*outDat.fs; 
     test = outDat.data(:,startIDX:endIDX); 
     
     %pull trial respiration data: 
@@ -1011,34 +1049,32 @@ for sniffi = 1:size(outDat.sniffInfo, 1)
 
 
     adjust = round(adjust-520 + minidx - outDat.fs*2);
-    test = outDat.data(:,adjust+startIDX:endIDX+adjust); 
-    outDat.sniffInfo(sniffi, 7) = adjust; 
-    outDat.sniffInfo(sniffi, 8) = outDat.sniffInfo(sniffi, 1) + adjust; 
+    outDat.behDat.adjust(sniffi) = adjust; 
+    outDat.behDat.finalOnset(sniffi) = ...
+                            outDat.behDat.sniffOnset(sniffi) + adjust; 
 
    
 
-    trialDat(:,:,sniffi) = test;
 
 
 end
 
 idx = cellfun(@(x) contains(x, 'rsp'), outDat.labels);
-rspDat = trialDat(idx, :, :); 
+rspDat = outDat.data(idx, :); 
 
   
     
 idx = rspIDX(sessi); 
-rspDat = squeeze(rspDat(idx, :, :)); 
+rspDat = squeeze(rspDat(idx, :)); 
     
 %flip signal
 rspDat = rspDat .* rspFlip(sessi);
 
-figure; imagesc(outDat.tim, [], rspDat')
+
 
 figure; plot(rspDat)
+xline(outDat.behDat.finalOnset)
 
-outDat.trialDat = trialDat; 
-outDat = rmfield(outDat, 'data');
 
 outDat.rspIDX = rspIDX(sessi);
 outDat.rspFlip = rspFlip(sessi); 

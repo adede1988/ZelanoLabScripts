@@ -8,30 +8,31 @@ datPre = { 'R:\Neurology\Zelano_Lab\Lab_Common\Dupi\', ...
 %prefix index for data folder: 
 datPrei = [1,1,1,2,2,1,1]; 
 
-sessionIDs = {'250818_Dupi_NMH_JH_1', ... %has behavior
-               '250623_DUPI_NMH_KS_2',... %has behavior
-               '250623_Dupi_NMH_KS_1',... %has behavior
-               '250908_OBE_NWU_AS', ...   %has behavior
-                '250904_OBE_NWU_TI', ...  %has behavior
-                '250818_Dupi_NMH_JH_2',...%has behavior
-                '250811_Dupi_NMH_TPB_1'};   %has behavior
+sessionIDs = {'250818_Dupi_NMH_JH_1', ... %preProcessed
+               '250623_DUPI_NMH_KS_2',... 
+               '250623_Dupi_NMH_KS_1',... 
+               '250908_OBE_NWU_AS', ...  
+                '250904_OBE_NWU_TI', ...  
+                '250818_Dupi_NMH_JH_2',...
+                '250811_Dupi_NMH_TPB_1'};   
 
 %there are multiple respiration channels in many recordings
 %which one is right for each session: 
 rspIDX = [1,1,1,1,1,1,1]; 
 rspFlip = [1,1,1,1,1,1,1]; %hard code flip
 
-addpath([codePre 'HpcAccConnectivityProject/helperFuncs'])
-addpath(genpath([codePre 'myFrequentUse']))
-addpath([codePre 'myFrequentUse/export_fig_repo'])
+% addpath([codePre 'HpcAccConnectivityProject/helperFuncs'])
+% addpath(genpath([codePre 'myFrequentUse']))
+% addpath([codePre 'myFrequentUse/export_fig_repo'])
 addpath(genpath('C:\Users\dtf8829\Documents\eeglab2025.0.0'))
+addpath(genpath([codePre 'ZelanoLabScripts']))
 
-addpath([codePre 'fieldtrip-20230118'])
-addpath([codePre 'emotionDecoding'])
-addpath([codePre 'slowBreathing'])
+% addpath([codePre 'fieldtrip-20230118'])
+% addpath([codePre 'emotionDecoding'])
+% addpath([codePre 'slowBreathing'])
 
 set(0, 'defaultfigurewindowstyle', 'docked')
-ft_defaults
+% ft_defaults
 
 
 
@@ -59,7 +60,7 @@ for sessi = 1:length(sessionIDs)
 
 
 
-     idx = cellfun(@(x) contains(x, 'event'), outDat.labels);
+    idx = cellfun(@(x) contains(x, 'event'), outDat.labels);
     photoDiode = outDat.data(idx, :); 
     
     photoDiode = (photoDiode - mean(photoDiode)) / std(photoDiode);
@@ -140,7 +141,39 @@ for sessi = 1:length(sessionIDs)
     %downsample the data
     outDat = downsample_data(outDat, 500);
 
+    outDat.task = "O15"; 
+    outDat.OGdataDir = [datPre{datPrei(sessi)} sessionIDs{sessi}];
+    tmp = dir([datPre{datPrei(sessi)} sessionIDs{sessi}]);
+    tmp = tmp(cellfun(@(x) contains(x, '.m'), {tmp.name}));
+    tmp = tmp(cellfun(@(x) contains(x, 'LoadData'), {tmp.name}));
+    if size(tmp,1) == 1
+        outDat.loadFile = tmp.name;
+    else 
+        error('load file not identified uniquely')
+    end
+    outDat.preProcScript = 'O15PreProc.m'; 
+    if datPrei(sessi) == 1
+        outDat.type = 'Dupi'; 
+    elseif datPrei(sessi) == 2
+        outDat.type = 'OBE';
+    end
+
+    clear behDat buttonPresses confirmMarks dat di difVals downs idx ...
+        photoDiode ups trialStarts trialMarks triali tmp starti ...
+        sniffMarks sniffi
+
     %% data cleaning
+
+    idx = cellfun(@(x) contains(x, 'macro'), outDat.labels);
+    figure
+    macroDat = outDat.data(idx, :); 
+    plot(macroDat(1,:))
+    hold on 
+    for ii = 2:6
+        plot(macroDat(ii,:)+(ii-1)*50)
+    end
+    title('will need to code channel selection if needed')
+
 
     idx = cellfun(@(x) contains(x, 'macro'), outDat.labels);
     macroDat = outDat.data(idx, :); 
@@ -196,7 +229,71 @@ for sessi = 1:length(sessionIDs)
         spikeWin = 11; 
         hasEEG = false;
 end
+%% EEG channel flagging, interpolation, blink removal, laplacian
 
+if hasEEG
+    standardEEGlocs = readtable([codePre ...
+        'ZelanoLabScripts/myEEGcoords_thetaPhi.csv']);
+
+    %check electrode names
+    for chan = 1:32
+        if ~strcmp(standardEEGlocs.Label(chan), outDat.labels(chan))
+            error('EEG channels not labeled as expected')
+        end
+    end
+
+    [badTS, badChans] = ...
+            removeNoiseChansVolt(outDat.data(1:32,:), outDat.fs);
+    chanIDX = 1:32; 
+    if ismember(1, badChans)
+      chanIDX(badChans(2:end)) = [];
+    else
+      chanIDX(badChans) = [];
+      
+    end
+    ephysDat = outDat.data(1:32,:);
+    [out, badChan2, blinkIndicator] = blinkRemoveWrapper(...
+                                                ephysDat(chanIDX,:),...
+                                                outDat.fs);
+
+    badChans = [badChans; chanIDX(badChan2)]; 
+    ephysDat(chanIDX,:) = out; 
+    phi = standardEEGlocs.Phi .*pi ./ 180; 
+    theta = standardEEGlocs.Theta .*pi ./ 180; 
+    X = cos(phi) .* sin(theta);
+    Y = sin(phi) .* sin(theta); 
+    Z = cos(theta); 
+
+    ephysDat = interpolate_perrinX(ephysDat,X,Y,Z,badChans);
+
+    ephysDat = ephysDat - mean(ephysDat,1); 
+
+    dataLap = laplacian_perrinX(ephysDat, X, Y, Z); 
+
+    lbls = string(outDat.labels(1:32));
+    lbls = reshape(lbls, [length(lbls), 1]);
+
+    outDat.eegLocs = table(lbls, 'VariableNames', {'labels'}); 
+    outDat.eegLocs.X = X; 
+    outDat.eegLocs.Y = Y; 
+    outDat.eegLocs.Z = Z; 
+    outDat.eegLocs.theta = theta; 
+    outDat.eegLocs.phi = phi; 
+    outDat.badChans = outDat.labels(badChans); 
+    outDat.dataLap = dataLap; 
+    outDat.data(1:32,:) = ephysDat; 
+    outDat.data(end+1, :,:) = blinkIndicator; 
+    outDat.labels{end+1} = "blinkIndicator";
+    outDat.data(end+1, :,:) = badTS; 
+    outDat.labels{end+1} = "badTS";
+    outDat.EEGInterpolation = 1;
+    outDat.EEGCleaning = 1;
+    outDat.blinkRemoval = 1; 
+
+
+end
+clear X Y Z theta phi ephysDat dataLap blinkIndicator badTS badChans ...
+    chanIDX standardEEGlocs badChan2 out lbls ii chan hasEEG
 %% spike cleaning using prominence detector combined with windowed IC removal
 %applied to macro channels only 
 if spikeClean
@@ -226,22 +323,10 @@ else
 
 
 end
-%% blink removal using full IC removal across all ephys channels
-if hasEEG
-    %cleaning blinks
-    ephysDat = outDat.data(1:32,:); 
-
-    [out, badChan, blinkIndicator] = blinkRemoveWrapper(ephysDat,...
-                                    outDat.fs);
-
-    outDat.badChans = badChan; 
-    outDat.data(1:32,:) = out; 
-    outDat.data(end+1, :,:) = blinkIndicator; 
-    outDat.labels{end+1} = "blinkIndicator";
-    outDat.blinkRemoval = 1; 
-end
 
 
+clear a b chani gammaSig idx macOut macroDat out prominence spikeClean ...
+    spikeThresh spikeWin test 
  
   
 %% respiration data handling to identify sniffs
@@ -262,7 +347,7 @@ end
 
     rspTrial = smoothdata(rspDat, 'gaussian', 300); 
     test = (rspTrial(30:end) - rspTrial(1:end-29)).^2 .* ...
-    rspTrial(30:end); 
+                    rspTrial(30:end); 
     test(test<0) = 0; 
     test(test>10000) = 10000; 
     test = smoothdata(test, 'gaussian', 500);
@@ -394,15 +479,43 @@ end
         plot(testHere)
 
     end
+     %col 1: sniff onset index
+    %col 2: trial number
+    %col 3: sniff within trial number
+    %col 4: off from TTL by
+    %col 5: corect / incorrect behavior 1 / 0
+    %col 6: sniff type 1 = start, 2 = free, 3 = confirm
+    %col 7: adjustment for phase align
+tmpBehDat = outDat.behDat; 
 
-outDat.sniffInfo = outSniffs; 
+sniffTypes = {"start", "free", "confirm"};     
+
+outDat.moreThan1 = 1; 
+outDat.behDat = table; 
+outDat.behDat.sniffOnset = outSniffs(:,1);
+outDat.behDat.n = outSniffs(:,2); 
+outDat.behDat.wiTriali = outSniffs(:,3); 
+outDat.behDat.TTLoffSet = outSniffs(:,4);
+outDat.behDat.sniffType = outSniffs(:,6); 
+outDat.behDat.sniffLabel = [sniffTypes{outSniffs(:,6)}]'; 
+for ii = 1:length(tmpBehDat.target)
+    idx = find(outDat.behDat.n == ii);
+    for jj = 1:length(idx)
+        outDat.behDat.target(idx(jj)) = string(tmpBehDat.target{ii});
+        outDat.behDat.response(idx(jj)) = string(tmpBehDat.response{ii});
+        outDat.behDat.expScore(idx(jj)) = tmpBehDat.expScore(ii);
+    end
+
+end
+
+clear cuedBackBuff curSniffs endidx endSearch idx ii jj maxSniff oi ...
+    outSniffs rspDat used val type TTLs tt triali tmpBehDat thresh ...
+    testSpace testHere test targidx targest startSearch sniffTypes ...
+    sniffi sizes rspTrial
 
 %% epoch the data! 
 
-%channels X 6 seconds of time X sniffs
-outDat.tim = -2:1/outDat.fs:4; 
-trialDat = zeros(size(outDat.data,1), length(outDat.tim), ...
-    size(outDat.sniffInfo,1));
+tim = -2:1/outDat.fs:4;
 
 
  %subjectSpecific Thresholds
@@ -414,10 +527,10 @@ switch sessionIDs{sessi}
         adjWin = 500; 
 end
 
-for sniffi = 1:size(outDat.sniffInfo, 1)
+for sniffi = 1:size(outDat.behDat, 1)
     %loop sniffs
-    startIDX = outDat.sniffInfo(sniffi,1) - 2*outDat.fs; 
-    endIDX = outDat.sniffInfo(sniffi,1) + 4*outDat.fs; 
+    startIDX = outDat.behDat.sniffOnset(sniffi) - 2*outDat.fs; 
+    endIDX = outDat.behDat.sniffOnset(sniffi) + 4*outDat.fs; 
     test = outDat.data(:,startIDX:endIDX); 
     
     %pull trial respiration data: 
@@ -432,7 +545,7 @@ for sniffi = 1:size(outDat.sniffInfo, 1)
     %flip signal
     rspDat = rspDat .* rspFlip(sessi);
     figure
-    plot(outDat.tim, rspDat)
+    plot(tim, rspDat)
     title(sniffi)
 
     analytic = hilbert(rspDat); 
@@ -441,7 +554,7 @@ for sniffi = 1:size(outDat.sniffInfo, 1)
     rspPhase = angle(analytic);
 
     yyaxis right
-    plot(outDat.tim, rspPhase)
+    plot(tim, rspPhase)
 
    %detect most likely peak of the sniff: 
     adjust = find(rspPhase(1:end-1) < 0 & rspPhase(2:end)>0);
@@ -450,7 +563,7 @@ for sniffi = 1:size(outDat.sniffInfo, 1)
     if length(adjust) > 1
         adjust = adjust(find(adjust>1000, 1));
     end
-    xline(outDat.tim(adjust))
+    xline(tim(adjust))
     %go backwards to find the onset
     adjust = adjust - 10;
     smthRsp = smoothdata(rspDat, 'gaussian', 500); 
@@ -458,47 +571,45 @@ for sniffi = 1:size(outDat.sniffInfo, 1)
         smthRsp(adjust-(adjWin-20):adjust);
     yyaxis left
     hold on 
-    plot(outDat.tim(adjust-(adjWin-10):adjust-10), difVals*5)
+    plot(tim(adjust-(adjWin-10):adjust-10), difVals*5)
 
     [~, minidx] = min(difVals); 
 
-    xline(outDat.tim(adjust-(adjWin+20) + minidx))
+    xline(tim(adjust-(adjWin+20) + minidx))
     
 
 
     adjust = round(adjust-520 + minidx - outDat.fs*2);
     test = outDat.data(:,adjust+startIDX:endIDX+adjust); 
-    outDat.sniffInfo(sniffi, 7) = adjust; 
-    outDat.sniffInfo(sniffi, 8) = outDat.sniffInfo(sniffi, 1) + adjust; 
+    outDat.behDat.adjust(sniffi) = adjust; 
+    outDat.behDat.finalOnset(sniffi) = ...
+                                outDat.behDat.sniffOnset(sniffi) + adjust; 
 
    
 
-    trialDat(:,:,sniffi) = test;
 
 
 end
 
 idx = cellfun(@(x) contains(x, 'rsp'), outDat.labels);
-rspDat = trialDat(idx, :, :); 
+rspDat = outDat.data(idx, :); 
 
   
     
 idx = rspIDX(sessi); 
-rspDat = squeeze(rspDat(idx, :, :)); 
+rspDat = squeeze(rspDat(idx, :)); 
     
 %flip signal
 rspDat = rspDat .* rspFlip(sessi);
 
-figure; imagesc(outDat.tim, [], rspDat')
+
 
 figure; plot(rspDat)
+xline(outDat.behDat.finalOnset)
 
-outDat.trialDat = trialDat; 
-outDat = rmfield(outDat, 'data');
 
-outDat.rspIDX = idx(rspIDX(sessi));
+outDat.rspIDX = rspIDX(sessi);
 outDat.rspFlip = rspFlip(sessi); 
-
  if ~exist([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc'], 'dir')
          mkdir([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc']);
  end

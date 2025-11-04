@@ -1,6 +1,7 @@
-function [out, badChan, blinkIndicator] = blinkRemoveWrapper(data, fs)
+function [out, badChan, blinkIndicator] = blinkRemoveWrapper(outDat, ...
+                                                            chanIDX, fs)
 
-
+    data = outDat.data(chanIDX, :); 
     origIs2D = ismatrix(data);
     if origIs2D
         data    = reshape(data,    size(data,1), size(data,2), 1);
@@ -9,15 +10,8 @@ function [out, badChan, blinkIndicator] = blinkRemoveWrapper(data, fs)
     [C,T,N] = size(data);
     data = reshape(data, C, []);
             
-    figure; plot(data(1, :))
-    hold on 
-    plot(data(32,:))
-    legend({'chan 1', 'chan 32'})
-    blinkChan = input(sprintf(...
-            'Enter the index of blinkChan (1 or %d), or [] to skip: '...
-                                            ,size(data,1)));
-    
-            
+    %hard coded index of blink channel! 
+    blinkChan = 1;      
     
     figure; 
     imagesc(data) %check for bad channels overall 
@@ -70,6 +64,10 @@ function [out, badChan, blinkIndicator] = blinkRemoveWrapper(data, fs)
 
     out = ica_blinks(trainDat, 'blinkChan', ...
         find(chanidx == blinkChan));
+
+    ax = plotICATopo(out, out.badICs(1), outDat.eegLocs.theta(chanidx), ...
+        outDat.eegLocs.phi(chanidx));
+    saveas(ax,fullfile(outDat.figs, 'removedBlink.jpg'));
 
     Sclean = out.W * data(chanidx,:); 
     Sclean(out.badICs,:) = 0; % removal of blink IC entirely 

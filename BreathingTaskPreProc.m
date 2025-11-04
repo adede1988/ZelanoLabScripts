@@ -13,43 +13,45 @@ datPre = { 'R:\Neurology\Zelano_Lab\Lab_Common\Dupi\', ...
 %prefix index for data folder: 
 datPrei = [1,1,1,2,3,3,3,3,3,3,2,1,1]; 
 
-sessionIDs = {'250818_Dupi_NMH_JH_1', ...%preprocessed
-               '250623_DUPI_NMH_KS_2',...%preprocessed
-               '250623_Dupi_NMH_KS_1',...%preprocessed
-               '250908_OBE_NWU_AS', ...%preprocessed
-                '250723_EEG_NWU_IN', ...%preprocessed
-                '250725_EEG_NWU_BN', ...%preprocessed
-                '250815_EEG_NWU_PP', ...%preprocessed
-                '250819_EEG_NWU_ZL', ...%preprocessed
-                '250723_EEG_NWU_BK', ...%preprocessed
-                '250912_EEG_NWU_JN', ...%preprocessed
-                '250904_OBE_NWU_TI',...%preprocessed
-                '250818_Dupi_NMH_JH_2',...%preprocessed
-                '250811_Dupi_NMH_TPB_1'};%preprocessed
+sessionIDs = {'250818_Dupi_NMH_JH_1', ... #preprocessed
+               '250623_DUPI_NMH_KS_2',... #preprocessed
+               '250623_Dupi_NMH_KS_1',... #preprocessed
+               '250908_OBE_NWU_AS', ...
+                '250723_EEG_NWU_IN', ...
+                '250725_EEG_NWU_BN', ...
+                '250815_EEG_NWU_PP', ...
+                '250819_EEG_NWU_ZL', ...
+                '250723_EEG_NWU_BK', ...
+                '250912_EEG_NWU_JN', ...
+                '250904_OBE_NWU_TI',...
+                '250818_Dupi_NMH_JH_2',...
+                '250811_Dupi_NMH_TPB_1'};
 
 %there are multiple respiration channels in many recordings
 %which one is right for each session: 
 rspIDX = [3,3,3,3,1,1,1,1,1,1,3,3,3]; 
 rspFlip = [-1,-1,-1,-1,-1,-1,-1,1,-1,1,1,1,1]; %hard code flip
 
-addpath([codePre 'HpcAccConnectivityProject/helperFuncs'])
-addpath(genpath([codePre 'myFrequentUse']))
-addpath([codePre 'myFrequentUse/export_fig_repo'])
+% addpath([codePre 'HpcAccConnectivityProject/helperFuncs'])
+% addpath(genpath([codePre 'myFrequentUse']))
+% addpath([codePre 'myFrequentUse/export_fig_repo'])
 
-addpath([codePre 'fieldtrip-20230118'])
-addpath([codePre 'emotionDecoding'])
+addpath(genpath('C:\Users\dtf8829\Documents\eeglab2025.0.0'))
+% addpath([codePre 'fieldtrip-20230118'])
+% addpath([codePre 'emotionDecoding'])
 addpath([codePre 'slowBreathing'])
+addpath([codePre 'ZelanoLabScripts'])
 
 set(0, 'defaultfigurewindowstyle', 'docked')
-ft_defaults
+% ft_defaults
 
 for sessi = 1:length(sessionIDs)
 
 %% custom import for different participants: 
 
 %check for pre existing processing: 
-if ~exist([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\' 'TESTTESTTESTTESTTEST' ...
-                sessionIDs{sessi} '_breathingPreProc.mat'], 'file')
+% if ~exist([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\' 'TESTTESTTESTTESTTEST' ...
+%                 sessionIDs{sessi} '_breathingPreProc.mat'], 'file')
 
 
 
@@ -382,6 +384,36 @@ if ~exist([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\' 'TESTTESTTESTTES
     
     end
     
+    %put all the data into Chan X time with conditions concatenated
+    %together
+
+    data = zeros(size(outDat.data,1), prod(size(outDat.data,[2,3])));
+    for ii = 1:size(outDat.data,3)
+        data(:,1+(ii-1)*600000:(ii*600000)) = outDat.data(:,:,ii); 
+    end
+    
+    outDat.data = data; 
+    % downsample and bandpass: 
+    outDat = downsample_data(outDat, 500);
+    outDat.task = "breathing"; 
+    outDat.sessID = sessionIDs{sessi};
+    outDat.OGdataDir = [datPre{datPrei(sessi)} sessionIDs{sessi}];
+    tmp = dir([datPre{datPrei(sessi)} sessionIDs{sessi}]);
+    tmp = tmp(cellfun(@(x) contains(x, '.m'), {tmp.name}));
+    tmp = tmp(cellfun(@(x) contains(x, 'LoadData'), {tmp.name}));
+    if size(tmp,1) == 1
+        outDat.loadFile = tmp.name;
+    else 
+        error('load file not identified uniquely')
+    end
+    outDat.preProcScript = 'BreathingTaskPreProc.m'; 
+    if datPrei(sessi) == 1
+        outDat.type = 'Dupi'; 
+    elseif datPrei(sessi) == 2
+        outDat.type = 'OBE';
+    elseif datPrei(sessi) == 3
+        outDat.type = 'EEG';
+    end
     %make a directory for preprocessed data if it hasn't been made yet
     if ~exist([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc'], 'dir')
          mkdir([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc']);
@@ -390,13 +422,15 @@ if ~exist([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\' 'TESTTESTTESTTES
     %                 sessionIDs{sessi} '_breathingPreProc.mat'], ...
     %                 'outDat', "-v7.3")
 %if there is pre existing processing, then load it: 
-else
-    outDat =  load([datPre{datPrei(sessi)} sessionIDs{sessi} ...
-                          '\preProc\' sessionIDs{sessi} ...
-                          '_breathingPreProc.mat']).outDat; 
+% else
+%     outDat =  load([datPre{datPrei(sessi)} sessionIDs{sessi} ...
+%                           '\preProc\' sessionIDs{sessi} ...
+%                           '_breathingPreProc.mat']).outDat; 
+% 
+% end
 
-end
-    
+clear behDat dat dat2 data di ii photoDiodeDat tim tmp TTLs secondBreaks
+
     %% combined flow from here: 
 
     %at this point there should be an outDat struct with the following: 
@@ -407,19 +441,25 @@ end
     %CSClist: 1Xchannels cell array of original CSC labels from neuralynx
     %fs: scalar sampling rate
 
-outDat.sessID = sessionIDs{sessi}; 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% downsample and bandpass: 
-outDat = downsample_data(outDat, 500);
+
 
 
 %% data cleaning
-[C,T,N] = size(outDat.data);
-X = reshape(outDat.data, C, T*N);  
+X = outDat.data;  
 
 try
     idx = cellfun(@(x) contains(x, 'macro'), outDat.labels);
     macroDat = X(idx, :); 
+    idx = cellfun(@(x) contains(x, 'macro'), outDat.labels);
+    figure
+    macroDat = outDat.data(idx, :); 
+    plot(macroDat(1,:))
+    hold on 
+    for ii = 2:6
+        plot(macroDat(ii,:)+(ii-1)*50)
+    end
+    title('will need to code channel selection if needed')
     macOut = zeros([5, size(macroDat, 2)]);
     %do bipolar rereferencing 
     for chani = 1:5
@@ -475,6 +515,71 @@ end
         spikeClean = false;
 end
 
+%% EEG channel flagging, interpolation, blink removal, laplacian
+
+if hasEEG
+    standardEEGlocs = readtable([codePre ...
+        'ZelanoLabScripts/myEEGcoords_thetaPhi.csv']);
+
+    %check electrode names
+    for chan = 1:32
+        if ~strcmp(standardEEGlocs.Label(chan), outDat.labels(chan))
+            error('EEG channels not labeled as expected')
+        end
+    end
+
+    [badTS, badChans] = ...
+            removeNoiseChansVolt(outDat.data(1:32,:), outDat.fs);
+    chanIDX = 1:32; 
+    if ismember(1, badChans)
+      chanIDX(badChans(2:end)) = [];
+    else
+      chanIDX(badChans) = [];
+      
+    end
+    ephysDat = outDat.data(1:32,:);
+    [out, badChan2, blinkIndicator] = blinkRemoveWrapper(...
+                                                ephysDat(chanIDX,:),...
+                                                outDat.fs);
+
+    badChans = [badChans; chanIDX(badChan2)]; 
+    ephysDat(chanIDX,:) = out; 
+    phi = standardEEGlocs.Phi .*pi ./ 180; 
+    theta = standardEEGlocs.Theta .*pi ./ 180; 
+    X = cos(phi) .* sin(theta);
+    Y = sin(phi) .* sin(theta); 
+    Z = cos(theta); 
+
+    ephysDat = interpolate_perrinX(ephysDat,X,Y,Z,badChans);
+
+    ephysDat = ephysDat - mean(ephysDat,1); 
+
+    dataLap = laplacian_perrinX(ephysDat, X, Y, Z); 
+
+    lbls = string(outDat.labels(1:32));
+    lbls = reshape(lbls, [length(lbls), 1]);
+
+    outDat.eegLocs = table(lbls, 'VariableNames', {'labels'}); 
+    outDat.eegLocs.X = X; 
+    outDat.eegLocs.Y = Y; 
+    outDat.eegLocs.Z = Z; 
+    outDat.eegLocs.theta = theta; 
+    outDat.eegLocs.phi = phi; 
+    outDat.badChans = outDat.labels(badChans); 
+    outDat.dataLap = dataLap; 
+    outDat.data(1:32,:) = ephysDat; 
+    outDat.data(end+1, :,:) = blinkIndicator; 
+    outDat.labels{end+1} = "blinkIndicator";
+    outDat.data(end+1, :,:) = badTS; 
+    outDat.labels{end+1} = "badTS";
+    outDat.EEGInterpolation = 1;
+    outDat.EEGCleaning = 1;
+    outDat.blinkRemoval = 1; 
+
+
+end
+clear X Y Z theta phi ephysDat dataLap blinkIndicator badTS badChans ...
+    chanIDX standardEEGlocs badChan2 out lbls ii chan hasEEG chani idx
 
 %% spike cleaning using prominence detector combined with windowed IC removal
 %applied to macro channels only 
@@ -490,40 +595,26 @@ if spikeClean & macroAvail
     out = ica_flag_spikes_targeted(macOut, test, prominence, 'Fs', 500);
 
    
-    outDat.data(end+1:end+5, :,:) = reshape(out.data_clean, 5, T, N);  
+    outDat.data(end+1:end+5, :) = out.data_clean; 
     outDat.labels(end+1:end+5) = {'macBP1', 'macBP2', 'macBP3', ...
                                                 'macBP4', 'macBP5'};
-    outDat.data(end+1, :,:) = reshape(out.mixVector, 1, T, N); 
+    outDat.data(end+1, :) = out.mixVector; 
     outDat.labels{end+1} = "spikeCleanVec";
     outDat.spikeRemoval = 1; 
 elseif macroAvail
-    outDat.data(end+1:end+5, :,:) = reshape(macOut, 5, T, N);
+    outDat.data(end+1:end+5, :) = macOut;
     outDat.labels(end+1:end+5) = {'macBP1', 'macBP2', 'macBP3', ...
                                                 'macBP4', 'macBP5'};
-    outDat.data(end+1, :,:) = ones(size(outDat.data,[2,3])); 
+    outDat.data(end+1, :) = ones(size(outDat.data,[2]),1); 
     outDat.labels{end+1} = "spikeCleanVec";
     outDat.spikeRemoval = 1; 
 
 
 end
 
-%% blink removal using full IC removal across all ephys channels
-    if hasEEG
-        ephysDat = outDat.data(1:32,:,:);
-        [out, badChan, blinkIndicator] = blinkRemoveWrapper(ephysDat,...
-                                        outDat.fs);
 
-        outDat.badChans = unique(badChan); 
-        outDat.data(1:32,:,:) = out;
-        outDat.data(end+1, :,:) = blinkIndicator; 
-        outDat.labels{end+1} = "blinkIndicator";
-        outDat.blinkRemoval = 1; 
-        
-
-
-       
-    end
-
+clear a b chani gammaSig idx macOut macroAvail macroDat out prominence ...
+    spikeClean spikeThresh spikeWin test
 
  
 
@@ -531,14 +622,14 @@ end
 if ~isfield(outDat, 'bmObj')
     %get out the respiration data
     idx = cellfun(@(x) contains(x, 'rsp'), outDat.labels);
-    rspDat = outDat.data(idx, :, :); 
+    rspDat = outDat.data(idx, :); 
     
     %choose which one looks right
-    rspDatz = (rspDat - mean(rspDat, [2,3])) ./ std(rspDat, [], [2,3]); 
+    % rspDatz = (rspDat - mean(rspDat, [2,3])) ./ std(rspDat, [], [2,3]); 
     
     idx = rspIDX(sessi); 
-    rspDat = squeeze(rspDat(idx, :, :)); 
-    rspDatz = squeeze(rspDatz(idx, :,:)); 
+    rspDat = squeeze(rspDat(idx, :)); 
+    % rspDatz = squeeze(rspDatz(idx, :,:)); 
     
     %flip signal
     rspDat = rspDat .* rspFlip(sessi);
@@ -563,34 +654,97 @@ if ~isfield(outDat, 'bmObj')
     %col13: empty
     %col14: index
     
-    bmObj = breathTemplates4(rspDat(:,1), outDat.fs);
+    bmObj = breathTemplates4(rspDat, outDat.fs);
     bmObj(:, 12) = 1; 
-    for cndi = 2:size(rspDat, 2)
-        bmCur = breathTemplates4(rspDat(:,cndi), outDat.fs);
-        bmCur(:,12) = cndi; 
-        bmObj = [bmObj; bmCur]; 
+    TaskBreaks = 0:300:max(outDat.behDat.order)*300-10; 
+    for cndi = 2:length(TaskBreaks)
+       
+        bmObj(bmObj(:,2)>TaskBreaks(cndi),12) = cndi; 
     
     end
+    outDat.moreThan1 = 1; 
+    tmpBehDat = outDat.behDat; 
+
+    outDat.behDat = table(); 
+    %col 2: onset tim
+    tim = (1:size(outDat.data,2)) / outDat.fs; 
+    idx = arrayfun(@(x) find(x<=tim, 1), bmObj(:,2)); 
+    outDat.behDat.sniffOnset = idx; 
+    outDat.behDat.finalOnset = idx; 
+    %col12: condition
+    outDat.behDat.condition = bmObj(:,12); 
+    %col 1: onset Y value
+    outDat.behDat.Yonset = bmObj(:,1); 
+    %col 3: peak Y value
+    outDat.behDat.inhaleMax = bmObj(:,3); 
+    %col 4: peak tim
+    idx = arrayfun(@(x) find(x<=tim, 1), bmObj(:,4)); 
+    outDat.behDat.inMaxTim = idx; 
+    %col 5: end Y value
+    outDat.behDat.Yend = bmObj(:,5); 
+    %col 6: end tim
+    idx = arrayfun(@(x) find(x<=tim, 1), bmObj(:,6)); 
+    outDat.behDat.endTim = idx; 
+    %col 7: length (end tim - onset tim)
+    outDat.behDat.length = bmObj(:,7); 
+    %col 8: amp (peak Y - avg of two ends)
+    outDat.behDat.amp = bmObj(:,8); 
+    %col10: exhale peak Y value
+    outDat.behDat.exhaleMin = bmObj(:,10); 
+    %col11: exhale peak tim
+    outDat.behDat.exMinTim = bmObj(:,11); 
+    %col14: index
+    outDat.behDat.index = bmObj(:,14); 
     
-    outDat.bmObj = bmObj; 
-    outDat.rspDat = rspDat; 
+    %integrate emotion data into the respiration data in general 
+    Qs = unique(tmpBehDat.Q_short); 
     
-    meanLens = zeros(size(rspDat,2)); 
-    for cndi = 1:size(rspDat, 2)
-        test = bmObj(bmObj(:,12)==cndi, 2);
-        figure
-        plot(outDat.tim, rspDat(:, cndi))
-        xline(test)
-    
-        meanLens(cndi) = mean(bmObj(bmObj(:,12)==cndi, 7));
-    
+    for cndi = 1:max(outDat.behDat.condition)
+        idx = find(outDat.behDat.condition == cndi); 
+        tmp = tmpBehDat(tmpBehDat.order == cndi,:);
+        outDat.behDat.task(idx) = tmp.task(1); 
+        outDat.behDat.noseMouth(idx) = tmp.noseMouth(1);
+        outDat.behDat.shadowFile(idx) = tmp.shadowFile(1);
+        outDat.behDat.warp(idx) = tmp.warp(1);
+        for q = 1:length(Qs)
+            ii = find(cellfun(@(x) strcmp(Qs{q}, x), tmp.Q_short));
+            outDat.behDat.([Qs{q} '_' tmp.type{ii}])(idx) = tmp.rsp(ii); 
+        end
     end
+
+    cndi = 0;
+    baseEmotion = table; 
+    tmp = tmpBehDat(tmpBehDat.order == cndi,:);
+    baseEmotion.task = tmp.task(1); 
+    baseEmotion.noseMouth = tmp.noseMouth(1);
+    baseEmotion.shadowFile = tmp.shadowFile(1);
+    baseEmotion.warp = tmp.warp(1);
+    for q = 1:length(Qs)
+        ii = find(cellfun(@(x) strcmp(Qs{q}, x), tmp.Q_short));
+        baseEmotion.([Qs{q} '_' tmp.type{ii}]) = tmp.rsp(ii); 
+    end
+    
+    
+    outDat.baseEmotion = baseEmotion; 
+    outDat.rspIdx = rspIDX(sessi);
+    outDat.rspFlip = rspFlip(sessi); 
+    
+    % meanLens = zeros(size(rspDat,2)); 
+    % for cndi = 1:size(rspDat, 2)
+    %     test = bmObj(bmObj(:,12)==cndi, 2);
+    %     figure
+    %     plot(outDat.tim, rspDat(:, cndi))
+    %     xline(test)
+    % 
+    %     meanLens(cndi) = mean(bmObj(bmObj(:,12)==cndi, 7));
+    % 
+    % end
     
     %get the target files for the shadow conditions:
-    targTraces = zeros(size(rspDat)); 
-     for cndi = 3:size(rspDat, 2)
-        idx = find(outDat.behDat.order == cndi, 1);
-        targFile = outDat.behDat.shadowFile{idx}; 
+    targTraces = zeros(length(TaskBreaks), outDat.fs * 300); 
+     for cndi = 3:max(outDat.behDat.condition)
+        idx = find(tmpBehDat.order == cndi, 1);
+        targFile = tmpBehDat.shadowFile{idx}; 
         if strcmp('NA', targFile)
             targFile = 'audioResp';
         end
@@ -600,17 +754,21 @@ if ~isfield(outDat, 'bmObj')
         targFile = readtable([codePre targFile]);
         targFile(targFile.voltage == 0,:) = []; 
         try
-            tempo_scale = str2num(outDat.behDat.warp{idx});
+            tempo_scale = str2num(tmpBehDat.warp{idx});
         catch
-            tempo_scale = outDat.behDat.warp(idx);
+            tempo_scale = tmpBehDat.warp(idx);
         end
     
-        targ_len = round( outDat.behDat.trialTim(idx)* ...
-                          outDat.behDat.FPS(idx) * 2);
+        targ_len = round( tmpBehDat.trialTim(idx)* ...
+                          tmpBehDat.FPS(idx) * 2);
         new_len = round(length(targFile.voltage) / tempo_scale);
-        voltages_resampled = interp1(1:length(targFile.voltage),... %og time
+
+        L = length(targFile.voltage); 
+        timRec = 1/L:1/L:1;
+        timGoal= 1/new_len:1/new_len:1; 
+        voltages_resampled = interp1(timRec,... %og time
                                     targFile.voltage, ... %og signal
-                                    1:new_len, 'linear'); %targ time
+                                    timGoal, 'linear'); %targ time
         loop_start = round(180/tempo_scale); 
         loop_end = length(voltages_resampled) - round(180/tempo_scale);
         loop_segment = voltages_resampled(loop_start:loop_end); 
@@ -628,23 +786,25 @@ if ~isfield(outDat, 'bmObj')
         
         %cut to trialTim length
         timStp = mean(diff(targFile.timestamp));
-        tmpTim = timStp:timStp:outDat.behDat.trialTim(idx);
+        tmpTim = timStp:timStp:tmpBehDat.trialTim(idx);
         voltages = voltages(1:length(tmpTim));
         
         %resample to match ephys data: 
         voltages = interp1(tmpTim, ...
                            voltages, ...
-                           outDat.tim, 'linear'); 
+                           1/outDat.fs:1/outDat.fs:300, 'linear');  %FLAG HERE!!!!!!!
         
-        targTraces(:,cndi) = voltages; 
+        targTraces(cndi,:) = voltages; 
     
     end
-    
-    outDat.targTraces = targTraces; 
-    outDat.data(end+1, :, :) = targTraces; 
+    targTraces = targTraces'; 
+    outDat.data(end+1, :) = targTraces(:); 
     outDat.labels{end+1} = 'targTrace'; 
-    outDat.CSClist{end+1} = 'targTrace'; 
     
+    figure
+    plot(rspDat)
+    yyaxis right
+    plot(targTraces(:))
     
     % save([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\' ...
     %                 sessionIDs{sessi} '_breathingPreProc.mat'], ...
@@ -655,6 +815,11 @@ else
 
 end
 
+clear bmObj baseEmotion cndi idx ii L loop_end loop_segment loop_start ...
+    loopLen new_len photoDiode q Qs repeats rspDat targ_len targFile ...
+    targTraces TaskBreaks tempo_scale tim timGoal timRec timStp tmp ...
+    tmpBehDat tmpTim voltages voltages_resampled
+
    %% get heartbeats: 
         %requires custom heartbeat detection
 if ~isfield(outDat, 'RRint')
@@ -662,149 +827,124 @@ if ~isfield(outDat, 'RRint')
 
     %bandpass and z-score
     idx = cellfun(@(x) contains(x, 'ECG'), outDat.labels);
-    ECG = outDat.data(idx, :, :); 
-    test = reshape(ECG, 3, []); 
+    ECG = outDat.data(idx, :); 
     
     d = designfilt('bandpassiir', 'FilterOrder', 4, ...
     'HalfPowerFrequency1', 5, 'HalfPowerFrequency2', 40, ...
     'SampleRate', outDat.fs);
-    L = size(outDat.data,2); 
-    test = filtfilt(d, test')'; 
-    ECG = reshape(test, 3, L, []); 
+  
+    ECG = filtfilt(d, ECG')'; 
     
     
     
     %plot for custom algorithm design: 
-    ECGz = (ECG - mean(ECG, [2,3])) ./ std(ECG, [], [2,3]); 
+    ECGz = (ECG - mean(ECG, 2)) ./ std(ECG, [], 2); 
     figure; 
-    plot(1:L, ECGz(1,:,1), 'color', 'k')
+    plot(ECGz(1,:), 'color', 'k')
     hold on 
-    plot(1:L,ECGz(2,:,1), 'color', 'red')
-    plot(1:L,ECGz(3,:,1), 'color', 'green')
+    plot(ECGz(2,:), 'color', 'red')
+    plot(ECGz(3,:), 'color', 'green')
     
     
-    beatSep = outDat.fs / 10; 
+    beatSep = outDat.fs / 20; 
     %participant specific heartbeat analysis:
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    heartBeats = cell(size(rspDat, 2),1); 
+    
     switch sessionIDs{sessi}
         case '250818_Dupi_NMH_JH_1'
-            for cndi = 1:size(rspDat, 2)
-                %get within beat times: 
-                test = find(arrayfun(@(x,y,z) x>5 & y>4 & z<-.5, ...
-                         ECGz(1,3:end,cndi), ECGz(2,1:end-2,cndi), ...
-                         ECGz(3,1:end-2,cndi) ) ) ;
-                test = test(diff(test) > beatSep);
-                heartBeats{cndi} = test; 
-            end
+            
+            %get within beat times: 
+            test = find(arrayfun(@(x,y,z) x>5 & y>4 & z<-.5, ...
+                     ECGz(1,3:end), ECGz(2,1:end-2), ...
+                     ECGz(3,1:end-2) ) ) ;
+            test = test(diff(test) > beatSep);
+            heartBeats = test; 
+         
         case '250818_Dupi_NMH_JH_2'
-            for cndi = 1:size(rspDat, 2)
-                %get within beat times: 
-                test = find(arrayfun(@(x,y,z) x>3 & y<-3 & z>1, ...
-                         ECGz(2,1:end-13,cndi), ECGz(3,2:end-12,cndi), ...
-                         ECGz(3,14:end,cndi) ) ) ;
-                test = test(diff(test) > beatSep);
-                heartBeats{cndi} = test; 
-            end
+            %get within beat times: 
+            test = find(arrayfun(@(x,y,z) x>3 & y<-3 & z>1, ...
+                     ECGz(2,1:end-13), ECGz(3,2:end-12), ...
+                     ECGz(3,14:end) ) ) ;
+            test = test(diff(test) > beatSep);
+            heartBeats = test; 
+
         case '250623_DUPI_NMH_KS_2'
-            for cndi = 1:size(rspDat, 2)
-                %get within beat times: 
-                test = find(arrayfun(@(x,y,z, n) x>.5 & y>1.75 & ...
-                                                 z<-2 & n<-1, ...
-                         ECGz(1,1:end-9,cndi), ECGz(2,1:end-9,cndi), ...
-                         ECGz(3,1:end-9,cndi), ECGz(2,10:end,cndi) ) ) ;
-                test = test(diff(test) > beatSep);
-                heartBeats{cndi} = test; 
-            end
+            %get within beat times: 
+            test = find(arrayfun(@(x,y,z, n) x>.5 & y>1.75 & ...
+                                             z<-2 & n<-1, ...
+                     ECGz(1,1:end-9), ECGz(2,1:end-9), ...
+                     ECGz(3,1:end-9), ECGz(2,10:end) ) ) ;
+            test = test(diff(test) > beatSep);
+            heartBeats = test; 
         case '250623_Dupi_NMH_KS_1'
-            for cndi = 1:size(rspDat, 2)
-                %get within beat times: 
-                test = find(arrayfun(@(x,y,z) x>2 & y>.75 & ...
-                                                 z<-2, ...
-                         ECGz(1,1:end-7,cndi), ECGz(2,8:end,cndi), ...
-                         ECGz(3,2:end-6,cndi)) ) ;
-                test = test(diff(test) > beatSep);
-                heartBeats{cndi} = test; 
-            end
+            %get within beat times: 
+            test = find(arrayfun(@(x,y,z) x>2 & y>.75 & ...
+                                             z<-2, ...
+                     ECGz(1,1:end-7), ECGz(2,8:end), ...
+                     ECGz(3,2:end-6)) ) ;
+            test = test(diff(test) > beatSep);
+            heartBeats = test; 
         case '250908_OBE_NWU_AS'
-            for cndi = 1:size(rspDat, 2)
-                %get within beat times: 
-                test = find(arrayfun(@(x,y,z) x>2 & y>5 & z<-4, ...
-                         ECGz(1,5:end,cndi), ECGz(2,1:end-4,cndi), ...
-                         ECGz(3,2:end-3,cndi) ) ) ;
-                test = test(diff(test) > beatSep);
-                heartBeats{cndi} = test; 
-            end
+            %get within beat times: 
+            test = find(arrayfun(@(x,y,z) x>2 & y>5 & z<-4, ...
+                     ECGz(1,5:end), ECGz(2,1:end-4), ...
+                     ECGz(3,2:end-3) ) ) ;
+            test = test(diff(test) > beatSep);
+            heartBeats = test; 
          case '250723_EEG_NWU_IN'
-            for cndi = 1:size(rspDat, 2)
-                %get within beat times: 
-                test = find(arrayfun(@(x,y,z) x<-1 & y>2 & z<-1, ...
-                         ECGz(1,5:end,cndi), ECGz(2,3:end-2,cndi), ...
-                         ECGz(3,1:end-4,cndi) ) ) ;
-                test = test(diff(test) > beatSep);
-                heartBeats{cndi} = test; 
-            end
+            %get within beat times: 
+            test = find(arrayfun(@(x,y,z) x<-1 & y>2 & z<-1, ...
+                     ECGz(1,5:end), ECGz(2,3:end-2), ...
+                     ECGz(3,1:end-4) ) ) ;
+            test = test(diff(test) > beatSep);
+            heartBeats = test; 
          case '250725_EEG_NWU_BN'
-            for cndi = 1:size(rspDat, 2)
-                %get within beat times: 
-                test = find(arrayfun(@(x,y,z) x>1 & y<-3 & z>1, ...
-                         ECGz(3,12:end,cndi), ECGz(3,1:end-11,cndi), ...
-                         ECGz(2,2:end-10,cndi) ) ) ;
-                test = test(diff(test) > beatSep);
-                heartBeats{cndi} = test; 
-            end
+            %get within beat times: 
+            test = find(arrayfun(@(x,y,z) x>1 & y<-3 & z>1, ...
+                     ECGz(3,12:end), ECGz(3,1:end-11), ...
+                     ECGz(2,2:end-10) ) ) ;
+            test = test(diff(test) > beatSep);
+            heartBeats = test; 
          case '250815_EEG_NWU_PP'
-            for cndi = 1:size(rspDat, 2)
-                %get within beat times: 
-                test = find(arrayfun(@(x,y) x<-4 & y>3, ...
-                         ECGz(1,1:end,cndi), ECGz(2,1:end,cndi) ) ) ;
-                test = test(diff(test) > beatSep);
-                heartBeats{cndi} = test; 
-            end
+            %get within beat times: 
+            test = find(arrayfun(@(x,y) x<-4 & y>3, ...
+                     ECGz(1,1:end), ECGz(2,1:end) ) ) ;
+            test = test(diff(test) > beatSep);
+            heartBeats = test; 
          case '250819_EEG_NWU_ZL'
-            for cndi = 1:size(rspDat, 2)
-                %get within beat times: 
-                test = find(arrayfun(@(x,y,z) x<-2 & y>4 & z<-2, ...
-                         ECGz(1,1:end,cndi), ECGz(2,1:end,cndi), ...
-                         ECGz(3,1:end,cndi)) ) ;
-                test = test(diff(test) > beatSep);
-                heartBeats{cndi} = test; 
-            end
+            %get within beat times: 
+            test = find(arrayfun(@(x,y,z) x<-2 & y>4 & z<-2, ...
+                     ECGz(1,1:end), ECGz(2,1:end), ...
+                     ECGz(3,1:end)) ) ;
+            test = test(diff(test) > beatSep);
+            heartBeats = test; 
          case '250723_EEG_NWU_BK'
-            for cndi = 1:size(rspDat, 2)
-                %get within beat times: 
-                test = find(arrayfun(@(x,y,z) x>1.5 & y>2 & z<-3, ...
-                         ECGz(1,5:end,cndi), ECGz(2,1:end-4,cndi), ...
-                         ECGz(3,3:end-2,cndi)) ) ;
-                test = test(diff(test) > beatSep);
-                heartBeats{cndi} = test; 
-            end
+            %get within beat times: 
+            test = find(arrayfun(@(x,y,z) x>1.5 & y>2 & z<-3, ...
+                     ECGz(1,5:end), ECGz(2,1:end-4), ...
+                     ECGz(3,3:end-2)) ) ;
+            test = test(diff(test) > beatSep);
+            heartBeats = test; 
          case '250912_EEG_NWU_JN'
-            for cndi = 1:size(rspDat, 2)
-                %get within beat times: 
-                test = find(arrayfun(@(x,y) x>4 & y<-4, ...
-                         ECGz(2,1:end,cndi), ECGz(3,1:end,cndi)) ) ;
-                test = test(diff(test) > beatSep);
-                heartBeats{cndi} = test; 
-            end
+            %get within beat times: 
+            test = find(arrayfun(@(x,y) x>4 & y<-4, ...
+                     ECGz(2,1:end), ECGz(3,1:end)) ) ;
+            test = test(diff(test) > beatSep);
+            heartBeats = test; 
          case '250904_OBE_NWU_TI'
-            for cndi = 1:size(rspDat, 2)
-                %get within beat times: 
-                test = find(arrayfun(@(x,y,z) x<-2 & y>3 & z<0, ...
-                         ECGz(1,1:end-2,cndi), ECGz(2,2:end-1,cndi),...
-                         ECGz(3,3:end, cndi)) ) ;
-                test = test(diff(test) > beatSep);
-                heartBeats{cndi} = test; 
-            end
+            %get within beat times: 
+            test = find(arrayfun(@(x,y,z) x<-2 & y>3 & z<0, ...
+                     ECGz(1,1:end-2), ECGz(2,2:end-1),...
+                     ECGz(3,3:end, cndi)) ) ;
+            test = test(diff(test) > beatSep);
+            heartBeats = test; 
          case '250811_Dupi_NMH_TPB_1'
-            for cndi = 1:size(rspDat, 2)
-                %get within beat times: 
-                test = find(arrayfun(@(x,y,z) x>1 & y<-1 & z<-1, ...
-                         ECGz(2,3:end-10,cndi), ECGz(3,1:end-12,cndi),...
-                         ECGz(2,13:end, cndi)) ) ;
-                test = test(diff(test) > beatSep);
-                heartBeats{cndi} = test; 
-            end
+            %get within beat times: 
+            test = find(arrayfun(@(x,y,z) x>1 & y<-1 & z<-1, ...
+                     ECGz(2,3:end-10), ECGz(3,1:end-12),...
+                     ECGz(2,13:end, cndi)) ) ;
+            test = test(diff(test) > beatSep);
+            heartBeats = test; 
     
         otherwise
             disp('This participant does not have a set heartbeat alg')
@@ -813,54 +953,62 @@ if ~isfield(outDat, 'RRint')
     end
     
     outDat.heartBeats = heartBeats; 
+
+    clear beatSep d ECG ECGz idx heartBeats test
+
     %% with beats detected, establish RR interval timeseries
     
-    RRint = zeros(size(rspDat)); 
-    for cndi = 1:size(rspDat, 2)
-        tim = outDat.tim; 
-        beats = heartBeats{cndi}; 
-        beatTims = tim(beats); 
-        beatDiffs = diff(beatTims);
-        beatTims(end) = [];
+    idx = cellfun(@(x) contains(x, 'rsp'), outDat.labels);
+    rspDat = outDat.data(idx, :); 
+    
+    %choose which one looks right
+    % rspDatz = (rspDat - mean(rspDat, [2,3])) ./ std(rspDat, [], [2,3]); 
+    
+    idx = rspIDX(sessi); 
+    rspDat = squeeze(rspDat(idx, :)); 
+    % rspDatz = squeeze(rspDatz(idx, :,:)); 
+    
+    %flip signal
+    rspDat = rspDat .* rspFlip(sessi);
+    tim = 1/outDat.fs:1/outDat.fs:size(outDat.data,2)/outDat.fs; 
+    beatTims = tim(outDat.heartBeats); 
+    beatDiffs = diff(beatTims);
+    beatTims(end) = [];
        
-    %  figure; 
-    % plot(1:L, ECGz(1,:,cndi), 'color', 'k')
-    % hold on 
-    % plot(1:L,ECGz(2,:,cndi), 'color', 'red')
-    % plot(1:L,ECGz(3,:,cndi), 'color', 'green')
-        %account for accidental misses and double counts and interpolate
-        %across
-        breakVals = [0:.05:3]; 
-        counts = arrayfun(@(x,y) sum(beatDiffs>x & beatDiffs<y), ...
-            breakVals(1:end-1), breakVals(2:end));
-        %locate the mode and find zeros around it to define central dist.
-        [~, idx] = max(counts); 
-        minVal = breakVals(idx - find(flip(counts(idx-10:idx))==0, 1) + 1); 
-        if isempty(minVal)
-            minVal = .6; 
-        end
-        maxVal = breakVals(idx + find(counts(idx:idx+10)==0, 1) - 1); 
-    
-        %remove bad vals: 
-        beatTims(beatDiffs < minVal) = []; 
-        beatDiffs(beatDiffs < minVal) = []; 
-    
-        beatTims(beatDiffs > maxVal) = []; 
-        beatDiffs(beatDiffs > maxVal) = []; 
-        figure
-        histogram(beatDiffs)
-         
-        RRint(:,cndi) = interp1(beatTims,beatDiffs, tim, 'linear');
+   
+    %account for accidental misses and double counts and interpolate
+    %across
+    breakVals = [0:.05:10]; 
+    counts = arrayfun(@(x,y) sum(beatDiffs>x & beatDiffs<y), ...
+    breakVals(1:end-1), breakVals(2:end));
+    %locate the mode and find zeros around it to define central dist.
+    [~, idx] = max(counts); 
+    minVal = breakVals(idx - find(flip(counts(1:idx))<5, 1) + 1); 
+    if isempty(minVal)
+        minVal = .6; 
     end
+    maxVal = breakVals(idx + find(counts(idx:end)<5, 1) - 1); 
+
+    %remove bad vals: 
+    beatTims(beatDiffs < minVal) = []; 
+    beatDiffs(beatDiffs < minVal) = []; 
+
+    beatTims(beatDiffs > maxVal) = []; 
+    beatDiffs(beatDiffs > maxVal) = []; 
+    figure
+    histogram(beatDiffs)
+         
+    RRint = interp1(beatTims,beatDiffs, tim, 'linear');
+    
     
     figure
-    plot(rspDat(:,2))
+    plot(rspDat)
     yyaxis right
-    plot(RRint(:,2))
+    plot(RRint)
     
-    outDat.data(end+1, :, :) = RRint; 
+    outDat.data(end+1, :) = RRint; 
     outDat.labels{end+1} = 'RRint'; 
-    outDat.CSClist{end+1} = 'RRint'; 
+
     
     % save([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\' ...
     %                 sessionIDs{sessi} '_breathingPreProc.mat'], ...
@@ -871,17 +1019,28 @@ else
 
 end
 
+clear beatDiffs beatTims breakVals counts idx maxVal minVal RRint ...
+    rspDat tim
 
  %% trial epoch all data, eliminating breaths that don't conform properly
 
  if ~isfield(outDat, 'trialDat')
     %grab 2 s buffer plus breath
     %max of 18 s breath
-    L20 = 20*outDat.fs; 
-    trialDat = zeros(size(outDat.data,1), ... % channels
-                        L20, ...     % 20 seconds
-                        size(outDat.bmObj,1)); % breaths
+    idx = cellfun(@(x) contains(x, 'rsp'), outDat.labels);
+    rspDat = outDat.data(idx, :); 
     
+    %choose which one looks right
+    % rspDatz = (rspDat - mean(rspDat, [2,3])) ./ std(rspDat, [], [2,3]); 
+    
+    idx = rspIDX(sessi); 
+    rspDat = squeeze(rspDat(idx, :)); 
+    % rspDatz = squeeze(rspDatz(idx, :,:)); 
+    
+    %flip signal
+    rspDat = rspDat .* rspFlip(sessi);
+    idx = cellfun(@(x) contains(x, 'RRint'), outDat.labels);
+    rrDat = outDat.data(idx, :); 
     %Good breaths indicator variable for whether a breath is well-behaved: 
     %good fit up to peak from start
     %only one peak and one minimum prior to next breath onset
@@ -903,28 +1062,27 @@ end
 %col15: RRmin
 %col16: RRmax
 %col17: RRmax - RRmin
-    for bb = 1:size(outDat.bmObj, 1)
+    for bb = 1:size(outDat.behDat, 1)
        bb
-        idx = find(outDat.bmObj(bb, 2)<=outDat.tim,1);
-        cndi = outDat.bmObj(bb, 12); 
-        bL = outDat.bmObj(bb, 7) ; 
+        idx = outDat.behDat.finalOnset(bb);
+        bL = outDat.behDat.length(bb) ; 
         %check breath isn't too near start or end of recording
         %also not more than 18 seconds long
-        endPnt = idx + L20  - outDat.fs*2;
-        startPnt = endPnt - L20 + 1;  
+        endPnt = idx + outDat.fs*20  - outDat.fs*2;
+        startPnt = endPnt - outDat.fs*20 + 1;  
         if startPnt > 0 && ...
            endPnt < length(outDat.tim) && ...
            bL < 18
 
           
-           curRsp = outDat.rspDat(startPnt:endPnt, cndi); 
+            curRsp = rspDat(startPnt:endPnt); 
 
            %quality check: 
            %end point should be higher than minimum
            %start point should be higher than minimum
            %one max
            %one min
-           smoothRsp = smoothdata(curRsp, 'gaussian', outDat.fs/4);
+           smoothRsp = smoothdata(curRsp, 'gaussian', outDat.fs/2);
            bonset = round(outDat.fs*2); 
            boffset = round(outDat.fs*2+bL*outDat.fs); 
            startVal = smoothRsp(bonset); 
@@ -957,58 +1115,45 @@ end
                ~tooFar(downTroughIdx)
 
                %good breath! 
-               trialDat(:,:,bb) = outDat.data(:, startPnt:endPnt, cndi);
-               outDat.bmObj(bb, 13) = 1; 
+               outDat.behDat.goodBreath(bb) = 1; 
 
                %get RR variability: 
-               outDat.bmObj(bb, 15) = max(trialDat(end, ...
-                                            bonset:boffset, bb));
-               outDat.bmObj(bb, 16) = min(trialDat(end, ...
-                                            bonset:boffset, bb));
-               outDat.bmObj(bb, 17) = outDat.bmObj(bb, 15)  -...
-                                            outDat.bmObj(bb, 16);
+                %col15: RRmin
+                %col16: RRmax
+                %col17: RRmax - RRmin
+               outDat.behDat.maxRR(bb) = max(rrDat( ...
+                                            bonset:boffset));
+               outDat.behDat.minRR(bb) = min(rrDat( ...
+                                            bonset:boffset));
+               outDat.behDat.RR_max_min(bb) = outDat.behDat.maxRR(bb) -...
+                                            outDat.behDat.minRR(bb);
 
            else
-                trialDat(:,:,bb) = NaN; 
+                outDat.behDat.goodBreath(bb) = 0; 
+
+               %get RR variability: 
+                %col15: RRmin
+                %col16: RRmax
+                %col17: RRmax - RRmin
+               outDat.behDat.maxRR(bb) = max(rrDat( ...
+                                            bonset:boffset));
+               outDat.behDat.minRR(bb) = min(rrDat( ...
+                                            bonset:boffset));
+               outDat.behDat.RR_max_min(bb) = outDat.behDat.maxRR(bb) -...
+                                            outDat.behDat.minRR(bb);
                 figure
                 plot(smoothRsp(bonset:boffset))
                 yline([highThresh, lowThresh])
-                title(['cndi: ' num2str(cndi) 'bb: ' num2str(bb)])
+                title(['bb: ' num2str(bb)])
            end
         end
 
     end
 
-    outDat.trialDat = trialDat; 
-    outDat = rmfield(outDat, "data");
-    bmObj = outDat.bmObj; 
-    
-
-    % Define column headers
-    colNames = { ...
-        'onsetY', ...
-        'onsetTime', ...
-        'peakY', ...
-        'peakTime', ...
-        'endY', ...
-        'endTime', ...
-        'length', ...
-        'amp', ...
-        'peakIdx', ...
-        'exhalePeakY', ...
-        'exhalePeakTime', ...
-        'condition', ...
-        'goodBreath', ...
-        'index', ...
-        'RRmin', ...
-        'RRmax', ...
-        'RRdif'};
-    
-    % Convert matrix to table
-    bmTable = array2table(bmObj, 'VariableNames', colNames);
+   
     
     % Save table to CSV
-    writetable(bmTable, [codePre 'closed-loop-respiration\processedBehavior\' ...
+    writetable(outDat.behDat, [codePre 'closed-loop-respiration\processedBehavior\' ...
                     sessionIDs{sessi} '_processedBreathing.csv']);
 
 
@@ -1022,53 +1167,30 @@ else
 end
 
 
-%% cleaning? 
+idx = outDat.behDat.sniffOnset(outDat.behDat.goodBreath == 1); 
+test = arrayfun(@(x) rspDat(x-1000:x+5000), idx, 'uniformoutput', false);
+test = cat(1, test{:});
 
-%7 is length
-starts = ones(size(outDat.bmObj,1),1) .* outDat.fs*2; 
-stops = round(outDat.bmObj(:,7)*outDat.fs + starts); 
-idx = find(cellfun(@(x) contains(x, 'ECG'), outDat.labels));
-idx = 1:max(idx); 
-[badIDX] = covMatClean_breathing(outDat.trialDat(idx,:,:), starts, stops);
+lenVals = outDat.behDat.length(outDat.behDat.goodBreath == 1); 
+figure
+[~, order] = sort(lenVals);
+imagesc(-2:.002:10, [], test(order,:))
+caxis([-100,100])
 
+test = arrayfun(@(x) rrDat(x-1000:x+5000), idx, 'uniformoutput', false);
+test = cat(1, test{:});
 
-% [data.nbChanOrig, data.nbChanFinal, data.nbTrialOrig, data.nbTrialFinal,behDat, EEG]...
-%          = removeNoiseChansVoltAB(EEG, behDat);
-% 
-% 
-% 
-% trodeLocs = readtable([codePre ...
-%                     'ZelanoLabScripts\myEEGcoords_thetaPhi.csv']);
+test = (test - mean(test, 2)) ./ std(test, [], 2);
 
-
-
-
-
-
-trialDat = outDat.trialDat; 
-bmObj = outDat.bmObj; 
-
-trialDat(:,:,badIDX ) = []; 
-bmObj(badIDX , :) = [];
-trialDat(:,:,bmObj(:,13) == 0 ) = []; 
-bmObj(bmObj(:,13) ==0, :) = [];
-
-
-
-idx = cellfun(@(x) contains(x, 'rsp'), outDat.labels);
-rspDat = trialDat(idx, :, :); 
-
-
-idx = rspIDX(sessi); 
-rspDat = squeeze(rspDat(idx, :, :)); 
-
-%flip signal
-rspDat = rspDat .* rspFlip(sessi);
 
 figure
-[~, order] = sort(bmObj(:,7));
-imagesc(.002:.002:20, [], squeeze(rspDat(:,order))')
-caxis([-100,100])
+[~, order] = sort(lenVals);
+imagesc(-2:.002:10, [], test(order,:))
+
+
+clear bb bL boffset bonset curRsp downPeakIdx downTroughIdx endPnt endVal...
+    highThresh idx lowThresh lenVals order rrDat rspDat smoothRsp ...
+    startPnt startVal test tooFar upPeakIdx upTroughIdx
 
 
 %% end

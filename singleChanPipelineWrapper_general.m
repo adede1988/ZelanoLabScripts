@@ -1,7 +1,7 @@
 
 
 %github access token: 
-%Feb 20: 
+%Oct 22, 2025: 
 %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
 
 
@@ -15,7 +15,7 @@ disp(['attempting file: ' num2str(start)])
 
 %local paths: 
 
-% codePre = 'R:\MSS\Johnson_Lab\dtf8829\GitHub\';
+% codePre = 'G:\My Drive\GitHub\';
 % datPre = 'R:\Neurology\Zelano_Lab\Lab_Common\QuestMirror\';
 
 %HPC paths: 
@@ -25,10 +25,10 @@ datPre = '/projects/p31578/dtf8829/QuestConnect/';
 
 %% set paths
 
-addpath(genpath([codePre 'HpcAccConnectivityProject']))
+addpath(genpath([codePre 'ZelanoLabScripts']))
 addpath([codePre 'myFrequentUse'])
-addpath([codePre 'fieldtrip-20230118'])
-ft_defaults;
+% addpath([codePre 'fieldtrip-20230118'])
+% ft_defaults;
 
 %% initialize chanFiles, dif versions for local v. quest running
 
@@ -36,7 +36,7 @@ ft_defaults;
 
 
 % 
-datFolder = [datPre 'CHANDAT/CHANRAW']; 
+datFolder = [datPre 'CHANDAT']; 
 chanFiles = dir(datFolder);
 test = cellfun(@(x) length(x)>0, strfind({chanFiles.name}, '.mat'));
 chanFiles = chanFiles(test); 
@@ -48,10 +48,18 @@ chanFiles = chanFiles(test);
 
 
 curChan = chanFiles(start).name; 
-subID = split(curChan, '_'); 
-subID = subID{2}; 
+parts = strsplit(curChan, {'_EEG','_macro'});
+subID = parts{1}; 
 
-subFiles = dir([datPre 'CHANDAT/CHANRAW']);
+if contains(curChan, 'EEG')
+    type = 'EEG'; 
+elseif contains(curChan, 'macro')
+    type = 'macro'; 
+else
+    error('unknown type')
+end
+
+subFiles = dir([datPre 'CHANDAT']);
 test = cellfun(@(x) length(x)>0, strfind({subFiles.name}, subID)); 
 
 subFiles = subFiles(test);
@@ -60,7 +68,7 @@ subFiles = subFiles(test);
 
 disp(['going for ' subID ' ' chanFiles(start).name] )
 
-singleChanPipeline(chanFiles, start, subFiles, codePre); 
+singleChanPipeline_general(chanFiles, start, subFiles, type); 
 
 
 
