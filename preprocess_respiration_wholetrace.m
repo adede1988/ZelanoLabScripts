@@ -1,11 +1,11 @@
-function [R] = preprocess_respiration_wholetrace(outDat, P)
+function [R] = preprocess_respiration_wholetrace(outDat)
 
 
     idx = cellfun(@(x) contains(x, 'rsp'), outDat.labels);
     rspDat = outDat.data(idx, :); 
-    rspDat = squeeze(rspDat(P.rspIDX, :)); 
+    rspDat = squeeze(rspDat(outDat.rspIDX, :)); 
     %flip signal
-    rspDat = rspDat .* P.rspFlip;
+    rspDat = rspDat .* outDat.rspFlip;
     
     smoothRsp = smoothdata(rspDat, 'gaussian', round(outDat.fs*.6)); 
     win = round(outDat.fs * .06); 

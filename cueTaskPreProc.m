@@ -5,7 +5,7 @@ datPre = { 'R:\Neurology\Zelano_Lab\Lab_Common\Dupi\', ...
            'R:\Neurology\Zelano_Lab\Lab_Common\OBEControl\'};
 
 %prefix index for data folder: 
-datPrei = [1,1,1,1,2,2,2,2,2]; 
+datPrei = [1,1,1,1,1,2,2,2,2,2]; 
 
 sessionIDs = {'250818_Dupi_NMH_JH_1', ... %preprocessed
                '250623_DUPI_NMH_KS_2',... 
@@ -38,7 +38,7 @@ set(0, 'defaultfigurewindowstyle', 'docked')
 
 %% 
 
-for sessi = 1:length(sessionIDs)
+for sessi = 7:length(sessionIDs)
 %% data load 
 
     %find behavioral folder: 
@@ -571,7 +571,6 @@ for sessi = 1:length(sessionIDs)
     idx = find(cellfun(@(x) isempty(x), outDat.behDat.response_str));
     outDat.behDat.type(idx) = repmat("skip", length(idx),1);  
     %downsample the data
-    outDat = downsample_data(outDat, 500);
     outDat.task = "cueTask"; 
     outDat.OGdataDir = [datPre{datPrei(sessi)} sessionIDs{sessi}];
     tmp = dir([datPre{datPrei(sessi)} sessionIDs{sessi}]);
@@ -580,7 +579,12 @@ for sessi = 1:length(sessionIDs)
     if size(tmp,1) == 1
         outDat.loadFile = tmp.name;
     else 
-        error('load file not identified uniquely')
+        tmp = tmp(cellfun(@(x) contains(x, 'AD.m'), {tmp.name}));
+        if size(tmp,1) == 1
+            outDat.loadFile = tmp.name;
+        else 
+            error('load file not identified uniquely')
+        end
     end
     outDat.preProcScript = 'cueTaskPreProc.m'; 
     if datPrei(sessi) == 1
@@ -588,16 +592,32 @@ for sessi = 1:length(sessionIDs)
     elseif datPrei(sessi) == 2
         outDat.type = 'OBE';
     end
+    outDat.TTL = table; 
+    outDat.TTL.trialStart = TTLs(:,1);  
+    outDat.TTL.response = TTLs(:,3); 
+    outDat.TTL.sniff = TTLs(:,2);
+
+
+    save([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\' ...
+                    sessionIDs{sessi} '_cueTaskPreProc.mat'], ...
+                    'outDat', "-v7.3")
+
+
 
     clear behDat behDat1 behDat2 behDir behFold cueTTLs dat1 datalabel ...
         datFolders di difVals downs idx outMat photoDiode responseTTLs ...
         ri s1 s2 sniffTTLs spliti splitIDX starti starti1 subFolders ...
         tmp tt ups TTLs2 L1 comboDat dat2 labs
 
+end
+
+%% BELOW HERE IS WHAT NEEDS TO BE CONVERTED INTO FUNCTIONS: 
+
     %% data cleaning
 
   
 
+    outDat = downsample_data(outDat, 500);
    
 
 

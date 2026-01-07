@@ -52,7 +52,7 @@ for sessi = 1:length(sessionIDs)
     idx = find(idx); 
     
     if isscalar(idx)
-        %process when two runs need to be stitched together: 
+        %process when one run: 
 
         %load in both files: 
         dat = load([datFolders(idx).folder '/' ...

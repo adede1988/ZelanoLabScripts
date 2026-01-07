@@ -132,6 +132,11 @@ zd1 = (zd1 - mean(zd1)) / std(zd1);
 blinkGuess = arrayfun(@(x) corr(Sact(x,:)', data(S.blinkChan,:)'), 1:K);
 plotK = sum(abs(blinkGuess)>.1);
 plotidx = find(abs(blinkGuess)>.1); 
+blinkGuess = abs(blinkGuess); 
+zMax = (max(blinkGuess) - mean(blinkGuess)) ./ std(blinkGuess);
+if zMax > 2
+    [~, S.knownIC] = max(blinkGuess);
+end
 % -------------------- Plot all ICs & select one --------------------
 %% ADDED: quick visualization and selection prompt
 if isempty(S.knownIC)

@@ -27,25 +27,28 @@ function outDat = preprocess_eeg(outDat, standardEEGlocs, P)
     
     [badTS, badChans] = ...
             removeNoiseChansVolt(outDat.data(1:32,:), outDat.fs);
-    chanIDX = 1:32; 
-    if ismember(1, badChans)
-      chanIDX(badChans(2:end)) = [];
-    else
-      chanIDX(badChans) = [];
-      
-    end
-    ephysDat = outDat.data(1:32,:);
+    EXEMPT = [1 32];
+     % only non-exempt get flagged
+    badChans = setdiff(unique(badChans(:)), EXEMPT);         
+
+    % 3) Build good-channel index for blink removal
+    chanIDX = setdiff(1:32, badChans);% includes 1 & 32 even if detected bad
+
+    % 4) Blink removal on good channels 
+    
     [out, badChan2, blinkIndicator] = blinkRemoveWrapper(outDat,...
                                                 chanIDX,...
                                                 outDat.fs);
 
+    tmp = chanIDX(badChan2); 
+    badChans = [badChans(:); tmp(:)]; 
+  
     
-    badChans = [badChans; chanIDX(badChan2)]; 
-    ephysDat(chanIDX,:) = out; 
-    
-
-    ephysDat = interpolate_perrinX(ephysDat,X,Y,Z,badChans);
-
+    if ~isempty(badChans)
+        ephysDat = interpolate_perrinX(out,X,Y,Z,badChans);
+    else
+        ephysDat = out;
+    end
     ephysDat = ephysDat - mean(ephysDat,1); 
 
     dataLap = laplacian_perrinX(ephysDat, X, Y, Z); 

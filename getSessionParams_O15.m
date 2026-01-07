@@ -94,6 +94,7 @@ function [raw, P] = getSessionParams_O15(S)
     P.spikeThresh = 20;
     P.spikeWin    = 11;
     P.spikeClean  = false;
+    P.macroRemove = []; 
 
     % Photodiode pulse parsing 
     P.pd = struct();
@@ -142,9 +143,14 @@ function [raw, P] = getSessionParams_O15(S)
             P.spikeThresh = 15;
             P.spikeWin    = 11;
             P.spikeClean  = false;
-
+            P.macroRemove = 6; 
             P.respThresh   = 5000;
             P.cuedBackBuff = 350;
+        case '250929_Dupi_NMH_GH_1'
+            P.hasEEG      = true;
+            P.spikeClean  = true;
+            P.macroRemove = 6; 
+            P.rspFlip     = 1;
 
         case '250818_Dupi_NMH_JH_2'
             P.hasEEG      = true;
@@ -177,7 +183,54 @@ function [raw, P] = getSessionParams_O15(S)
 
             P.respThresh   = 20;
             P.cuedBackBuff = 150;
-
+        case '250811_Dupi_NMH_TB_2'
+            P.hasEEG      = true;
+            P.spikeClean  = true;
+            P.rspFlip     = -1;
+                
+            P.respThresh   = 20;
+            P.cuedBackBuff = 150;
+        case '251002_Dupi_NMH_AB_1'
+            P.hasEEG      = true;
+            P.spikeClean  = true;
+            P.respThresh   = 2000;
+        case '251006_OBE_NWU_RY_1'
+            P.hasEEG      = true;
+            P.spikeClean  = true;
+            P.respThresh   = 4000;
+            P.cuedBackBuff = 400;
+        case '251027_Dupi_NMH_DL_1'
+            P.hasEEG      = true;
+            P.spikeClean  = true;
+            P.cuedBackBuff = 300;
+            P.respThresh   = 4000;
+        case '251013_Dupi_NMH_JN_2'
+            P.hasEEG      = true;
+            P.spikeClean  = true;
+            P.macroRemove = 6;
+            P.cuedBackBuff = 200;
+            P.respThresh   = 2000;
+        case '251009_OBE_NWU_CP_1' 
+            P.macroRemove = 6; 
+            P.hasEEG      = true;
+            P.spikeClean  = true;
+            P.respThresh   = 2000;
+            P.cuedBackBuff = 250;
+        case '250929_Dupi_NMH_GH_2'
+            P.rspIDX      = 1; 
+            P.macroRemove = [5,6]; 
+            P.hasEEG      = true;
+            P.spikeClean  = true;
+            P.respThresh   = 4000;
+            P.cuedBackBuff = 350;
+            P.ttl.removeTrialMarksIdx = [27,28];
+            P.ttl.note = "Drop extra TTLs from restarting task.";
+        case '251002_Dupi_NMH_AB_2'
+            P.rspIDX      = 1; 
+            P.macroRemove = [4,5,6]; 
+            P.hasEEG      = true;
+            P.spikeClean  = false;
+            P.respThresh   = 1000;
         otherwise
             % keep defaults
     end

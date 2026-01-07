@@ -9,6 +9,10 @@ function outDat = preprocess_macros(outDat, P)
         plot(macroDat(ii,:)+(ii-1)*50)
     end
     legend()
+    if ~isempty(P.macroRemove)
+        plot(macroDat(P.macroRemove(1), :) + (P.macroRemove(1)-1)*50, ...
+            'color', 'red')
+    end
     title([outDat.sessID ' macros raw'], 'Interpreter','none')
     saveas(gcf,fullfile(outDat.figs, 'macrosRaw.jpg'));
 
@@ -21,31 +25,57 @@ function outDat = preprocess_macros(outDat, P)
         plot(macroDat(ii,50000:55000)+(ii-1)*50)
     end
     legend()
+    if ~isempty(P.macroRemove)
+        plot(macroDat(P.macroRemove(1), 50000:55000) + ...
+            (P.macroRemove(1)-1)*50, ...
+            'color', 'red')
+    end
     title([outDat.sessID ' macros raw 10s'], 'Interpreter','none')
     saveas(gcf,fullfile(outDat.figs, 'macrosRaw_zoom.jpg'));
 
     idx = cellfun(@(x) contains(x, 'macro'), outDat.labels);
     macroDat = outDat.data(idx, :); 
-    macOut = zeros([5, size(macroDat, [2,3])]);
+    if ~isempty(P.macroRemove)
+        macroDat(P.macroRemove,:) = []; 
+    end
+    macOut = zeros([size(macroDat,1)-1, size(macroDat, [2,3])]);
     %do bipolar rereferencing 
-    for chani = 1:5
+    for chani = 1:size(macroDat,1)-1
         macOut(chani, :, :) = squeeze(macroDat(chani, :) -...
                                       macroDat(chani+1,:)); 
     end
 
 if P.spikeClean
-    [b,a] = butter(4, [5,150]/(outDat.fs/2), 'bandpass');
-    gammaSig = filtfilt(b,a, macOut')'; 
-    [test, prominence] = detect_spikes(macOut,P.spikeThresh,...
-        P.spikeWin,...
-        false, gammaSig); 
-        %ICA is on the macro data without bipolar rereference 
-        %this allows later rereferencing at will
-    out = ica_flag_spikes_targeted(macOut, test, prominence, ...
-        'Fs', outDat.fs);
+    % [b,a] = butter(4, [5,150]/(outDat.fs/2), 'bandpass');
+    % gammaSig = filtfilt(b,a, macOut')'; 
 
+    macOut = double(macOut); 
+
+    splitFreq = 10;          % Hz cutoff between "low" and "high" components
+    hpOrder   = 4;           % 4th-order Butterworth for high-pass
+    
+    % Design high-pass for the spike-y part (> splitFreq)
+    [b_hp, a_hp] = butter(hpOrder, splitFreq/(outDat.fs/2), 'high');
+    
+    % High-frequency component of the IC
+    x_high = filtfilt(b_hp, a_hp, macOut.').';   % column
+    % Low-frequency residual (everything not captured by high-pass)
+    x_low  = macOut - x_high;             
+
+    z_high = (x_high - mean(x_high,2)) ./ std(x_high, [], 2); 
+            
+    [test, prominence] = detect_spikes(z_high, 2,...
+        P.spikeWin); 
+        %ICA is on the macro data after bipolar rereferencing because ICs
+        %are more stable this way.
+    out = ica_flag_spikes_targeted(x_high, test, prominence, ...
+        'Fs', outDat.fs);
+    %add low frequency component back into the clean data: 
+    out.data_clean = out.data_clean + x_low; 
     whereSpikes = movmean(out.mixVector, 10*outDat.fs);
-    [~, idx] = min(whereSpikes); 
+    [~, idx] = min(whereSpikes(20000:end-20000)); 
+    idx = idx + 10000; 
+    idx = min(size(macOut,2)-outDat.fs*5-1, idx);
     x = figure('visible', false, 'position', [0,0,1000,500]);
     plot(macOut(1,idx-outDat.fs*5:idx+outDat.fs*5))
     hold on 
@@ -61,19 +91,37 @@ if P.spikeClean
     title([outDat.sessID ' spike removal'], 'interpreter', 'none')
     saveas(x, fullfile(outDat.figs, 'macroSpikeRemoval.jpg'));
 
-    outDat.data(end+1:end+5, :) = out.data_clean; 
-    outDat.labels(end+1:end+5) = {'macBP1', 'macBP2', 'macBP3', ...
-                                                'macBP4', 'macBP5'};
+    newLabs = {'macBP1', 'macBP2', 'macBP3','macBP4', 'macBP5'};
+    if ~isempty(P.macroRemove)
+        
+            newLabs(P.macroRemove-1) = [];
+      
+
+    end
+    C = size(out.data_clean,1); 
+    outDat.data(end+1:end+C, :) = out.data_clean; 
+    outDat.labels(end+1:end+C) = newLabs; 
     outDat.data(end+1, :) = out.mixVector; 
     outDat.labels{end+1} = "spikeCleanVec";
     outDat.spikeRemoval = 1; 
+    
 
     
 
 else
-    outDat.data(end+1:end+5, :) = macOut;
-    outDat.labels(end+1:end+5) = {'macBP1', 'macBP2', 'macBP3', ...
-                                                'macBP4', 'macBP5'};
+    newLabs = {'macBP1', 'macBP2', 'macBP3','macBP4', 'macBP5'};
+    if ~isempty(P.macroRemove)
+        
+            newLabs(P.macroRemove-1) = [];
+      
+
+    end
+    C = length(newLabs);
+
+
+    outDat.data(end+1:end+C, :) = macOut;
+    outDat.labels(end+1:end+C) = newLabs;
+
     outDat.data(end+1, :) = ones(size(outDat.data,2),1); 
     outDat.labels{end+1} = "spikeCleanVec";
     outDat.spikeRemoval = 1; 

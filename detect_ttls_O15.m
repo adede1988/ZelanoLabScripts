@@ -1,8 +1,40 @@
-function TTLs = detect_ttls_O15(raw, P)
+function [outTTLs, raw] = detect_ttls_O15(raw, P)
 
     idx = cellfun(@(x) contains(x, 'event'), raw.labels);
     photoDiode = raw.data(idx, :); 
     
+
+ % Find missing samples in the photodiode channel
+        nanidx = isnan(photoDiode);
+        nNan   = sum(nanidx);
+        
+        if nNan > 4000
+            error('too many missing values!');
+        end
+        
+        % Get raw data for this trial (rows = channels, cols = time)
+        rawData = raw.data;
+        
+        if nNan > 0
+            % --- 1) Interpolate photodiode (1-D vector) ---
+            % Fill internal NaNs by linear interpolation
+            photoDiode = fillmissing(photoDiode, 'linear');
+            % Any leading/trailing NaNs get replaced by nearest neighbor
+            photoDiode = fillmissing(photoDiode, 'nearest');
+        
+            % --- 2) Interpolate rawData along time (dimension 2) ---
+            % Linear interpolation across time for each channel
+            rawData = fillmissing(rawData, 'linear', 2);
+            % Nearest neighbor for any remaining edge NaNs
+            rawData = fillmissing(rawData, 'nearest', 2);
+        end
+
+        raw.data = rawData;
+
+
+
+
+
     photoDiode = (photoDiode - mean(photoDiode)) / std(photoDiode);
     
 
@@ -19,6 +51,7 @@ function TTLs = detect_ttls_O15(raw, P)
     for di = 5:length(downs)
         if downs(di) - downs(di-4) < 3500
             starti = di; 
+            break
         end
     end
     downs(1:starti) = []; 
@@ -38,6 +71,8 @@ function TTLs = detect_ttls_O15(raw, P)
     confirmMarks = sniffMarks(diff(sniffMarks)<raw.fs_raw);
     idx = find(diff(sniffMarks)<raw.fs_raw);
     sniffMarks([idx, idx+1]) = []; 
+
+ 
 
     if length(trialMarks) ~= P.ttl.expectedTrialCount
         error('wrong trial count!')
@@ -82,7 +117,27 @@ function TTLs = detect_ttls_O15(raw, P)
     end
     TTLs =round(TTLs ./ (raw.fs_raw / P.fs_target));
 
-
+    outTTLs = table; 
+    outTTLs.trialStart = TTLs(:,1); 
+    outTTLs.buttonPress = TTLs(:,2); 
+    outTTLs.confirmSniff = TTLs(:,3); 
+    outTTLs.free1 = TTLs(:,4); 
+    outTTLs.free2 = TTLs(:,5); 
+    outTTLs.free3 = TTLs(:,6); 
+    outTTLs.free4 = TTLs(:,7); 
+    outTTLs.free5 = TTLs(:,8); 
+    outTTLs.free6 = TTLs(:,9); 
+    outTTLs.free7 = TTLs(:,10); 
+    outTTLs.free8 = TTLs(:,11); 
+    outTTLs.free9 = TTLs(:,12); 
+    outTTLs.free10= TTLs(:,13); 
+    outTTLs.free11= TTLs(:,14); 
+    outTTLs.free12= TTLs(:,15); 
+    outTTLs.free13= TTLs(:,16); 
+    outTTLs.free14= TTLs(:,17); 
+    outTTLs.free15= TTLs(:,18); 
+    outTTLs.free16= TTLs(:,19); 
+    outTTLs.free17= TTLs(:,20); 
 
 
 end

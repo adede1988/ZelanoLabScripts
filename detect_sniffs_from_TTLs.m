@@ -1,18 +1,22 @@
-function [outSniffs] = detect_sniffs_from_TTLs(R, TTL, P, outDat)
+function [outSniffs] = detect_sniffs_from_TTLs(R, P, outDat)
 
+    %outDat.TTL      table with col1: trialStart
+    %                           col2: buttonpress
+    %                           col3-20: sniffs
 
     outSniffs = zeros(30, 7); 
-    %col 1: sniff onset index
+    TTL = outDat.TTL; 
+    %col 1: sniff onset index into data
     %col 2: trial number
     %col 3: sniff within trial number
     %col 4: off from TTL by
-    %col 5: corect / incorrect behavior 1 / 0
     %col 6: sniff type 1 = start, 2 = free, 3 = confirm
     %col 7: adjustment for phase align
     oi = 1; %index variable for out sniffs
 
     for triali = 1:size(TTL,1)
         targets = TTL(triali, 3:end);
+        targets = table2array(targets); 
         targets(isnan(targets)) = [];
         targets = sort(targets); 
         sniffi = 1; 
@@ -20,7 +24,7 @@ function [outSniffs] = detect_sniffs_from_TTLs(R, TTL, P, outDat)
             if tt == 1 || tt == length(targets) 
                 %first and last sniff! should be after TTL
                 startSearch = targets(tt) - 30 - P.cuedBackBuff; 
-                endSearch = targets(tt)+1000 - 30; %search window of 2s
+                endSearch = targets(tt)+2000 - 30; %search window of 4s
                 val = find(R.testSig(startSearch:endSearch-1)<...
                                                     P.respThresh  & ... 
                     R.testSig(startSearch+1:endSearch) > P.respThresh, 1);
@@ -80,7 +84,7 @@ function [outSniffs] = detect_sniffs_from_TTLs(R, TTL, P, outDat)
     end
 
 
-
+    TTL = table2array(TTL); 
 
 
     for triali  = 1:15

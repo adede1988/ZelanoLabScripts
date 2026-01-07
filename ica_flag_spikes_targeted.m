@@ -95,7 +95,7 @@ end
 
 % ------------------Prepare spike targeted snippets for ICA-----------
 spikeFlags = reshape(spikeDat, size(spikeDat,1), []);               % C x (T*N)
-spikeMaskData = any(spikeFlags, 1);                     % 1 x (T*N), union over channels
+spikeMaskData = any(spikeFlags==1, 1);                     % 1 x (T*N), union over channels
 spikeProm = reshape(spikeProm, size(spikeProm,1), []); 
 spikeProm = max(spikeProm, [], 1); 
 spikeMaskData(spikeProm<1) = false; 
@@ -110,6 +110,7 @@ for i = 1:numel(spikeIDX)
     end
 end
 spikeIDX = spikeIDX(keep);
+spikeIDX(spikeIDX<100 | spikeIDX>length(spikeMaskData)-100) = []; 
 
 nonSpikeIDX = sample_nonspike_onsets(spikeIDX, length(spikeMaskData), 50, 50); 
 
@@ -153,12 +154,53 @@ Ssamples = T*N;
 
 % -------------------- Plot all ICs & select one --------------------
 %% ADDED: quick visualization and selection prompt
+
+zic = (Sact - mean(Sact, 2)) ./ std(Sact, [], 2);
+
+spikeSnips = arrayfun(@(x) zic(:, x-50:x+50), spikeIDX, ...
+    'UniformOutput', false);
+spikeSnips = cat(3, spikeSnips{:}); 
+spikeSnips = squeeze(max(spikeSnips, [], 2) - min(spikeSnips, [], 2));
+
+
+nonSnips = arrayfun(@(x) zic(:, x-50:x+50), nonSpikeIDX, ...
+    'UniformOutput', false);
+nonSnips = cat(3, nonSnips{:}); 
+nonSnips = squeeze(max(nonSnips, [], 2) - min(nonSnips, [], 2));
+
+
+difs = mean(spikeSnips, 2) - mean(nonSnips, 2);
+
+% figure 
+% for ic = 1:K
+%         ax = subplot(K,1,ic);
+% 
+%         histogram(spikeSnips(ic,:)); 
+%         hold on 
+%         histogram(nonSnips(ic,:)); 
+% 
+%         ylabel(sprintf('IC %d',ic));
+%         if ic==1, title('Choose spike-like IC (then close figure)'); end
+%         if ic==K, xlabel('max - min around spikes'); end
+%         grid(ax,'on');
+% end
+%     drawnow;
+
+
+
+if (max(difs) - min(difs)) / min(difs) > 3
+    [~, S.knownIC] = max(difs);
+else
+    S.knownIC = -1; 
+end
+
 if isempty(S.knownIC)
     figure('Name','ICA activations (z-scored)','Color','w');
-    
+ 
     for ic = 1:K
         ax = subplot(K,1,ic);
         zic = (Sact(ic,:) - mean(Sact(ic,:))) / max(std(Sact(ic,:)), eps);
+     
         plot(zic); xlim([1 Ssamples]);
         hold on 
         % pos = find(spikeMaskData);
@@ -175,6 +217,7 @@ if isempty(S.knownIC)
 else
     badIC = S.knownIC; 
 end
+
 if isempty(badIC) || badIC<1 || badIC>K
     % nothing to remove
     Sclean = Sact;
@@ -193,19 +236,42 @@ end
 
 
 % -------------------- Cross-reference with chosen IC --------------------
-%% ADDED: robust z-score on chosen IC and AND with data spike mask
-x = Sact(badIC,:);
-medx = median(x);
-madx = 1.4826*median(abs(x - medx));
-if madx==0, madx = std(x); end
-zbadIC = abs( (x - medx) / max(madx, eps) );          % robust |z|
+%% Split chosen IC into low/high frequency and only "surgically" edit high-freq part
+x_full = double(Sact(badIC,:));   % 1 x (T*N)
+Ssamples = numel(x_full);
 
-% Keep times where BOTH the original data had spikes AND IC is large
-spikeMask = spikeMaskData & (zbadIC > 2);             % logical 1 x (T*N)
+if isempty(S.Fs)
+    error('Fs must be provided to split IC into low/high frequency components.');
+end
 
+Fs = S.Fs;
+splitFreq = 10;          % Hz cutoff between "low" and "high" components
+hpOrder   = 4;           % 4th-order Butterworth for high-pass
 
-% -------------------- Build smooth surgical mixVector --------------------
-%% ADDED: raised-cosine "notch" centered at each spike (0 at center -> 1 by ±50)
+% Design high-pass for the spike-y part (> splitFreq)
+[b_hp, a_hp] = butter(hpOrder, splitFreq/(Fs/2), 'high');
+
+% High-frequency component of the IC
+x_high = filtfilt(b_hp, a_hp, x_full(:));   % column
+% Low-frequency residual (everything not captured by high-pass)
+x_low  = x_full(:) - x_high;                % column
+
+% For convenience, keep row versions for later reconstruction
+x_high_row = x_high(:).';
+x_low_row  = x_low(:).';
+
+% --- Spike detection based on high-frequency component only ---
+medx = median(x_high);
+madx = 1.4826 * median(abs(x_high - medx));
+if madx == 0
+    madx = std(x_high);
+end
+zbadIC = abs( (x_high - medx) / max(madx, eps) );   % robust |z|, column
+
+% Keep times where BOTH the original data had spikes AND high-freq IC is large
+spikeMask = spikeMaskData & (zbadIC(:).' > 2);      % logical 1 x (T*N)
+
+% -------------------- Build smooth surgical mixVector for high-freq part only --------------------
 halfWin = 50;                             % half-width (total ~100 points)
 w = hann(2*halfWin + 1)';                 % 0 at edges, 1 at center
 notch = 1 - w;                            % 1 at edges, 0 at center
@@ -224,7 +290,11 @@ end
 
 % -------------------- Reconstruct cleaned data --------------------
 Sclean = Sact;
-Sclean(badIC,:) = Sclean(badIC,:) .* mixVector; % surgical removal of spikes
+
+% Only attenuate the high-frequency portion around spikes,
+% keep the low-frequency part untouched.
+Sclean(badIC,:) = x_low_row + x_high_row .* mixVector;
+
 Xclean = A * Sclean;                     % back to channel space
 Xclean = Xclean + chMeans;               % restore means
 data_clean = reshape(Xclean, C, T, N);   % C x T x N
@@ -233,8 +303,6 @@ data_clean = data_clean + trialMeans;    % restore trial means
 % -------------------- Outputs --------------------
 out.A = A; out.W = W; out.S = Sact;
 out.badICs = badIC;
-% out.X = X; 
-% out.Xclean = Xclean;
 out.data_clean = squeeze(data_clean);
 out.means = chMeans;
 out.mixVector = mixVector;
