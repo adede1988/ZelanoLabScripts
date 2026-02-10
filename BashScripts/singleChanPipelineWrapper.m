@@ -19,8 +19,8 @@ disp(['attempting file: ' num2str(start)])
 
 %HPC paths: 
 
-codePre = '/projects/p31578/dtf8829/';
-datPre = '/projects/p31578/dtf8829/QuestConnect/';
+codePre = '/projects/b1248/code/';
+datPre = '/projects/b1248/';
 
 %% set paths
 
