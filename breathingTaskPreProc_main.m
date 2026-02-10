@@ -7,7 +7,7 @@ datPre = { 'R:\Neurology\Zelano_Lab\Lab_Common\Dupi\', ...
            'R:\Neurology\Zelano_Lab\Lab_Common\AllStudyData\EEGbreathing\'};
 
 %prefix index for data folder: 
-datPrei = [1,1,1,2,3,3,3,3,3,3,2,1,1,1,1,2,1,1,1,1,1]; 
+datPrei = [1,1,1,2,3,3,3,3,3,3,2,1,1,1,1,2,1,1,1,1,1,1,1,1]; 
 
 sessionIDs = {'250818_Dupi_NMH_JH_1', ... 
                '250623_DUPI_NMH_KS_2',... 
@@ -29,7 +29,13 @@ sessionIDs = {'250818_Dupi_NMH_JH_1', ...
                 '251027_Dupi_NMH_DL_1', ...
                 '250929_Dupi_NMH_GH_2',...
                 '251002_Dupi_NMH_AB_2'...
-                '251013_Dupi_NMH_JN_2'};
+                '251013_Dupi_NMH_JN_2',...
+                '251030_Dupi_NMH_DB_1',...
+                '251110_Dupi_NMH_PC_1'};
+
+                % '250623_Dupi_NMH_KS_3' not included due to photodiode
+                % missing issue. Could fix later. 
+
 % %there are multiple respiration channels in many recordings
 % %which one is right for each session: 
 % rspIDX = [1,1,3,1,1,1,1,1,1,1]; 
@@ -47,7 +53,7 @@ figPath = 'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\';
 EEGLOC = readtable(fullfile(codePre, 'ZelanoLabScripts','myEEGcoords_thetaPhi.csv'));
 set(0, 'defaultfigurewindowstyle', 'normal')
 success = ones(length(sessionIDs),1); 
-for s = 1:numel(sessionIDs)
+for s = 22:numel(sessionIDs)
     try
     disp(['working on ', sessionIDs{s}])
     % --- Session descriptor (adjust to your system) ---

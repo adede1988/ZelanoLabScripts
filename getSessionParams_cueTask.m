@@ -123,7 +123,7 @@ function [raw, P] = getSessionParams_cueTask(S)
             P.respThresh  = 3000; P.cuedBackBuff = 150;
         
         case '240923_OBE_NMH_HRM'
-            P.rspIDX = 1;  P.rspFlip = -1;
+            P.rspIDX = 1;  P.rspFlip = 1;
             P.hasEEG = false; P.spikeClean = true;
             P.respThresh  = 1000; P.cuedBackBuff = 350;
         
@@ -133,13 +133,13 @@ function [raw, P] = getSessionParams_cueTask(S)
             P.respThresh  = 3000; P.cuedBackBuff = 150;
         
         case '250313_OBE_NMH_CS'
-            P.rspIDX = 1;  P.rspFlip = 1;
+            P.rspIDX = 1;  P.rspFlip = -1;
             P.hasEEG = false; P.spikeClean = false;
             P.respThresh  = 3000; P.cuedBackBuff = 150;
         
         case '250929_Dupi_NMH_GH_1'
             P.rspFlip = 1;
-            P.macroRemove = 6;
+            P.macroRemove = 6; P.cuedBackBuff = 250;
             P.hasEEG = true;  P.spikeClean = true;
         
         case '250811_Dupi_NMH_TB_2'
@@ -149,7 +149,7 @@ function [raw, P] = getSessionParams_cueTask(S)
         
         case '251002_Dupi_NMH_AB_1'
             P.hasEEG = true;  P.spikeClean = true;
-            P.respThresh  = 2000;
+            P.respThresh  = 2000; P.cuedBackBuff = 250;
         
         case '251027_Dupi_NMH_DL_1'
             P.hasEEG = true;  P.spikeClean = true;

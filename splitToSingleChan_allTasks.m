@@ -2,14 +2,13 @@
 clear
 
 codePre = 'G:\My Drive\GitHub\';
-datPre = { 'R:\Neurology\Zelano_Lab\Lab_Common\Dupi\', ... 
-           'R:\Neurology\Zelano_Lab\Lab_Common\OBEControl\',...
-           'R:\Neurology\Zelano_Lab\Lab_Common\AllStudyData\EEGbreathing\'};
+datPre = { 'R:\Neurology\Zelano_Lab\Lab_Common\Dupi\',...
+    'R:\Neurology\Zelano_Lab\Lab_Common\OBEControl'};
 
 outPre = 'R:\Neurology\Zelano_Lab\Lab_Common\QuestMirror';
 
 allPreProcFiles = []; 
-%find preproc files: 
+%% find preproc files: 
 for ii = 1:length(datPre)
 
     subdir = dir(datPre{ii}); 
@@ -47,46 +46,43 @@ for ii = 1:length(datPre)
 end
 
 
-%there are multiple respiration channels in many recordings
-%which one is right for each session: 
-rspIDX = [3,3,3,3,1,1,1,1,1,1,3,3,3]; 
-rspFlip = [-1,-1,-1,-1,-1,-1,-1,1,-1,1,1,1,1]; %hard code flip
+%% just going after breathing task right now
 
-% addpath([codePre 'HpcAccConnectivityProject/helperFuncs'])
-% addpath(genpath([codePre 'myFrequentUse']))
-% addpath([codePre 'myFrequentUse/export_fig_repo'])
+test = cellfun(@(x) ~contains(x, 'breathing'), {allPreProcFiles.name});
+allPreProcFiles(test,:) = [];
 
-% addpath([codePre 'fieldtrip-20230118'])
-% addpath([codePre 'emotionDecoding'])
-% addpath([codePre 'slowBreathing'])
+
+%%
+
 addpath([codePre 'ZelanoLabScripts'])
 set(0, 'defaultfigurewindowstyle', 'docked')
 
 
 
-for ii = 1:length(allPreProcFiles)
+for ii = 3:length(allPreProcFiles)
+    try
     outDat = load([allPreProcFiles(ii).folder '/'...
                      allPreProcFiles(ii).name]);
-    outDat = outDat.outDat; 
     
+    outDat = outDat.out; 
     
     %ALL TASKS MUST HAVE: 
     chanTmp = struct; 
-    %task
-    if contains(allPreProcFiles(ii).name, 'O15')
-        chanTmp.task = 'O15'; 
-    elseif contains(allPreProcFiles(ii).name, 'PEA_threshold')
-        chanTmp.task = 'PEA_threshold'; 
-    elseif contains(allPreProcFiles(ii).name, 'breathing')
-        chanTmp.task = 'breathing'; 
-    elseif contains(allPreProcFiles(ii).name, 'cueTask')
-        chanTmp.task = 'cueTask'; 
-    else 
-        error('unknown task')
+    %task 
+    chanTmp.task = outDat.task; 
+    if strcmp(chanTmp.task, 'breathing')
+        chanTmp.task = 'breathingTask';
     end
-    %subID
-    chanTmp.subID = strsplit(allPreProcFiles(ii).name, ['_' chanTmp.task]); 
-    chanTmp.subID = chanTmp.subID{1}; 
+    %subID, sessID, sessNum
+    chanTmp.sessID = outDat.sessID; 
+    if strcmp(chanTmp.sessID, '250811_Dupi_NMH_TPB_1')
+        chanTmp.sessID = '250811_Dupi_NMH_TB_1';
+    end
+    nameBits = strsplit(chanTmp.sessID, '_'); 
+    chanTmp.subID = nameBits{4};
+    if length(nameBits) == 5
+        chanTmp.sessNum = str2num(nameBits{5}); 
+    end
     %OGdataDir
     chanTmp.OGdataDir = strsplit(allPreProcFiles(ii).folder, 'preProc'); 
     chanTmp.OGdataDir = chanTmp.OGdataDir{1}; 
@@ -96,30 +92,22 @@ for ii = 1:length(allPreProcFiles)
     if sum(idx) == 1
         chanTmp.loadFile = tmp(idx).name; 
     else
-        error('load file not identified uniquely')
+        try
+            ADidx = cellfun(@(x) contains(x, 'AD'), {tmp(idx).name});
+            idx = find(idx); 
+            chanTmp.loadFile = tmp(idx(ADidx)).name;
+        catch
+            error('unidentified load file')
+        end
     end
-    %preProcScript
-    switch chanTmp.task
-        case 'O15'
-            chanTmp.preProcScript = 'O15PreProc.m';
-        case 'PEA_threshold'
-            chanTmp.preProcScript = 'threshPreProc.m';
-        case 'breathing'
-            chanTmp.preProcScript = 'breathingTaskPreProc.m';
-        case 'cueTask'
-            chanTmp.preProcScript = 'cueTaskPreProc.m';
-        otherwise
-            error('unknown pre proc file')
-    end
+
     %type (EEG, OBE, Dupi)
-    chanTmp.type = strsplit(chanTmp.subID, '_'); 
-    chanTmp.type = chanTmp.type{2}; 
+    chanTmp.type = outDat.type; 
     %age
     %sex
     %fs
     chanTmp.fs = outDat.fs; 
-    %use (length of trials, indicates bad trials with 0s)
-    chanTmp.use = ones(size(outDat.trialDat,1),1); 
+    
     %elecLabels (human readable labels)
     chanTmp.labels = outDat.labels;
     %spikeRemoval (1 = yes; 0 = no)
@@ -140,101 +128,101 @@ for ii = 1:length(allPreProcFiles)
     %spikeEyeFileName 
     idx1 = cellfun(@(x) strcmp(x, 'spikeCleanVec'), outDat.labels);
     idx2 = cellfun(@(x) strcmp(x, 'blinkIndicator'), outDat.labels);
+    idx3 = cellfun(@(x) strcmp(x, 'badTS'), outDat.labels);
     if sum(idx1+idx2) > 0
-        chanTmp.spikeEyeFileDir = [outPre '/cleanFiles']; 
-        chanTmp.spikeEyeFileName = [chanTmp.subID '_' 'cleaningVecs.mat']; 
+        chanTmp.QCFileDir = [outPre '/cleanFiles']; 
+        chanTmp.QCFileName = [chanTmp.sessID '_' 'cleaningVecs.mat']; 
         cleanDat = chanTmp; 
-        tmp = outDat.trialDat(idx1==1,:,:); 
+        tmp = outDat.data(idx1==1,:); 
         cleanDat.spikeCleanVec = tmp; 
-        tmp = outDat.trialDat(idx2==1,:,:); 
+        tmp = outDat.data(idx2==1,:); 
         cleanDat.blinkCleanVec = tmp; 
-        save([chanTmp.spikeEyeFileDir '/' chanTmp.spikeEyeFileName],...
+        tmp = outDat.data(idx3==1,:); 
+        cleanDat.badTS = tmp; 
+        save([chanTmp.QCFileDir '/' chanTmp.QCFileName],...
                                         'cleanDat'); 
         
     else
-        disp([chanTmp.subID ' has no spike or blink cleaning'])
-        chanTmp.spikeEyeFileDir = []; 
-        chanTmp.spikeEyeFileName = []; 
+        disp([chanTmp.subID ' has no QC information'])
+        chanTmp.QCFileDir = []; 
+        chanTmp.QCFileName = []; 
     end
     %behDat (task specific behavioral data; grab trial X column matrix
     %task specific
     switch chanTmp.task
         case 'O15'
-            chanTmp.behDat = outDat.sniffInfo; 
+            chanTmp.behDat = outDat.behDat; 
         case 'PEA_threshold'
-            chanTmp.behDat = outDat.sniffInfo; 
-        case 'breathing'
-            chanTmp.behDat = outDat.bmObj; 
+            chanTmp.behDat = outDat.behDat; 
+        case 'breathingTask'
+            chanTmp.behDat = outDat.behDat; 
+            chanTmp.baseEmotion = outDat.baseEmotion;
         case 'cueTask'
-            chanTmp.behDat = outDat.sniffInfo; 
+            chanTmp.behDat = outDat.behDat; 
         otherwise
             error('unknown behavior')
     end  
-    %badChans (are there any bad channels? 
-    if isfield(outDat, 'badChans')
-        chanTmp.badChans = outDat.badChans; 
-    else
-        chanTmp.badChans = [];
-        warning(['no bad channels: ' chanTmp.subID])
+   
 
-    end
-    %respiration (3 X time X trials)
-    idx1 = cellfun(@(x) contains(x, 'rsp'), outDat.labels);
-    chanTmp.rsp = outDat.trialDat(idx1,:,:); 
-    if isfield(outDat, 'rspIDX')
-        chanTmp.rspIDX = outDat.rspIDX; 
-        chanTmp.rspFlip = outDat.rspFlip; 
-    else
-        warning(['NEED rspIDX: ' chanTmp.task ' ' chanTmp.subID])
-        chanTmp.rspIDX = 999; 
-        chanTmp.rspFlip = 999;
-    end
+    %respiration
+    
+    idx = cellfun(@(x) contains(x, 'rsp'), outDat.labels);
+    rspDat = outDat.data(idx,:); 
+    rspDat = rspDat(outDat.rspIDX,:);
+    rspDat = rspDat .* outDat.rspFlip;
+
+    chanTmp.rsp = rspDat; 
+    
 
 
     %task specific extra stuff: 
     switch chanTmp.task
         case 'O15'
             %rawBehavior: trials X 3 matrix of behavioral responses
-            chanTmp.extraBehavior = outDat.behDat;
+            error('check extra stuff for O15')
         case 'PEA_threshold'
-            chanTmp.extraBehavior = outDat.behDat;
-        case 'breathing'
-            chanTmp.extraBehavior = outDat.behDat;
+            error('check extra stuff for PEA thresh')
+        case 'breathingTask'
             idx = cellfun(@(x) contains(x, 'RRint'), outDat.labels);
-            chanTmp.RRints = squeeze(outDat.trialDat(idx, :,:)); 
+            chanTmp.RRint = squeeze(outDat.data(idx, :)); 
             idx = cellfun(@(x) contains(x, 'targTrace'), outDat.labels);
-            chanTmp.targTrace = squeeze(outDat.trialDat(idx, :,:)); 
+            chanTmp.targTrace = squeeze(outDat.data(idx, :)); 
         case 'cueTask'
-            chanTmp.extraBehavior = outDat.behDat;
+            error('check extra stuff for O15')
         otherwise
             error('unknown extra')
     end  
-   
+
+   eegChans = {'Fp1', 'Fz' , 'F3' , 'F7' , 'FT9', 'FC5', 'FC1', ...
+                'C3' , 'T7' , 'TP9', 'CP5', 'CP1', 'Pz' , 'P3' , ...
+                'P7' , 'O1' , 'Oz' , 'O2' , 'P4' , 'P8' , 'TP10',...
+                'CP6', 'CP2', 'Cz' , 'C4' , 'T8' ,'FT10', 'FC6', ...
+                'FC2', 'F4' , 'F8' , 'Fp2'};
     
     for chi = 1:length(outDat.labels)
         chanDat = chanTmp; 
         lab = chanDat.labels{chi}; 
-        if ~contains(lab, 'rsp') && ...
-           ~contains(lab, 'event') && ...   
-           ~contains(lab, 'spike') && ...   
-           ~contains(lab, 'blink') && ...  
-           ~contains(lab, 'macro') && ...  
-           ~contains(lab, 'ECG')   
+        if contains(lab, 'macBP') || ...
+           sum(cellfun(@(x) strcmp(x, lab), eegChans))==1 
             %chi (index of current channel)
             chanDat.chi = chi; 
             %trialDat (time X trials)
-            chanDat.trialDat = squeeze(outDat.trialDat(chi,:,:)); 
+            chanDat.data = squeeze(outDat.data(chi,:)); 
             %chanType (EEG, macro)
             if contains(lab, 'mac')
                 chanDat.chanType = 'macro'; 
             else
                 chanDat.chanType = 'EEG';
+                
             end
 
             save([outPre '/CHANDAT/' ...
-                chanDat.subID '_' chanDat.chanType '_' chanDat.task '_' ...
+                chanDat.sessID '_' chanDat.chanType '_' chanDat.task '_' ...
                 num2str(chi) '.mat'], 'chanDat');
         end
+    end
+    catch
+        disp(['error on: ' allPreProcFiles(ii).name])
     end
 end
 

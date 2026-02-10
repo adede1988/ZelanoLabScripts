@@ -52,6 +52,7 @@ pow = zeros(nS(1), nF, nS(2));
 phase = zeros(nS(1), nF, nS(2));
 
 for i = 1:nF
+    disp(i)
     Ly2 = Ly2s(i);
     
     %%% Perform the convolution of curWaves{i} with every row of S

@@ -292,10 +292,25 @@ function [raw, P] = getSessionParams_breathingTask(S)
             P.spikeClean  = true;
             P.getBeats    = @(ECGz, beatSep)...
                  getBeats_251027_Dupi_NMH_DL_1(ECGz, beatSep);
+        case '251030_Dupi_NMH_DB_1'
+            P.rspIDX      = 3; 
+            P.rspFlip     = 1;
+            P.macroRemove = []; %was run with 6 removed by accident
+            P.hasEEG      = true;
+            P.spikeClean  = true;
+            P.getBeats    = @(ECGz, beatSep)...
+                 getBeats_251027_Dupi_NMH_DL_1(ECGz, beatSep);
+        case '251110_Dupi_NMH_PC_1'
+            P.rspIDX      = 1; 
+            P.rspFlip     = 1;
+            P.macroRemove = [2,3,4]; 
+            P.hasEEG      = true;
+            P.spikeClean  = false;
+            P.getBeats    = @(ECGz, beatSep)...
+                 getBeats_251027_Dupi_NMH_DL_1(ECGz, beatSep);
         otherwise
             % Defaults if you hit an unexpected session:
             error('participant needs parameter specification')
-            P.getBeats = @(ECGz, beatSep) error('No heartbeat algorithm defined for session %s', raw.sessID);
     end
 
 
@@ -339,7 +354,7 @@ end
 % 
 % 
 % 
-% %plot for custom algorithm design: 
+% % plot for custom algorithm design: 
 % ECGz = (ECG - mean(ECG, 2)) ./ std(ECG, [], 2); 
 % 
 % ECGz = ECGz(:, 1:4:end);

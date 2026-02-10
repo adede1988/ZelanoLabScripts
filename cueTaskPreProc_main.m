@@ -6,7 +6,7 @@ datPre = { 'R:\Neurology\Zelano_Lab\Lab_Common\Dupi\', ...
            'R:\Neurology\Zelano_Lab\Lab_Common\OBEControl\'};
 
 %prefix index for data folder: 
-datPrei = [1,1,1,1,1,2,2,2,2,2,1,1,1,1,1,1]; 
+datPrei = [1,1,1,1,1,2,2,2,2,2,1,1,1,1,1,1,1]; 
 
 sessionIDs = {'250818_Dupi_NMH_JH_1', ... %preprocessed
                '250623_DUPI_NMH_KS_2',... 
@@ -23,7 +23,8 @@ sessionIDs = {'250818_Dupi_NMH_JH_1', ... %preprocessed
             '251027_Dupi_NMH_DL_1', ...
             '250929_Dupi_NMH_GH_2',...
             '251002_Dupi_NMH_AB_2'...
-            '251013_Dupi_NMH_JN_2'};  
+            '251013_Dupi_NMH_JN_2', ...
+            '250811_Dupi_NMH_TB_2'};  
 
 % %there are multiple respiration channels in many recordings
 % %which one is right for each session: 
@@ -39,7 +40,7 @@ figPath = 'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\';
 
 EEGLOC = readtable(fullfile(codePre, 'ZelanoLabScripts','myEEGcoords_thetaPhi.csv'));
 
-
+set(0, 'defaultfigurewindowstyle', 'normal')
 for s = 1:numel(sessionIDs)
     % --- Session descriptor (adjust to your system) ---
     S.id   = sessionIDs{s};

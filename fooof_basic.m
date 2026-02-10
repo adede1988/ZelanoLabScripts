@@ -58,8 +58,8 @@ if numel(f) < 16, error('Not enough valid points in the specified f_range.'); en
 % ---------- log transforms ----------
 x = log10(f);              % predictor for fixed model
 y = log10(P);              % response
-figure
-plot(x, y)
+% figure
+% plot(x, y)
 % ---------- initial aperiodic fit (robust, sigma-clipped) ----------
 [ap_params, ap_fit] = fit_aperiodic(f, x, y, opt.aperiodic_mode, opt.max_clip_iters);
 

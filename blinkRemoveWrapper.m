@@ -151,8 +151,9 @@ function [out, badChan, blinkIndicator] = blinkRemoveWrapper(outDat, ...
 
     trainDat = trainDat(:,startIdx:startIdx+100000);
 
+
     out = ica_blinks(trainDat, 'blinkChan', ...
-        find(chanIDX == blinkChan));
+        blinkChan);
     if ~isempty(out.badICs)
         ax = plotICATopo(out, out.badICs(1), outDat.eegLocs.theta(chanIDX), ...
             outDat.eegLocs.phi(chanIDX));
