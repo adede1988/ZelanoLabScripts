@@ -64,6 +64,10 @@ subFiles = subFiles(test);
 
 disp(['going for ' subID ' ' chanFiles(start).name] )
 
+test = cellfun(@(x) length(x)>0, strfind({chanFiles.name}, '_macro'));
+chanFiles = chanFiles(test); 
+
+
 singleChanPipeline(chanFiles, start, subFiles, codePre); 
 
 
