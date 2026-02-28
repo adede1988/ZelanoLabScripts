@@ -147,7 +147,7 @@ if ~isfield(chanDat, 'targaIDX')
         disp('length added')
     end
    
-else
+end
     rawDat = load([chanFiles(filei).folder '/' chanFiles(filei).name]).chanDat; 
     [idx50, lm] = breathPiecewiseTemplateIdx(rawDat);         % nBreaths x 50
     rawDat.targIDX = idx50; 
@@ -165,7 +165,7 @@ else
     saveDir = fullfile(stem,'CHANDAT'); 
     save(fullfile(saveDir, chanFiles(filei).name), 'chanDat', '-v7.3'); 
     chanDat = tmp; 
-end
+
 
 %% QC use/notuse breath by breath
 

@@ -9,13 +9,13 @@ disp(['attempting file: ' num2str(start)])
 
 %local paths: 
 
-codePre = 'G:\My Drive\GitHub\';
-datPre = 'R:\Neurology\Zelano_Lab\Lab_Common\QuestMirror\';
+%codePre = 'G:\My Drive\GitHub\';
+%datPre = 'R:\Neurology\Zelano_Lab\Lab_Common\QuestMirror\';
 
 %HPC paths: 
 
-% codePre = '/projects/b1248/code/';
-% datPre = '/projects/b1248/';
+codePre = '/projects/p33197/code/';
+datPre = '/projects/p33197/QuestMirror/';
 
 %% set paths
 
@@ -38,12 +38,14 @@ chanFiles = chanFiles(test);
 test = cellfun(@(x) length(x)>0, strfind({chanFiles.name}, '_EEG'));
 eegFiles = chanFiles(test); 
 
-
+%cut to breathing task only for now!
+test = cellfun(@(x) length(x)>0, strfind({eegFiles.name}, 'breathingTask'));
+eegFiles = eegFiles(test); 
 
 %% run the pipeline
 
-parfor start = 1:length(eegFiles)
-    try
+% parfor start = 1:length(eegFiles)
+%     try
         curChan = eegFiles(start).name; 
         if ~contains(curChan, 'EEG') %check this! 
             subID = split(curChan, '_macro_');
@@ -70,12 +72,12 @@ parfor start = 1:length(eegFiles)
         disp(['going for ' subID ' ' eegFiles(start).name] )
         
         if strcmp(taskID, 'breathingTask')
-            singleChanEEGPipeline(eegFiles, start, subFiles, codePre); 
+            singleChanEEGPipeline(eegFiles, start, subFiles, datPre); 
         else
             disp('only doing breathing for now, so skip')
         end
-    catch
-        disp(['failure on ' subID ' ' eegFiles(start).name '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'])
-    end
+    % catch
+    %     disp(['failure on ' subID ' ' eegFiles(start).name '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'])
+    % end
 
-end
+% end
