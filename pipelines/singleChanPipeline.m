@@ -1937,7 +1937,7 @@ end
 
 
 %% respiration PAC
-if ~isfield(chanDat, 'pac')
+if ~isfield(chanDat, 'paca')
     disp('working on pac')
   rawDat = load([chanFiles(filei).folder '/' chanFiles(filei).name]).chanDat;
    try
@@ -1962,7 +1962,7 @@ if ~isfield(chanDat, 'pac')
     halfBW = 5;                    % +/- 5 Hz
     bpHz   = double([gamMed-halfBW, gamMed+halfBW]);
     
-    PACfrex = logspace(log10(.05), log10(2), 2); 
+    PACfrex = logspace(log10(.05), log10(2), 50); 
     
   [pacOut, meta] = pac_breathTemplate_timeResolvedPAC(rawDat, [], keyBreathIDX, gamMed, fs, bpHz, PACfrex, ...
     'targetFs', 20);
