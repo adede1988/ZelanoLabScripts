@@ -68,7 +68,7 @@ macFiles = chanFiles(test);
         disp(['going for ' subID ' ' macFiles(start).name] )
         
         
-        singleChanPipeline(macFiles, start, subFiles, codePre); 
+        singleChanPipeline(macFiles, start, subFiles, datPre); 
     % catch
     %     disp(['failure on ' subID ' ' macFiles(start).name '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'])
     % end

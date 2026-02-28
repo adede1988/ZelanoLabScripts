@@ -1,4 +1,4 @@
-function [] = singleChanPipeline(chanFiles, filei, subFiles, codePre)
+function [] = singleChanPipeline(chanFiles, filei, subFiles, datPre)
 
 %% set frequency parameters
 
@@ -22,23 +22,23 @@ try %try loading the processed file
     
     chanDat = load([stem 'CHANDAT_processed/' chanFiles(filei).name]).chanDat; 
     try
-        QC = load([chanDat.QCFileDir '/' chanDat.QCFileName]).cleanDat;
+        QC = load([datPre  'cleanFiles/' chanDat.QCFileName]).cleanDat;
     catch
         QCnameBits = strsplit(chanDat.QCFileName, 'cleaningVecs.mat'); 
         chanDat.QCFileName = [QCnameBits{1} char(chanDat.task) ...
                             '_cleaningVecs.mat'];
-        QC = load([chanDat.QCFileDir '/' chanDat.QCFileName]).cleanDat;
+        QC = load([datPre 'cleanFiles/' chanDat.QCFileName]).cleanDat;
 
     end
 catch
     chanDat = load([chanFiles(filei).folder '/' chanFiles(filei).name]).chanDat; % go raw if it's not working!
     try
-        QC = load([chanDat.QCFileDir '/' chanDat.QCFileName]).cleanDat;
+        QC = load([datPre 'cleanFiles/' chanDat.QCFileName]).cleanDat;
     catch
         QCnameBits = strsplit(chanDat.QCFileName, 'cleaningVecs.mat'); 
         chanDat.QCFileName = [QCnameBits{1} char(chanDat.task) ...
                             '_cleaningVecs.mat'];
-        QC = load([chanDat.QCFileDir '/' chanDat.QCFileName]).cleanDat;
+        QC = load([datPre 'cleanFiles/' chanDat.QCFileName]).cleanDat;
 
     end
 end
