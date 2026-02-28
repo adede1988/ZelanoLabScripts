@@ -19,7 +19,7 @@ datPre = 'R:\Neurology\Zelano_Lab\Lab_Common\QuestMirror\';
 
 %HPC paths: 
 
-% codePre = '/projects/b1248/code/';
+% codePre = '/projects/p33197/code/';
 % datPre = '/projects/p33197/';
 
 %% set paths
@@ -47,8 +47,8 @@ macFiles = chanFiles(test);
 
 %% run the pipeline
 
-parfor start = 1:length(macFiles)
-    try
+% parfor start = 1:length(macFiles)
+    % try
         curChan = macFiles(start).name; 
         if length(split(curChan, 'EEG')) == 1
             subID = split(curChan, '_macro');
@@ -69,11 +69,11 @@ parfor start = 1:length(macFiles)
         
         
         singleChanPipeline(macFiles, start, subFiles, codePre); 
-    catch
-        disp(['failure on ' subID ' ' macFiles(start).name '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'])
-    end
+    % catch
+    %     disp(['failure on ' subID ' ' macFiles(start).name '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'])
+    % end
 
-end
+% end
 
 %% put encoding behavioral data onto it
 % curSub = 'something'; 
