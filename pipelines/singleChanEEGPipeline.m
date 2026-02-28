@@ -921,8 +921,11 @@ if ~isfield(chanDat, 'pac')
          macRaw, keyBreathIDX, gamMed, fs, bpHz, PACfrex);
     chanDat.pac = meta; 
     chanDat.pac.pac = pacOut; 
+    chanDat.pac.gamMed
     saveDir = fullfile(stem,'CHANDAT_processed');
     save(fullfile(saveDir, chanFiles(filei).name), 'chanDat', '-v7.3');
+    disp('saved with pac')
+    
    
 end
 
@@ -936,6 +939,7 @@ out = helper_breathISPC(rawDat);
 chanDat.breathLock = out; 
 saveDir = fullfile(stem,'CHANDAT_processed');
 save(fullfile(saveDir, chanFiles(filei).name), 'chanDat', '-v7.3');
+disp('saved file!')
 
 %% go back for the respiration data and get phase locking with respiration: 
 
