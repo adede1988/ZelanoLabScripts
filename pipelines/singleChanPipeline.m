@@ -1947,18 +1947,22 @@ if ~isfield(chanDat, 'pac')
         lengthVals = (lm.winEnd - lm.onsetIdx) ./ chanDat.fs; 
         rawDat.behDat.length = lengthVals; 
         disp('length added')
-    end
+   end
+   rawDat.behDat.length;
   keyBreathIDX = chanDat.targIDX; 
     onsets = chanDat.behDat.finalOnset; 
     keyBreathIDX = keyBreathIDX + onsets; 
     keyBreathIDX = keyBreathIDX(:,[ 1 25 50]);
-  gamMed = median(chanDat.fooof.gamma_peaks, 'all', 'omitnan');
+  gamMed = median(chanDat.fooof.gamma_peaks, 'all', 'omitnan')
+  if isnan(gamMed)
+      gamMed = median(chanDat.fooof.gamma_peak_freq, 'all', 'omitnan')
+  end
     fs = chanDat.fs;               % Hz
     
     halfBW = 5;                    % +/- 5 Hz
     bpHz   = double([gamMed-halfBW, gamMed+halfBW]);
     
-    PACfrex = logspace(log10(.05), log10(2), 50); 
+    PACfrex = logspace(log10(.05), log10(2), 2); 
     
   [pacOut, meta] = pac_breathTemplate_timeResolvedPAC(rawDat, [], keyBreathIDX, gamMed, fs, bpHz, PACfrex, ...
     'targetFs', 20);
