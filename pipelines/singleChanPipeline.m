@@ -162,7 +162,7 @@ else
 
     tmp = chanDat; 
     chanDat = rawDat; 
-    saveDir = fullfile(stem,'CHANDAT_processed'); 
+    saveDir = fullfile(stem,'CHANDAT'); 
     save(fullfile(saveDir, chanFiles(filei).name), 'chanDat', '-v7.3'); 
     chanDat = tmp; 
 end
