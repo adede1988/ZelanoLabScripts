@@ -6,18 +6,13 @@ datPre = { 'R:\Neurology\Zelano_Lab\Lab_Common\Dupi\', ...
            'R:\Neurology\Zelano_Lab\Lab_Common\OBEControl\'};
 
 %prefix index for data folder: 
-datPrei = [1,1,1,1,1,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1]; 
+datPrei = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]; 
 
 sessionIDs = {'250818_Dupi_NMH_JH_1', ... %preprocessed
                '250623_DUPI_NMH_KS_2',... 
                '250623_Dupi_NMH_KS_1',... 
                 '250818_Dupi_NMH_JH_2',... 
                 '250811_Dupi_NMH_TPB_1',... 
-              '230611_OBE_NMH_AZ',... 
-                '241017_OBE_NMH_AS',...  
-                '240923_OBE_NMH_HRM',... 
-                '250310_OBE_NMH_FS',...
-                '250313_OBE_NMH_CS',...
                  '250929_Dupi_NMH_GH_1',...
             '251002_Dupi_NMH_AB_1',...
             '251027_Dupi_NMH_DL_1', ...
@@ -28,14 +23,11 @@ sessionIDs = {'250818_Dupi_NMH_JH_1', ... %preprocessed
                 '251030_Dupi_NMH_DB_1',...
                 '251110_Dupi_NMH_PC_1',...
                 '250623_Dupi_NMH_KS_3',...
-    '251030_Dupi_NMH_DB_2',...
-    '251120_Dupi_NMH_JL_1',...
-    '250818_Dupi_NMH_JH_3'};  
+            '251030_Dupi_NMH_DB_2',...
+            '251120_Dupi_NMH_JL_1',...
+            '250818_Dupi_NMH_JH_3'};
 
-% %there are multiple respiration channels in many recordings
-% %which one is right for each session: 
-% rspIDX = [1,1,3,1,1,1,1,1,1,1]; 
-% rspFlip = [1,1,-1,1,1,1,1,-1,-1,1]; %hard code flip
+
 
 
 addpath(genpath([codePre 'ZelanoLabScripts']))
@@ -47,14 +39,14 @@ figPath = 'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\';
 EEGLOC = readtable(fullfile(codePre, 'ZelanoLabScripts','myEEGcoords_thetaPhi.csv'));
 
 set(0, 'defaultfigurewindowstyle', 'normal')
-for s = 20:numel(sessionIDs)
+for s = 14:numel(sessionIDs)
     % --- Session descriptor (adjust to your system) ---
     S.id   = sessionIDs{s};
     S.root = datPre{datPrei(s)};     % holds exampCueTaskDat.mat
     S.fig  = fullfile(figPath, S.id);
     disp(['working on ', sessionIDs{s}])
     preDir = fullfile(S.root, S.id, 'preProc');
-    outDat = load(fullfile(preDir, [S.id '_cueTaskPreproc.mat']));
+    outDat = load(fullfile(preDir, [S.id '_PEA_threshold_preproc.mat']));
     
     if isfield(outDat, 'out')
         outDat = outDat.out; 
@@ -69,10 +61,10 @@ for s = 20:numel(sessionIDs)
         continue
     end
     % --- Params + raw load ---
-    [raw, P] = getSessionParams_cueTask(S);
+    [raw, P] = getSessionParams_threshTask(S);
     
     % --- Assemble, preprocess shared pieces ---
-    outDat = assemble_outDat_breathing_cue_Task(raw, S, P);
+    outDat = assemble_outDat_breathing_cue_Task(raw, S, P); %this works for thresh task too! 
      disp(['........................Loaded ', sessionIDs{s}])
   % trialStarts, buttonPresses, sniffMarks    
     outDat = downsample_data(outDat, P.fs_target);
@@ -82,26 +74,32 @@ for s = 20:numel(sessionIDs)
   disp(['........................spike and blink ', sessionIDs{s}])
     R = preprocess_respiration_wholetrace(outDat); % fields: rsp, rsp_smooth, phase, onset_metric
 
+    
+    trial = 1:45; 
+    sniff = outDat.TTL.sniff; 
+    x = table(sniff(:)-1000, trial(:), sniff(:), ...
+        'variablenames', {'start', 'trial', 'sniff'}); 
+    outDat.TTL = x; 
     sniffs = detect_sniffs_from_TTLs(R, P, outDat);  % returns table or matrix
     
     %there's more than one sniff per trial
-    outDat.moreThan1 = 0; 
+    
     outDat.rspIDX = P.rspIDX;
     outDat.rspFlip = P.rspFlip; 
 
 
-    outDat.behDat = build_behavior_table_cueTask(sniffs, raw.beh);
+    outDat.behDat = build_behavior_table_threshTask(sniffs, raw.beh);
 
     outDat = refine_onsets_with_phase(outDat, R, P); % uses precomputed phase
 
 
     plot_sniff_epochs(outDat, R);
-   
+   outDat.moreThan1 = 0; 
   disp(['........................breath behave ', sessionIDs{s}])
     % --- Save ---
     preDir = fullfile(S.root, S.id, 'preProc');
     if ~exist(preDir,'dir'), mkdir(preDir); end
-    save(fullfile(preDir, [S.id '_cueTaskPreproc.mat']), 'outDat','-v7.3');
+    save(fullfile(preDir, [S.id '_PEA_threshold_preproc.mat']), 'outDat','-v7.3');
     
 end
 

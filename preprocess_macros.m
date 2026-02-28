@@ -91,14 +91,10 @@ if P.spikeClean
     title([outDat.sessID ' spike removal'], 'interpreter', 'none')
     saveas(x, fullfile(outDat.figs, 'macroSpikeRemoval.jpg'));
 
+    C = size(macOut,1);
     newLabs = {'macBP1', 'macBP2', 'macBP3','macBP4', 'macBP5'};
-    if ~isempty(P.macroRemove)
-        
-            newLabs(P.macroRemove-1) = [];
-      
-
-    end
-    C = size(out.data_clean,1); 
+    newLabs = newLabs(1:C);  
+    
     outDat.data(end+1:end+C, :) = out.data_clean; 
     outDat.labels(end+1:end+C) = newLabs; 
     outDat.data(end+1, :) = out.mixVector; 
@@ -109,14 +105,10 @@ if P.spikeClean
     
 
 else
+    C = size(macOut,1);
     newLabs = {'macBP1', 'macBP2', 'macBP3','macBP4', 'macBP5'};
-    if ~isempty(P.macroRemove)
-        
-            newLabs(P.macroRemove-1) = [];
-      
-
-    end
-    C = length(newLabs);
+    newLabs = newLabs(1:C); 
+   
 
 
     outDat.data(end+1:end+C, :) = macOut;

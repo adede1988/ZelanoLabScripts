@@ -14,13 +14,13 @@ disp(['attempting file: ' num2str(start)])
 
 %local paths: 
 
-% codePre = 'G:\My Drive\GitHub\';
-% datPre = 'R:\Neurology\Zelano_Lab\Lab_Common\QuestMirror\';
+codePre = 'G:\My Drive\GitHub\';
+datPre = 'R:\Neurology\Zelano_Lab\Lab_Common\QuestMirror\';
 
 %HPC paths: 
 
-codePre = '/projects/b1248/code/';
-datPre = '/projects/b1248/';
+% codePre = '/projects/b1248/code/';
+% datPre = '/projects/p33197/';
 
 %% set paths
 
@@ -40,37 +40,40 @@ chanFiles = dir(datFolder);
 test = cellfun(@(x) length(x)>0, strfind({chanFiles.name}, '.mat'));
 chanFiles = chanFiles(test); 
 
+test = cellfun(@(x) length(x)>0, strfind({chanFiles.name}, '_macro'));
+macFiles = chanFiles(test); 
 
 
 
 %% run the pipeline
 
+parfor start = 1:length(macFiles)
+    try
+        curChan = macFiles(start).name; 
+        if length(split(curChan, 'EEG')) == 1
+            subID = split(curChan, '_macro');
+            subID = subID{1}; 
+        else
+            subID = split(curChan, '_EEG'); 
+            subID = subID{1}; 
+        end
+        
+        subFiles = dir([datPre 'CHANDAT']);
+        test = cellfun(@(x) length(x)>0, strfind({subFiles.name}, subID)); 
+        
+        subFiles = subFiles(test);
+        
+        
+        
+        disp(['going for ' subID ' ' macFiles(start).name] )
+        
+        
+        singleChanPipeline(macFiles, start, subFiles, codePre); 
+    catch
+        disp(['failure on ' subID ' ' macFiles(start).name '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'])
+    end
 
-curChan = chanFiles(start).name; 
-if length(split(curChan, 'EEG')) == 1
-    subID = split(curChan, '_macro');
-    subID = subID{1}; 
-else
-    subID = split(curChan, '_EEG'); 
-    subID = subID{1}; 
 end
-
-subFiles = dir([datPre 'CHANDAT']);
-test = cellfun(@(x) length(x)>0, strfind({subFiles.name}, subID)); 
-
-subFiles = subFiles(test);
-
-
-
-disp(['going for ' subID ' ' chanFiles(start).name] )
-
-test = cellfun(@(x) length(x)>0, strfind({chanFiles.name}, '_macro'));
-chanFiles = chanFiles(test); 
-
-
-singleChanPipeline(chanFiles, start, subFiles, codePre); 
-
-
 
 %% put encoding behavioral data onto it
 % curSub = 'something'; 

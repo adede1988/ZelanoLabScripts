@@ -52,7 +52,7 @@ pow = zeros(nS(1), nF, nS(2));
 phase = zeros(nS(1), nF, nS(2));
 
 for i = 1:nF
-    disp(i)
+    % disp(i)
     Ly2 = Ly2s(i);
     
     %%% Perform the convolution of curWaves{i} with every row of S
@@ -73,14 +73,14 @@ for i = 1:nF
     phase(:,i,:) = angle(y1);
 end
 
-if ~silent
-    sz = size(pow);
-    if size(pow,1) == 1
-        fprintf(['\nWarning::multiphasevec3: size(pow)=[%d %d %d].\n', ...
-            'This is a reminder that this function expects [trials x samples].\n', ...
-            'You may want to squeeze(pow) now, since it contans [trials=1 x freq x samples].\n\n'], ...
-            sz(1), sz(2), sz(3));
-    end
-end
+% if ~silent
+%     sz = size(pow);
+%     if size(pow,1) == 1
+%         fprintf(['\nWarning::multiphasevec3: size(pow)=[%d %d %d].\n', ...
+%             'This is a reminder that this function expects [trials x samples].\n', ...
+%             'You may want to squeeze(pow) now, since it contans [trials=1 x freq x samples].\n\n'], ...
+%             sz(1), sz(2), sz(3));
+%     end
+% end
 
 

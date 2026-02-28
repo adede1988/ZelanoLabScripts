@@ -300,12 +300,37 @@ function [raw, P] = getSessionParams_breathingTask(S)
             P.spikeClean  = true;
             P.getBeats    = @(ECGz, beatSep)...
                  getBeats_251027_Dupi_NMH_DL_1(ECGz, beatSep);
+        case '251030_Dupi_NMH_DB_2'
+            P.rspIDX      = 3; 
+            P.rspFlip     = 1;
+            P.macroRemove = [4,5,6]; %was run with 6 removed by accident
+            P.hasEEG      = true;
+            P.spikeClean  = true;
+            P.getBeats    = @(ECGz, beatSep)...
+                 getBeats_251027_Dupi_NMH_DL_1(ECGz, beatSep);
         case '251110_Dupi_NMH_PC_1'
             P.rspIDX      = 1; 
             P.rspFlip     = 1;
             P.macroRemove = [2,3,4]; 
             P.hasEEG      = true;
             P.spikeClean  = false;
+            P.getBeats    = @(ECGz, beatSep)...
+                 getBeats_251027_Dupi_NMH_DL_1(ECGz, beatSep);
+        case '251120_Dupi_NMH_JL_1'
+            P.rspIDX      = 1; 
+            P.rspFlip     = 1;
+            P.macroRemove = []; %was run with 6 removed by accident
+            P.hasEEG      = true;
+            P.spikeClean  = true;
+            P.getBeats    = @(ECGz, beatSep)...
+                 getBeats_251120_Dupi_NMH_JL_1(ECGz, beatSep);
+        case '250818_Dupi_NMH_JH_3'
+            P.rspIDX      = 1;
+            P.rspFlip     = 1;
+            % P.spikeThresh = 20;
+            % P.spikeWin    = 11;
+            P.hasEEG      = true;
+            P.spikeClean  = true;
             P.getBeats    = @(ECGz, beatSep)...
                  getBeats_251027_Dupi_NMH_DL_1(ECGz, beatSep);
         otherwise
@@ -323,7 +348,7 @@ end
  %    plot(rspDat(1,:))
  %    hold on 
  %    plot(rspDat(3,:))
-   
+ % 
 
 %% evaluate macros for spike params: 
  % idx = cellfun(@(x) contains(x, 'macro'), od.labels);
@@ -337,8 +362,8 @@ end
  %    legend()
  % 
  %    title([od.sessID ' macros raw'], 'Interpreter','none')
-
-
+ % 
+ % 
 
 
 
@@ -390,7 +415,13 @@ function heartBeats = getBeats_251027_Dupi_NMH_DL_1(ECGz, beatSep)
     heartBeats = test;
 end
 
-
+function heartBeats = getBeats_251120_Dupi_NMH_JL_1(ECGz, beatSep)
+    % get within-beat times: JH_1
+    test = find(arrayfun(@(x) x > 2.5, ...
+                         ECGz(1,1:end)));
+    test = test(diff(test) > beatSep);
+    heartBeats = test;
+end
 
 function heartBeats = getBeats_250818_Dupi_NMH_JH_1(ECGz, beatSep)
     % get within-beat times: JH_1

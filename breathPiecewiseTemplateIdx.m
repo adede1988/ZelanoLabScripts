@@ -52,7 +52,41 @@ end
 
 % Extract breath length (sec) robustly
 if istable(chanDat.behDat)
-    lenSec = chanDat.behDat.length;
+    try
+        lenSec = chanDat.behDat.length;
+    catch %need to deal with cued sniffs that don't have a length input
+        
+        %first derivative used to find peaks and troughs
+        difVals = diff(chanDat.trial.lowRsp, [], 2);
+        
+        bidx = (1:nBreaths).';  % column
+        
+        % First peak after sample 1000: + -> - in derivative
+        peaks = arrayfun(@(x) ...
+            find(difVals(x,1000:end-1) > 0 & difVals(x,1001:end) < 0, 1), ...
+            1:nBreaths);
+        
+        % First trough after the peak (still in derivative): - -> + in derivative
+        troughs = arrayfun(@(x,p) ...
+            find(difVals(x,p+1000:end-1) < 0 & difVals(x,p+1+1000:end) > 0, 1), ...
+            bidx, peaks(:));
+        
+        % Convert peak/trough indices into rsp indices (offset by 1000)
+        peakIdx   = 1000 + peaks(:);
+        troughIdx = 1000 + peaks(:) + troughs(:);
+        
+        peakVals   = arrayfun(@(x,i) rsp(x,i), bidx, peakIdx);
+        troughVals = arrayfun(@(x,i) rsp(x,i), bidx, troughIdx);
+        
+        endThresh = epsFrac * 3 + median(rsp, 'all');
+     
+
+
+        % First time after trough that rsp exceeds endThresh
+        endIdx = arrayfun(@(x,i0) find(chanDat.trial.lowRsp(x,i0:end) > endThresh, 1), bidx, troughIdx);
+        endIdx = endIdx + troughIdx;
+        lenSec = (endIdx - 1000) ./ fs;
+    end
 elseif isstruct(chanDat.behDat)
     if numel(chanDat.behDat) > 1
         lenSec = [chanDat.behDat.length]';
@@ -140,7 +174,8 @@ for b = 1:nBreaths
     % Return crossing ABOVE onsetLevel+eps after trough (end of exhale fall)
     caSearchStart = troughIdx;
     caSearchEnd   = winEnd;
-    ca = find(x(caSearchStart:caSearchEnd) >= (onsetLevel - epsVal), 1, 'first');
+
+    ca = find(x(caSearchStart:caSearchEnd) >= (median(x) - epsVal), 1, 'first');
     if isempty(ca)
         continue;
     end
@@ -219,6 +254,10 @@ for b = 1:nBreaths
         onsetLevel = lm.onsetLevelMed(b);
         onsetCurIdx = onsetIdx - 150 + ...
                         find(x(onsetIdx-150:onsetIdx+100)>=onsetLevel, 1);
+        if isempty(onsetCurIdx)
+            idx50(b,:) = nan(1, nPerSeg*5);
+            continue;
+        end
         lm.onsetIdx(b) = onsetCurIdx; 
     else
         lm.onsetIdx(b) = onsetIdx; 

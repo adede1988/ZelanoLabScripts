@@ -188,7 +188,7 @@ difs = mean(spikeSnips, 2) - mean(nonSnips, 2);
 
 
 
-if (max(difs) - min(difs)) / min(difs) > 3
+if (max(difs) - min(difs)) / median(difs) > 3
     [~, S.knownIC] = max(difs);
 else
     S.knownIC = -1; 

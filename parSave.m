@@ -1,3 +1,3 @@
-function [] = parSave(fn, out)
-    save(fn, 'out', '-v7.3')
+function [] = parSave(fn, chanDat)
+    save(fn, 'chanDat', '-v7.3')
 end

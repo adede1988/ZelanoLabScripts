@@ -110,130 +110,220 @@ function [raw, P] = getSessionParams_O15(S)
     P.ttl.note                 = "";  % free-form notes
 
     %% --- Session-specific overrides (aggregated from your script) ---
-    switch sessID
-        % EEG present + spike cleaning parameters
-        case '250904_OBE_NWU_TI'
-            P.hasEEG      = true;
-            P.spikeThresh = 50;
-            P.spikeWin    = 11;
-            P.spikeClean  = true;
+  switch sessID
+    % EEG present + spike cleaning parameters
+    case '250904_OBE_NWU_TI'
+        P.hasEEG      = true;
+        P.spikeThresh = 50;
+        P.spikeWin    = 11;
+        P.spikeClean  = true;
 
-            % Resp thresholds
-            P.respThresh   = 5000;
-            P.cuedBackBuff = 100;
+        % Resp thresholds
+        P.respThresh   = 5000;
+        P.cuedBackBuff = 100;
 
-            % Refine window narrower for this participant
-            P.adjWin       = 300;
+        % Refine window narrower for this participant
+        P.adjWin       = 300;
 
-            % Known TTL anomaly in your script
-            P.ttl.removeTrialMarksIdx = 28;
-            P.ttl.note = "Drop aberrant extra TTL at index 28.";
+        % Known TTL anomaly in your script
+        P.ttl.removeTrialMarksIdx = 28;
+        P.ttl.note = "Drop aberrant extra TTL at index 28.";
 
-        case '250623_DUPI_NMH_KS_2'
-            P.hasEEG      = true;
-            P.spikeThresh = 15;
-            P.spikeWin    = 11;
-            P.spikeClean  = false;
+    case '250623_DUPI_NMH_KS_2'
+        P.hasEEG      = true;
+        P.spikeThresh = 15;
+        P.spikeWin    = 11;
+        P.spikeClean  = false;
 
-            P.respThresh   = 3000;
-            P.cuedBackBuff = 350;
+        P.respThresh   = 3000;
+        P.cuedBackBuff = 350;
 
-        case '250623_Dupi_NMH_KS_1'
-            P.hasEEG      = false;
-            P.spikeThresh = 15;
-            P.spikeWin    = 11;
-            P.spikeClean  = false;
-            P.macroRemove = 6; 
-            P.respThresh   = 5000;
-            P.cuedBackBuff = 350;
-        case '250929_Dupi_NMH_GH_1'
-            P.hasEEG      = true;
-            P.spikeClean  = true;
-            P.macroRemove = 6; 
-            P.rspFlip     = 1;
+    % ---- ADDED (present in set 1, missing in set 2) ----
+    case '250623_DUPI_NMH_KS_3'
+        P.hasEEG      = true;
+        P.spikeThresh = 15;
+        P.spikeWin    = 11;
+        P.spikeClean  = false;
 
-        case '250818_Dupi_NMH_JH_2'
-            P.hasEEG      = true;
-            P.spikeThresh = 20;
-            P.spikeWin    = 11;
-            P.spikeClean  = true;
+        P.respThresh   = 3000;
+        P.cuedBackBuff = 350;
 
-            % Uses defaults for resp thresholds
+    case '250623_Dupi_NMH_KS_1'
+        P.hasEEG      = false;
+        P.spikeThresh = 15;
+        P.spikeWin    = 11;
+        P.spikeClean  = false;
+        P.macroRemove = 6;
+        P.respThresh   = 5000;
+        P.cuedBackBuff = 350;
 
-        case '250818_Dupi_NMH_JH_1'
-            P.hasEEG      = true;
-            P.spikeThresh = 20;
-            P.spikeWin    = 11;
-            P.spikeClean  = true;
+    case '250929_Dupi_NMH_GH_1'
+        P.hasEEG      = true;
+        P.spikeClean  = true;
+        P.macroRemove = 6;
+        P.rspFlip     = 1;
 
-        case '250908_OBE_NWU_AS'
-            P.hasEEG      = true;
-            P.spikeThresh = 20;
-            P.spikeWin    = 11;
-            P.spikeClean  = false;
+    case '250818_Dupi_NMH_JH_2'
+        P.hasEEG      = true;
+        P.spikeThresh = 20;
+        P.spikeWin    = 11;
+        P.spikeClean  = true;
 
-            P.respThresh   = 3000;
-            P.cuedBackBuff = 150;
+        % Uses defaults for resp thresholds
 
-        case '250811_Dupi_NMH_TPB_1'
-            P.hasEEG      = true;
-            P.spikeThresh = 10;
-            P.spikeWin    = 9;
-            P.spikeClean  = true;
+    case '250818_Dupi_NMH_JH_1'
+        P.hasEEG      = true;
+        P.spikeThresh = 20;
+        P.spikeWin    = 11;
+        P.spikeClean  = true;
 
-            P.respThresh   = 20;
-            P.cuedBackBuff = 150;
-        case '250811_Dupi_NMH_TB_2'
-            P.hasEEG      = true;
-            P.spikeClean  = true;
-            P.rspFlip     = -1;
-                
-            P.respThresh   = 20;
-            P.cuedBackBuff = 150;
-        case '251002_Dupi_NMH_AB_1'
-            P.hasEEG      = true;
-            P.spikeClean  = true;
-            P.respThresh   = 2000;
-        case '251006_OBE_NWU_RY_1'
-            P.hasEEG      = true;
-            P.spikeClean  = true;
-            P.respThresh   = 4000;
-            P.cuedBackBuff = 400;
-        case '251027_Dupi_NMH_DL_1'
-            P.hasEEG      = true;
-            P.spikeClean  = true;
-            P.cuedBackBuff = 300;
-            P.respThresh   = 4000;
-        case '251013_Dupi_NMH_JN_2'
-            P.hasEEG      = true;
-            P.spikeClean  = true;
-            P.macroRemove = 6;
-            P.cuedBackBuff = 200;
-            P.respThresh   = 2000;
-        case '251009_OBE_NWU_CP_1' 
-            P.macroRemove = 6; 
-            P.hasEEG      = true;
-            P.spikeClean  = true;
-            P.respThresh   = 2000;
-            P.cuedBackBuff = 250;
-        case '250929_Dupi_NMH_GH_2'
-            P.rspIDX      = 1; 
-            P.macroRemove = [5,6]; 
-            P.hasEEG      = true;
-            P.spikeClean  = true;
-            P.respThresh   = 4000;
-            P.cuedBackBuff = 350;
-            P.ttl.removeTrialMarksIdx = [27,28];
-            P.ttl.note = "Drop extra TTLs from restarting task.";
-        case '251002_Dupi_NMH_AB_2'
-            P.rspIDX      = 1; 
-            P.macroRemove = [4,5,6]; 
-            P.hasEEG      = true;
-            P.spikeClean  = false;
-            P.respThresh   = 1000;
-        otherwise
-            % keep defaults
-    end
+    % ---- ADDED (present in set 1, missing in set 2) ----
+    case '250818_Dupi_NMH_JH_3'
+        P.hasEEG      = true;
+        P.spikeThresh = 20;
+        P.spikeWin    = 11;
+        P.spikeClean  = true;
+
+        P.respThresh   = 4000;
+        P.cuedBackBuff = 350;
+
+    case '250908_OBE_NWU_AS'
+        P.hasEEG      = true;
+        P.spikeThresh = 20;
+        P.spikeWin    = 11;
+        P.spikeClean  = false;
+
+        P.respThresh   = 3000;
+        P.cuedBackBuff = 150;
+
+    case '250811_Dupi_NMH_TPB_1'
+        P.hasEEG      = true;
+        P.spikeThresh = 10;
+        P.spikeWin    = 9;
+        P.spikeClean  = true;
+
+        P.respThresh   = 20;
+        P.cuedBackBuff = 150;
+
+    case '250811_Dupi_NMH_TB_2'
+        P.hasEEG      = true;
+        P.spikeClean  = true;
+        P.rspFlip     = -1;
+
+        P.respThresh   = 20;
+        P.cuedBackBuff = 150;
+
+    case '251002_Dupi_NMH_AB_1'
+        P.hasEEG      = true;
+        P.spikeClean  = true;
+        P.respThresh   = 2000;
+
+    case '251006_OBE_NWU_RY_1'
+        P.hasEEG      = true;
+        P.spikeClean  = true;
+        P.respThresh   = 4000;
+        P.cuedBackBuff = 400;
+
+    case '251027_Dupi_NMH_DL_1'
+        P.hasEEG       = true;
+        P.spikeClean   = true;
+        P.cuedBackBuff = 300;
+        P.respThresh   = 4000;
+
+    case '251013_Dupi_NMH_JN_2'
+        P.hasEEG       = true;
+        P.spikeClean   = true;
+        P.macroRemove  = 6;
+        P.cuedBackBuff = 200;
+        P.respThresh   = 2000;
+
+    case '251009_OBE_NWU_CP_1'
+        P.macroRemove  = 6;
+        P.hasEEG       = true;
+        P.spikeClean   = true;
+        P.respThresh   = 2000;
+        P.cuedBackBuff = 250;
+
+    case '250929_Dupi_NMH_GH_2'
+        P.rspIDX      = 1;
+        P.macroRemove = [5,6];
+        P.hasEEG      = true;
+        P.spikeClean  = true;
+        P.respThresh   = 4000;
+        P.cuedBackBuff = 350;
+
+        P.ttl.removeTrialMarksIdx = [27,28];
+        P.ttl.note = "Drop extra TTLs from restarting task.";
+
+    case '251002_Dupi_NMH_AB_2'
+        P.rspIDX      = 1;
+        P.macroRemove = [4,5,6];
+        P.hasEEG      = true;
+        P.spikeClean  = false;
+        P.respThresh   = 1000;
+    case '251120_Dupi_NMH_JL_1'
+        P.rspIDX      = 1;
+        P.macroRemove = [];
+        P.hasEEG      = true;
+        P.spikeClean  = false;
+        P.respThresh   = 3000;
+
+    case '230611_OBE_NMH_AZ'
+        P.hasEEG      = false;
+        P.spikeClean  = true;
+        P.respThresh   = 3000;
+        P.cuedBackBuff = 150;
+
+    case '241017_OBE_NMH_AS'
+        P.hasEEG      = false;
+        P.spikeClean  = false;
+        P.respThresh   = 3000;
+        P.cuedBackBuff = 150;
+
+    case '240923_OBE_NMH_HRM'
+        P.hasEEG      = false;
+        P.spikeClean  = true;
+        P.respThresh   = 1000;
+        P.cuedBackBuff = 350;
+
+    case '250310_OBE_NMH_FS'
+        P.hasEEG      = false;
+        P.spikeClean  = true;
+        P.rspFlip     = -1;
+        P.respThresh   = 3000;
+        P.cuedBackBuff = 150;
+
+    case '250313_OBE_NMH_CS'
+        P.hasEEG      = false;
+        P.spikeClean  = false;
+        P.rspFlip     = -1;
+        P.respThresh   = 3000;
+        P.cuedBackBuff = 150;
+
+    case '251030_Dupi_NMH_DB_1'
+        P.hasEEG      = true;
+        P.spikeClean  = true;
+        P.rspIDX      = 1;
+        P.respThresh   = 1000;
+        P.cuedBackBuff = 350;
+
+    case '251030_Dupi_NMH_DB_2'
+        P.hasEEG      = true;
+        P.spikeClean  = true;
+        P.macroRemove = [4,5,6];
+        P.rspIDX      = 1;
+        P.respThresh   = 1000;
+        P.cuedBackBuff = 350;
+    case '251110_Dupi_NMH_PC_1'
+        P.rspIDX = 1;
+        P.macroRemove = [1,2,3,4];
+        P.hasEEG = true;  P.spikeClean = false;
+        P.respThresh  = 4000;
+        P.cuedBackBuff = 450;
+    otherwise
+        % keep defaults
+end
+
 
     % sanity: make sure labels exist as cellstr
     if isstring(raw.labels), raw.labels = cellstr(raw.labels); end

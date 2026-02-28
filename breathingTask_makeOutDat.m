@@ -11,7 +11,7 @@ datPre = { 'R:\Neurology\Zelano_Lab\Lab_Common\Dupi\', ...
            'R:\Neurology\Zelano_Lab\Lab_Common\AllStudyData\EEGbreathing\'};
 
 %prefix index for data folder: 
-datPrei = [1,1,1,2,3,3,3,3,3,3,2,1,1,1,1,2,1,1,1,1,1,1,1,1]; 
+datPrei = [1,1,1,2,3,3,3,3,3,3,2,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1,1]; 
 
 sessionIDs = {'250818_Dupi_NMH_JH_1', ... #preprocessed
                '250623_DUPI_NMH_KS_2',... #preprocessed
@@ -36,7 +36,10 @@ sessionIDs = {'250818_Dupi_NMH_JH_1', ... #preprocessed
                 '251013_Dupi_NMH_JN_2',...
                 '251030_Dupi_NMH_DB_1',...
                 '251110_Dupi_NMH_PC_1',...
-                '250623_Dupi_NMH_KS_3'};
+                '250623_Dupi_NMH_KS_3',...
+                '251030_Dupi_NMH_DB_2',...
+                '251120_Dupi_NMH_JL_1',...
+                '250818_Dupi_NMH_JH_3'};
 
 %participants with new TTL style for more standardized read in:
 newList = {'250811_Dupi_NMH_TB_2',...
@@ -49,12 +52,15 @@ newList = {'250811_Dupi_NMH_TB_2',...
             '251013_Dupi_NMH_JN_2',...
             '251030_Dupi_NMH_DB_1',...
             '251110_Dupi_NMH_PC_1',...
-            '250623_Dupi_NMH_KS_3'};
+            '250623_Dupi_NMH_KS_3',...
+            '251030_Dupi_NMH_DB_2',...
+            '251120_Dupi_NMH_JL_1',...
+            '250818_Dupi_NMH_JH_3'};
 
 %there are multiple respiration channels in many recordings
 %which one is right for each session: 
-rspIDX = [3,3,3,3,1,1,1,1,1,1,3,3,3,1,1,1,1,1,1,1,1,1,1,1]; 
-rspFlip = [-1,-1,-1,-1,-1,-1,-1,1,-1,1,1,1,1,-1,1,1,1,1,1,1,1,1,1,1]; %hard code flip
+rspIDX = [3,3,3,3,1,1,1,1,1,1,3,3,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1]; 
+rspFlip = [-1,-1,-1,-1,-1,-1,-1,1,-1,1,1,1,1,-1,1,1,1,1,1,1,1,1,1,1,1,1,1]; %hard code flip
 
 % addpath([codePre 'HpcAccConnectivityProject/helperFuncs'])
 % addpath(genpath([codePre 'myFrequentUse']))
@@ -69,7 +75,7 @@ addpath([codePre 'ZelanoLabScripts'])
 % set(0, 'defaultfigurewindowstyle', 'docked')
 % ft_defaults
 
-parfor sessi = 1:length(sessionIDs)
+for sessi = 1:length(sessionIDs)
 try
 %% custom import for different participants: 
 disp(sessi)
@@ -384,6 +390,9 @@ if ~exist([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\' ...
                     sessionIDs{sessi} '.csv'];
         behDat = readtable([codePre behDat]);
         
+        if strcmp(sessionIDs{sessi} , '251030_Dupi_NMH_DB_2')
+            dat.rawData.trial{1}(:,1:1023000) = []; %eliminate initial recording before computer glitch
+        end
     
         outDat = struct; 
         outDat.behDat = behDat; 
@@ -455,10 +464,10 @@ if ~exist([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\' ...
         TTLs = startTTLs(blockLens>290 & blockLens<310);
         TTLs = sort(TTLs); 
 
-        % figure
-        % plot(photoDiode)
-        % xline(TTLs)
-        % title(sessi)
+        figure
+        plot(photoDiode)
+        xline(TTLs)
+        title(sessi)
         outDat.data = zeros(size(dat.rawData.trial{1}, 1), 600000, ...
                     length(TTLs));
         di = 1; 

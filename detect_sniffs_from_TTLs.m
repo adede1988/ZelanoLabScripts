@@ -87,7 +87,7 @@ function [outSniffs] = detect_sniffs_from_TTLs(R, P, outDat)
     TTL = table2array(TTL); 
 
 
-    for triali  = 1:15
+    for triali  = 1:size(TTL,1)
         figure('visible', false)
         idx = TTL(triali, 1); 
         endidx = TTL(triali,3)+P.fs_target*4; 

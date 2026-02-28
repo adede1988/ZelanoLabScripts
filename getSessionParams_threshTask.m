@@ -1,4 +1,4 @@
-function [raw, P] = getSessionParams_cueTask(S)
+function [raw, P] = getSessionParams_threshTask(S)
 % getSessionParams_cueTask
 %   Loads the prebuilt outDat for the cue task and aggregates
 %   all subject-specific parameters into P (centralizing what
@@ -23,15 +23,15 @@ function [raw, P] = getSessionParams_cueTask(S)
     end
 
     %% --- Load prebuilt outDat ---
-    matPath = fullfile(S.root, S.id, 'preProc', [S.id '_cueTaskPreProc.mat']);
+    matPath = fullfile(S.root, S.id, 'preProc', [S.id '_PEA_threshold_preproc.mat']);
     if ~exist(matPath, 'file')
-        error('getSessionParams_cueTask:MissingMat', ...
+        error('getSessionParams_threshTask:MissingMat', ...
               'Expected MAT at %s (containing outDat).', matPath);
     end
     tmp = load(matPath);
    
     if ~isfield(tmp, 'outDat')
-        error('getSessionParams_cueTask:NoOutDat', ...
+        error('getSessionParams_threshTask:NoOutDat', ...
               'MAT must contain variable outDat.');
     end
     od = tmp.outDat;
@@ -54,7 +54,7 @@ function [raw, P] = getSessionParams_cueTask(S)
     end
     %% --- Defaults (session-agnostic) ---
     P = struct();
-    P.task        = 'cueTask';
+    P.task        = 'threshTask';
     P.type        = raw.type;
     P.fs_target   = 500;
     P.debug       = false;
@@ -78,9 +78,7 @@ function [raw, P] = getSessionParams_cueTask(S)
 
     % TTL name mapping (used if raw.TTL is a struct/table)
     P.ttlMap = struct( ...
-        'cue',    {'cue','Cue','cueOnset'}, ...
-        'target', {'targ','target','TargetOnset'}, ...
-        'resp',   {'resp','response','button'} );
+        'sniff',    {'sniff'});
 
     %% --- Subject-specific overrides from cueTaskPreProc_scratch.m ---
 
@@ -95,8 +93,8 @@ function [raw, P] = getSessionParams_cueTask(S)
             P.rspIDX = 1;  P.rspFlip = 1;
             P.hasEEG = true;  P.spikeClean = false;
             P.respThresh  = 3000; P.cuedBackBuff = 350;
-
-        case '250623_Dupi_NMH_KS_3'
+            
+        case '250623_DUPI_NMH_KS_3'
             P.rspIDX = 1;  P.rspFlip = 1;
             P.hasEEG = true;  P.spikeClean = false;
             P.respThresh  = 3000; P.cuedBackBuff = 350;
@@ -111,12 +109,12 @@ function [raw, P] = getSessionParams_cueTask(S)
             P.rspIDX = 1;  P.rspFlip = 1;
             P.hasEEG = true;  P.spikeClean = true;
             P.respThresh  = 4000; P.cuedBackBuff = 350;
-
+        
         case '250818_Dupi_NMH_JH_3'
             P.rspIDX = 1;  P.rspFlip = 1;
             P.hasEEG = true;  P.spikeClean = true;
-            P.respThresh  = 4000; P.cuedBackBuff = 350;
-        
+            P.respThresh  = 4000; P.cuedBackBuff = 350;    
+
         case '250811_Dupi_NMH_TPB_1'
             P.rspIDX = 1;  P.rspFlip = 1;
             P.hasEEG = true;  P.spikeClean = true;
@@ -187,7 +185,6 @@ function [raw, P] = getSessionParams_cueTask(S)
             P.hasEEG = true;  P.spikeClean = false;
             P.respThresh  = 1000;
             P.cuedBackBuff = 350;
-
         case '251030_Dupi_NMH_DB_2'
             P.hasEEG      = true;
             P.spikeClean  = true;
@@ -195,19 +192,17 @@ function [raw, P] = getSessionParams_cueTask(S)
             P.rspIDX      = 3;
             P.respThresh   = 1000;
             P.cuedBackBuff = 350;
-
         case '251120_Dupi_NMH_JL_1'
             P.rspIDX      = 1;
             P.macroRemove = [];
             P.hasEEG      = true;
             P.spikeClean  = false;
             P.respThresh   = 3000;
-
         case '251110_Dupi_NMH_PC_1'
             P.rspIDX = 3;
             P.macroRemove = [1,2,3,4];
             P.hasEEG = true;  P.spikeClean = false;
-            P.respThresh  = 1000;
+            P.respThresh  = 4000;
             P.cuedBackBuff = 450;
 
         otherwise

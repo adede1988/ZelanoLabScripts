@@ -37,7 +37,8 @@ for ii = 1:length(datPre)
                 allPreProcFiles = vertcat(allPreProcFiles, preProcDir); 
             end
         else
-            warning(['wrong number of preProc folders: ' subdir(jj).name])
+            warning(['wrong number of preProc folders: ' ...
+                subdir(jj).name 'num: ' num2str(length(innerDir))])
         end
     end
 
@@ -48,8 +49,8 @@ end
 
 %% just going after breathing task right now
 
-test = cellfun(@(x) ~contains(x, 'breathing'), {allPreProcFiles.name});
-allPreProcFiles(test,:) = [];
+% test = cellfun(@(x) ~contains(x, 'cueTask'), {allPreProcFiles.name});
+% allPreProcFiles(test,:) = [];
 
 
 %%
@@ -59,12 +60,33 @@ set(0, 'defaultfigurewindowstyle', 'docked')
 
 
 
-for ii = 3:length(allPreProcFiles)
+parfor ii = 1:length(allPreProcFiles)
+    disp(ii)
+    disp(allPreProcFiles(ii).name)
+    %SAVE TIME BY SKIPPING IF ANY SPLITTING HAS ALREADY BEEN DONE: 
+    %caution: will skip entire preproc file if any single chan files have
+    %been made! 
+    sid = regexp(allPreProcFiles(ii).name,'^\d{6}_[^_]+_[^_]+_[^_]+(?:_\d+)?','match','once'); 
+    sid = strrep(sid,'250811_Dupi_NMH_TPB_1','250811_Dupi_NMH_TB_1'); 
+    % % % if ~isempty(sid) && ~isempty(dir(fullfile(outPre,'CHANDAT',...
+    % % %         [sid '_*.mat']))), ...
+    % % %         fprintf('Skipping %s (CHANDAT outputs already exist)\n',sid); 
+    % % %     continue; 
+    % % % end
     try
     outDat = load([allPreProcFiles(ii).folder '/'...
                      allPreProcFiles(ii).name]);
+    if isfield(outDat, 'outDat')
+        outDat = outDat.outDat; 
+    elseif isfield(outDat, 'out') 
+        outDat = outDat.out; 
+    else
+        error('could not extract outDat')
+    end
     
-    outDat = outDat.out; 
+    if ~isfield(outDat, 'moreThan1')
+        error('file not fully processed')
+    end
     
     %ALL TASKS MUST HAVE: 
     chanTmp = struct; 
@@ -82,13 +104,15 @@ for ii = 3:length(allPreProcFiles)
     chanTmp.subID = nameBits{4};
     if length(nameBits) == 5
         chanTmp.sessNum = str2num(nameBits{5}); 
+    else
+        chanTmp.sessNum = 1; 
     end
     %OGdataDir
     chanTmp.OGdataDir = strsplit(allPreProcFiles(ii).folder, 'preProc'); 
     chanTmp.OGdataDir = chanTmp.OGdataDir{1}; 
     %loadFile
     tmp = dir(chanTmp.OGdataDir);
-    idx = cellfun(@(x) contains(x, 'LoadData'), {tmp.name});
+    idx = cellfun(@(x) contains(x, 'LoadData') & contains(x, '.m'), {tmp.name});
     if sum(idx) == 1
         chanTmp.loadFile = tmp(idx).name; 
     else
@@ -131,7 +155,7 @@ for ii = 3:length(allPreProcFiles)
     idx3 = cellfun(@(x) strcmp(x, 'badTS'), outDat.labels);
     if sum(idx1+idx2) > 0
         chanTmp.QCFileDir = [outPre '/cleanFiles']; 
-        chanTmp.QCFileName = [chanTmp.sessID '_' 'cleaningVecs.mat']; 
+        chanTmp.QCFileName = [chanTmp.sessID '_' char(chanTmp.task) '_' 'cleaningVecs.mat']; 
         cleanDat = chanTmp; 
         tmp = outDat.data(idx1==1,:); 
         cleanDat.spikeCleanVec = tmp; 
@@ -139,8 +163,8 @@ for ii = 3:length(allPreProcFiles)
         cleanDat.blinkCleanVec = tmp; 
         tmp = outDat.data(idx3==1,:); 
         cleanDat.badTS = tmp; 
-        save([chanTmp.QCFileDir '/' chanTmp.QCFileName],...
-                                        'cleanDat'); 
+        parSaveClean([chanTmp.QCFileDir '/' chanTmp.QCFileName],...
+                                        cleanDat); 
         
     else
         disp([chanTmp.subID ' has no QC information'])
@@ -152,7 +176,7 @@ for ii = 3:length(allPreProcFiles)
     switch chanTmp.task
         case 'O15'
             chanTmp.behDat = outDat.behDat; 
-        case 'PEA_threshold'
+        case 'threshTask'
             chanTmp.behDat = outDat.behDat; 
         case 'breathingTask'
             chanTmp.behDat = outDat.behDat; 
@@ -178,17 +202,16 @@ for ii = 3:length(allPreProcFiles)
     %task specific extra stuff: 
     switch chanTmp.task
         case 'O15'
-            %rawBehavior: trials X 3 matrix of behavioral responses
-            error('check extra stuff for O15')
-        case 'PEA_threshold'
-            error('check extra stuff for PEA thresh')
+            %behavior fully integrated into behDat, no extras
+        case 'threshTask'
+            %behavior fully integrated into behDat, no extras 
         case 'breathingTask'
             idx = cellfun(@(x) contains(x, 'RRint'), outDat.labels);
             chanTmp.RRint = squeeze(outDat.data(idx, :)); 
             idx = cellfun(@(x) contains(x, 'targTrace'), outDat.labels);
             chanTmp.targTrace = squeeze(outDat.data(idx, :)); 
         case 'cueTask'
-            error('check extra stuff for O15')
+            %fully integrated behavior in behDat, no extras
         otherwise
             error('unknown extra')
     end  
@@ -215,10 +238,13 @@ for ii = 3:length(allPreProcFiles)
                 chanDat.chanType = 'EEG';
                 
             end
-
-            save([outPre '/CHANDAT/' ...
-                chanDat.sessID '_' chanDat.chanType '_' chanDat.task '_' ...
-                num2str(chi) '.mat'], 'chanDat');
+            if ~exist([outPre '/CHANDAT/' ...
+                chanDat.sessID '_' chanDat.chanType '_' char(chanDat.task) '_' ...
+                num2str(chi) '.mat'], 'file')
+                parSave([outPre '/CHANDAT/' ...
+                    chanDat.sessID '_' chanDat.chanType '_' char(chanDat.task) '_' ...
+                    num2str(chi) '.mat'], chanDat);
+            end
         end
     end
     catch
