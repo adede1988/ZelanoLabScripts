@@ -1945,7 +1945,7 @@ if ~isfield(chanDat, 'pac')
     disp('length checked')
  catch
         lengthVals = (lm.winEnd - lm.onsetIdx) ./ chanDat.fs; 
-        chanDat.behDat.length = lengthVals; 
+        rawDat.behDat.length = lengthVals; 
         disp('length added')
     end
   keyBreathIDX = chanDat.targIDX; 
