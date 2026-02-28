@@ -43,6 +43,15 @@ catch
     end
 end
 
+ try
+        chanDat.behDat.length;
+    disp('length checked')
+ catch
+        lengthVals = (lm.winEnd - lm.onsetIdx) ./ chanDat.fs; 
+        chanDat.behDat.length = lengthVals; 
+        disp('length added')
+    end
+
 disp(['data loaded: ' chanDat.subID ' ' num2str(chanDat.chi)])
 
 
@@ -137,12 +146,7 @@ if ~isfield(chanDat, 'targIDX')
     [idx50, lm] = breathPiecewiseTemplateIdx(chanDat);         % nBreaths x 50
     chanDat.targIDX = idx50; 
     
-    try
-        chanDat.behDat.length
-    catch
-        lengthVals = (lm.winEnd - lm.onsetIdx) ./ chanDat.fs; 
-        chanDat.behDat.length = lengthVals; 
-    end
+   
 end
 
 %% QC use/notuse breath by breath
