@@ -43,14 +43,7 @@ catch
     end
 end
 
- try
-        chanDat.behDat.length;
-    disp('length checked')
- catch
-        lengthVals = (lm.winEnd - lm.onsetIdx) ./ chanDat.fs; 
-        chanDat.behDat.length = lengthVals; 
-        disp('length added')
-    end
+
 
 disp(['data loaded: ' chanDat.subID ' ' num2str(chanDat.chi)])
 
@@ -140,13 +133,38 @@ end
 
 %% breath phase info per trial: 
 
-if ~isfield(chanDat, 'targIDX')
+if ~isfield(chanDat, 'targaIDX')
    disp('breath time indicies')
     
     [idx50, lm] = breathPiecewiseTemplateIdx(chanDat);         % nBreaths x 50
     chanDat.targIDX = idx50; 
-    
+     try
+        chanDat.behDat.length;
+        disp('length checked')
+    catch
+        lengthVals = (lm.winEnd - lm.onsetIdx) ./ chanDat.fs; 
+        chanDat.behDat.length = lengthVals; 
+        disp('length added')
+    end
    
+else
+    rawDat = load([chanFiles(filei).folder '/' chanFiles(filei).name]).chanDat; 
+    [idx50, lm] = breathPiecewiseTemplateIdx(rawDat);         % nBreaths x 50
+    rawDat.targIDX = idx50; 
+     try
+        rawDat.behDat.length;
+        disp('length checked')
+    catch
+        lengthVals = (lm.winEnd - lm.onsetIdx) ./ rawDat.fs; 
+        rawDat.behDat.length = lengthVals; 
+        disp('length added')
+    end
+
+    tmp = chanDat; 
+    chanDat = rawDat; 
+    saveDir = fullfile(stem,'CHANDAT_processed'); 
+    save(fullfile(saveDir, chanFiles(filei).name), 'chanDat', '-v7.3'); 
+    chanDat = tmp; 
 end
 
 %% QC use/notuse breath by breath
@@ -1922,6 +1940,14 @@ end
 if ~isfield(chanDat, 'pac')
     disp('working on pac')
   rawDat = load([chanFiles(filei).folder '/' chanFiles(filei).name]).chanDat;
+   try
+        rawDat.behDat.length;
+    disp('length checked')
+ catch
+        lengthVals = (lm.winEnd - lm.onsetIdx) ./ chanDat.fs; 
+        chanDat.behDat.length = lengthVals; 
+        disp('length added')
+    end
   keyBreathIDX = chanDat.targIDX; 
     onsets = chanDat.behDat.finalOnset; 
     keyBreathIDX = keyBreathIDX + onsets; 
