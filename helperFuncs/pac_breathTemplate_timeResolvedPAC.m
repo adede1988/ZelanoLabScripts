@@ -98,7 +98,7 @@ winCapSec    = opt.winCapSec;
 
 % -------------------- inputs / mode selection --------------------
 useRespMode = isempty(macRaw);
-
+disp('inputs parsed and establishing mode')
 if ~isfield(rawDat,'data') || isempty(rawDat.data)
     error('rawDat.data is required.');
 end
@@ -141,7 +141,7 @@ end
 if any(~isfinite(xAmpSrc))
     xAmpSrc = fillmissing(xAmpSrc,'linear','EndValues','nearest');
 end
-
+disp('mode established and source vectors set')
 % -------------------- amplitude envelope (bandpass -> Hilbert -> lowpass -> resample) --------------------
 bp = bpHz(:).';
 if numel(bp) ~= 2 || bp(1) <= 0 || bp(2) <= bp(1) || bp(2) >= fs/2
@@ -213,11 +213,11 @@ mz0Global = complex(nan(nFrex,1));         % debiased complex sum vector (unnorm
 
 % optional: how many windows contributed per frequency
 nWinGlobal = zeros(nFrex,1);
-
+disp('everything ready to begin frequency loop')
 % -------------------- main loop over phase freqs --------------------
 for fi = 1:nFrex
     f = PACfrex(fi);
-
+    disp(fi)
     % decide method (hard hybrid)
     useSOS = (f < sosBelowHz);
     methodUsed(fi) = ternary(useSOS, "sos", "wavelet");
@@ -577,7 +577,7 @@ for fi = 1:nFrex
     pacOut(:,:,fi,9) = reshape(out9, nBreaths, nTpl);
     pacOut(:,:,fi,10) = reshape(out10, nBreaths, nTpl);
 end
-
+disp('packaging for exit')
 % -------------------- meta --------------------
 meta = struct();
 meta.mode            = ternary(useRespMode, "respMode", "legacyMode");
@@ -625,7 +625,7 @@ meta.pacOut_nMetrics = 9;
 meta.pacOut_labels = { ...
     'C_A', 'C_corr', 'zC_A_globalShift', 'zC_corr_globalShift', 'prefPhase', ...
     'zC_A_breathShift', 'zC_corr_breathShift', 'C_debiased', 'zC_debiased_globalShift'};
-
+disp('end of function')
 end
 
 % =========================
