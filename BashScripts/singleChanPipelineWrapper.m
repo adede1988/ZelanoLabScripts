@@ -14,13 +14,13 @@ disp(['attempting file: ' num2str(start)])
 
 %local paths: 
 
-codePre = 'G:\My Drive\GitHub\';
-datPre = 'R:\Neurology\Zelano_Lab\Lab_Common\QuestMirror\';
+%codePre = 'G:\My Drive\GitHub\';
+%datPre = 'R:\Neurology\Zelano_Lab\Lab_Common\QuestMirror\';
 
 %HPC paths: 
 
-% codePre = '/projects/p33197/code/';
-% datPre = '/projects/p33197/';
+codePre = '/projects/p33197/code/';
+datPre = '/projects/p33197/QuestMirror/';
 
 %% set paths
 
