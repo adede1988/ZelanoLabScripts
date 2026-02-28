@@ -931,7 +931,7 @@ end
 
 %% while the raw data are here, get better HRV measures! 
 
-chanDat = addBreathHRV_fromRRint(chanDat, rawDat, fs);
+chanDat = addBreathHRV_fromRRint(chanDat, rawDat, chanDat.fs);
 
 %% Low frequency breathing lock in .11 to 2 Hz
 
