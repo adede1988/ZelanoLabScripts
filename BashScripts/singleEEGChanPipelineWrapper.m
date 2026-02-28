@@ -69,8 +69,11 @@ parfor start = 1:length(eegFiles)
         
         disp(['going for ' subID ' ' eegFiles(start).name] )
         
-        
-        singleChanEEGPipeline(eegFiles, start, subFiles, codePre); 
+        if strcmp(taskID, 'breathingTask')
+            singleChanEEGPipeline(eegFiles, start, subFiles, codePre); 
+        else
+            disp('only doing breathing for now, so skip')
+        end
     catch
         disp(['failure on ' subID ' ' eegFiles(start).name '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'])
     end

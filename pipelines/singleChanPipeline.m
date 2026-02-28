@@ -1599,8 +1599,8 @@ for kk = 1:nFsel
     nullOut.meta.poolSec      = poolSec;
     nullOut.meta.nShuf        = nShuf;
 
-    nullFile = fullfile(saveDirNull, sprintf('%s_BurstNull_fi%03d.mat', baseName, fi));
-    save(nullFile, 'nullOut', '-v7.3');
+    % nullFile = fullfile(saveDirNull, sprintf('%s_BurstNull_fi%03d.mat', baseName, fi));
+    % save(nullFile, 'nullOut', '-v7.3');
 
     clear powNull_primary phaseNull_primary powNull_secondary phaseNull_secondary nullOut
 end

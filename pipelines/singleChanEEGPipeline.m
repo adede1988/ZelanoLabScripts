@@ -138,7 +138,7 @@ if ~isfield(chanDat, 'targIDX')
     chanDat.targIDX = idx50; 
     
     try
-        chanDat.behDat.length
+        chanDat.behDat.length;
     catch
         lengthVals = (lm.winEnd - lm.onsetIdx) ./ chanDat.fs; 
         chanDat.behDat.length = lengthVals; 
@@ -874,7 +874,7 @@ rawDat = load([chanFiles(filei).folder '/' chanFiles(filei).name]).chanDat;
 macRaw = load([chanFiles(filei).folder '/' macChan.sessID '_' ...
                     macChan.chanType '_' macChan.task '_' ...
                     num2str(macChan.chi) '.mat']).chanDat; 
-deliberate error! 
+
 %think here about adding in PAC relative to gamma Burst, but juice might
 %not be worth the squeeze
 if ~isfield(chanDat, 'pac')
@@ -891,14 +891,15 @@ if ~isfield(chanDat, 'pac')
     halfBW = 5;                    % +/- 5 Hz
     bpHz   = double([gamMed-halfBW, gamMed+halfBW]);
     
-    PACfrex = logspace(log10(2), log10(25), 20); 
+    PACfrex = logspace(log10(2), log10(25), 50); 
     
     
      [pacOut, meta] = pac_breathTemplate_timeResolvedPAC(rawDat,...
          macRaw, keyBreathIDX, gamMed, fs, bpHz, PACfrex);
     chanDat.pac = meta; 
     chanDat.pac.pac = pacOut; 
-    
+    saveDir = fullfile(stem,'CHANDAT_processed');
+    save(fullfile(saveDir, chanFiles(filei).name), 'chanDat', '-v7.3');
    
 end
 
@@ -1075,280 +1076,298 @@ save(fullfile(saveDir, chanFiles(filei).name), 'chanDat', '-v7.3');
 
 
 
-
-
-
-
-
-
-
-
-gamERP = nan(length(macChan.gammaEnv.evBreath), 2001); 
-w = -1000:1000; 
-us = chanDat.fs / macChan.gammaEnv.fs; 
-for ii = 1:length(macChan.gammaEnv.evBreath)
-    t0 = macChan.gammaEnv.evT0(ii); 
-    bi = macChan.gammaEnv.evBreath(ii); 
-    t0 = round(t0*us); 
-    if t0>1001 && t0<4999
-        gamERP(ii,:) = chanDat.trial.data(bi,t0+w);
-    end
-
-
-
-end
-
-nBreath = length(macChan.gammaBurstSecondary.t0_idx); 
-
-gamERP = nan(nBreath, 2001); 
-w = -1000:1000; 
-us = chanDat.fs / macChan.gammaBurstSecondary.fs_tf; 
-for ii = 1:nBreath
-    t0 = macChan.gammaBurstSecondary.t0_idx(ii); 
-    t0 = round(t0*us); 
-    if t0>1001 && t0<4999
-        gamERP(ii,:) = chanDat.trial.data(ii,t0+w);
-    end
-
-end
-
-test = mean(gamERP(:,1000:1500), 2, 'omitnan'); 
-
-% -----------------------------
-% 1000 random mean-ERP samples
-% (<= 1 event per breath/sample)
-% -----------------------------
-
-nIter = 1000;
-w     = -1000:1000;                          % window in chanDat samples
-us    = chanDat.fs / macChan.gammaEnv.fs;    % upsample factor
-
-data = chanDat.trial.data;
-[nBreaths, nT] = size(data);
-
-evBreath = macChan.gammaEnv.evBreath(:);     % breath index (row in data)
-evT0     = macChan.gammaEnv.evT0(:);         % event time (in macChan.gammaEnv.fs)
-
-% Convert event times to chanDat sample indices
-t0s = round(evT0 * us);
-
-%overwrite with values from gammaburst 
-t0s = macChan.gammaBurst.t0_idx_full; 
-evBreath = [1:length(t0s)]; 
-t0s = t0s(:); 
-evBreath = evBreath(:); 
-
-% Keep only events whose snippet fits fully in bounds
-valid = isfinite(evBreath) & isfinite(t0s) & ...
-        evBreath >= 1 & evBreath <= nBreaths & ...
-        (t0s + w(1)  >= 1) & (t0s + w(end) <= nT);
-
-evBreath = evBreath(valid);
-t0s      = t0s(valid);
-useVec   = chanDat.use(valid) == 1; 
-
-nEv = numel(evBreath);
-if nEv == 0
-    error('No valid events after bounds checking.');
-end
-
-% Extract ERP snippet for each valid event
-gamERP = nan(nEv, numel(w));
-for ii = 1:nEv
-    gamERP(ii,:) = data(evBreath(ii), t0s(ii) + w);
-end
-
-% Group event indices by breath
-eventsByBreath = accumarray(evBreath, (1:nEv)', [nBreaths 1], @(x){x}, {[]});
-breathList     = find(~cellfun(@isempty, eventsByBreath));  % breaths with >=1 valid event
-
-% Bootstrap: pick ONE event per breath, then average across breaths
-meanERP_boot = nan(nIter, numel(w));
-selEventIdx  = nan(nIter, numel(breathList)); % optional: which events were chosen each iteration
-
-for it = 1:nIter
-    sel = zeros(numel(breathList), 1);
-    for jj = 1:numel(breathList)
-        b = breathList(jj);
-        idxs = eventsByBreath{b};
-        sel(jj) = idxs(randi(numel(idxs)));   % choose 1 event from that breath
-    end
-    selEventIdx(it,:)  = sel;
-    meanERP_boot(it,:) = mean(gamERP(sel,:), 1, 'omitnan');
-end
-
-% meanERP_boot is [1000 x 2001], each row is a random mean ERP
-
-% ============================================================
-% Condition-specific regular ERPs (no bootstrap)
-% Conditions: audio / focus / shadow
-% Uses only breaths where chanDat.use == 1
-% Mean ± SEM across events (breaths) within each condition
-% ============================================================
-
-condNames = ["audio","focus","shadow"];
-
-w  = -1000:1000;                           % window in chanDat samples
-data = chanDat.trial.data;                % [breaths x time]
-[nBreaths, nT] = size(data);
-
-useBreath  = chanDat.use(:) == 1;         % [breaths x 1]
-taskBreath = string(chanDat.behDat.task(:));
-
-% Use gammaBurst indices (as in your original block)
-t0s     = macChan.gammaBurst.t0_idx_full(:);   % per-breath event time (chanDat samples)
-evBreath = (1:numel(t0s))';                    % breath index
-
-% Valid breaths/events
-valid = isfinite(evBreath) & isfinite(t0s) & ...
-        evBreath>=1 & evBreath<=nBreaths & ...
-        (t0s+w(1) >= 1) & (t0s+w(end) <= nT) & ...
-        useBreath(evBreath);
-
-tSec = w / chanDat.fs;
-cols = lines(numel(condNames));
-
-figure; hold on
-
-for cc = 1:numel(condNames)
-    cond = condNames(cc);
-
-    inCond = valid & (taskBreath(evBreath) == cond);
-    evB = evBreath(inCond);
-    t0  = t0s(inCond);
-
-    nEv = numel(evB);
-    if nEv < 2
-        warning('Too few events for condition "%s" (n=%d).', cond, nEv);
-        continue
-    end
-
-    % Extract ERP snippets (events x time)
-    gamERP = nan(nEv, numel(w));
-    for ii = 1:nEv
-        gamERP(ii,:) = data(evB(ii), t0(ii) + w);
-    end
-
-    % Same normalization you had (global over this condition's events)
-    % gamERP = gamERP - prctile(gamERP(:), 2);
-    % gamERP = gamERP ./ prctile(gamERP(:), 98);
-
-    mu  = mean(gamERP, 1, 'omitnan');
-    sem = std(gamERP, 0, 1, 'omitnan') ./ sqrt(nEv);
-
-    % optional smoothing (keep consistent with your prior plot)
-    muS  = movmean(mu, 20);
-    semS = movmean(sem,20);
-
-    x  = tSec(:);
-    lo = (muS - semS).';
-    hi = (muS + semS).';
-
-    fill([x; flipud(x)], [lo; flipud(hi)], cols(cc,:), ...
-        'FaceAlpha', 0.2, 'EdgeColor','none', 'HandleVisibility','off');
-    plot(tSec, muS, 'LineWidth', 2, 'Color', cols(cc,:));
-end
-
-xlabel('Time (s)'); ylabel('ERP (uV)');
-legend(condNames, 'Location','best'); box off
-title('Condition-specific mean ERP (mean ± SEM; use==1)');
-xlim([-.5 .5])
-
-% --- Add null (t0-shuffle) lines: 100 shuffles -> 1 grey line per condition ---
-nShuf = 100;
-
-figure; hold on
-cols = lines(numel(condNames));
-
-for cc = 1:numel(condNames)
-    cond = condNames(cc);
-
-    inCond = valid & (taskBreath(evBreath) == cond);
-    evB = evBreath(inCond);
-    t0  = t0s(inCond);
-
-    nEv = numel(evB);
-    if nEv < 2
-        warning('Too few events for condition "%s" (n=%d).', cond, nEv);
-        continue
-    end
-
-    % -------- Observed ERP (mean ± SEM across events) --------
-    gamERP = nan(nEv, numel(w));
-    for ii = 1:nEv
-        gamERP(ii,:) = data(evB(ii), t0(ii) + w);
-    end
-    % gamERP = gamERP - prctile(gamERP(:), 2);
-    % gamERP = gamERP ./ prctile(gamERP(:), 98);
-
-    mu  = mean(gamERP, 1, 'omitnan');
-    sem = std(gamERP, 0, 1, 'omitnan') ./ sqrt(nEv);
-
-    muS  = movmean(mu, 20);
-    semS = movmean(sem,20);
-
-    x  = tSec(:);
-    lo = (muS - semS).';
-    hi = (muS + semS).';
-
-    fill([x; flipud(x)], [lo; flipud(hi)], cols(cc,:), ...
-        'FaceAlpha', 0.2, 'EdgeColor','none', 'HandleVisibility','off');
-    plot(tSec, muS, 'LineWidth', 2, 'Color', cols(cc,:));
-
-    % -------- Null ERP: shuffle t0 across breaths (break breath-event linkage) --------
-    nullMu = zeros(1, numel(w));
-    for ss = 1:nShuf
-        t0sh = t0(randperm(nEv));  % shuffle within condition
-
-        tmp = nan(nEv, numel(w));
-        for ii = 1:nEv
-            tmp(ii,:) = data(evB(ii), t0sh(ii) + w);
-        end
-        tmp = tmp - prctile(tmp(:), 2);
-        tmp = tmp ./ prctile(tmp(:), 98);
-
-        nullMu = nullMu + mean(tmp, 1, 'omitnan');
-    end
-    nullMu = nullMu / nShuf;
-    nullMuS = movmean(nullMu, 20);
-
-    plot(tSec, nullMuS, 'LineWidth', 1.5, 'Color', [0.6 0.6 0.6], ...
-        'HandleVisibility','off');
-end
-
-xlabel('Time (s)'); ylabel('ERP (uV)');
-legend(condNames, 'Location','best'); box off
-title('Condition-specific mean ERP (mean ± SEM) + t0-shuffle null (grey)');
-xlim([-.5 .5])
-
-
-
-
-%% 
-
-
-
-%%
-% --- after you load chanDat ---
-chanDat = add_OB_gamma_features_to_behDat(chanDat);
-chanDat.behDat.subID = repmat({chanDat.subID}, height(chanDat.behDat), 1); 
-chanDat.behDat.type = repmat({chanDat.type}, height(chanDat.behDat), 1); 
-chanDat.behDat.sessType = repmat({chanDat.task}, height(chanDat.behDat), 1); 
-chanDat.behDat.sessNum = repmat({chanDat.sessNum}, height(chanDat.behDat), 1); 
-% --- resave chanDat back to original file ---
-saveDir = fullfile(stem,'CHANDAT_processed');
-save(fullfile(saveDir, chanFiles(filei).name), 'chanDat', '-v7.3');
-
-% --- save behDat out (mat + csv) ---
-[~, baseName] = fileparts(chanFiles(filei).name);
-
-saveDirBehDat = fullfile(stem,'CHANDAT_processed','BehFiles');
-if ~exist(saveDirBehDat,'dir'), mkdir(saveDirBehDat); end
-
-behFileCsv = fullfile(saveDirBehDat, sprintf('%s_behFile.csv', baseName));
-
-
-writetable(chanDat.behDat, behFileCsv);
+%%%%%%%%%%%%%%%%%%%%%%SCRATCH THAT MIGHT BE GOOD BELOW HERE
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+% % 
+% % 
+% % 
+% % 
+% % gamERP = nan(length(macChan.gammaEnv.evBreath), 2001); 
+% % w = -1000:1000; 
+% % us = chanDat.fs / macChan.gammaEnv.fs; 
+% % for ii = 1:length(macChan.gammaEnv.evBreath)
+% %     t0 = macChan.gammaEnv.evT0(ii); 
+% %     bi = macChan.gammaEnv.evBreath(ii); 
+% %     t0 = round(t0*us); 
+% %     if t0>1001 && t0<4999
+% %         gamERP(ii,:) = chanDat.trial.data(bi,t0+w);
+% %     end
+% % 
+% % 
+% % 
+% % end
+% % 
+% % 
+% % ev = macChan.pac_peaks.peakIDX_local;
+% % 
+% % nBreath = length(ev); 
+% % gamERP = nan(nBreath, 2001); 
+% % w = -1000:1000; 
+% % % us = chanDat.fs / macChan.gammaBurstSecondary.fs_tf; 
+% % for ii = 1:nBreath
+% %     t0 = ev(ii); 
+% %     % t0 = round(t0*us); 
+% %     if t0>1001 && t0<4999
+% %         gamERP(ii,:) = chanDat.trial.data(ii,t0+w);
+% %     end
+% % 
+% % end
+% % 
+% % ev = macChan.pac_peaks.minIDX_local;
+% % 
+% % nBreath = length(ev); 
+% % gamERP2 = nan(nBreath, 2001); 
+% % w = -1000:1000; 
+% % % us = chanDat.fs / macChan.gammaBurstSecondary.fs_tf; 
+% % for ii = 1:nBreath
+% %     t0 = ev(ii); 
+% %     % t0 = round(t0*us); 
+% %     if t0>1001 && t0<4999
+% %         gamERP2(ii,:) = chanDat.trial.data(ii,t0+w);
+% %     end
+% % 
+% % end
+% % 
+% % test = mean(gamERP(:,1000:1500), 2, 'omitnan'); 
+% % 
+% % % -----------------------------
+% % % 1000 random mean-ERP samples
+% % % (<= 1 event per breath/sample)
+% % % -----------------------------
+% % 
+% % nIter = 1000;
+% % w     = -1000:1000;                          % window in chanDat samples
+% % us    = chanDat.fs / macChan.gammaEnv.fs;    % upsample factor
+% % 
+% % data = chanDat.trial.data;
+% % [nBreaths, nT] = size(data);
+% % 
+% % evBreath = macChan.gammaEnv.evBreath(:);     % breath index (row in data)
+% % evT0     = macChan.gammaEnv.evT0(:);         % event time (in macChan.gammaEnv.fs)
+% % 
+% % % Convert event times to chanDat sample indices
+% % t0s = round(evT0 * us);
+% % 
+% % %overwrite with values from gammaburst 
+% % t0s = macChan.gammaBurst.t0_idx_full; 
+% % evBreath = [1:length(t0s)]; 
+% % t0s = t0s(:); 
+% % evBreath = evBreath(:); 
+% % 
+% % % Keep only events whose snippet fits fully in bounds
+% % valid = isfinite(evBreath) & isfinite(t0s) & ...
+% %         evBreath >= 1 & evBreath <= nBreaths & ...
+% %         (t0s + w(1)  >= 1) & (t0s + w(end) <= nT);
+% % 
+% % evBreath = evBreath(valid);
+% % t0s      = t0s(valid);
+% % useVec   = chanDat.use(valid) == 1; 
+% % 
+% % nEv = numel(evBreath);
+% % if nEv == 0
+% %     error('No valid events after bounds checking.');
+% % end
+% % 
+% % % Extract ERP snippet for each valid event
+% % gamERP = nan(nEv, numel(w));
+% % for ii = 1:nEv
+% %     gamERP(ii,:) = data(evBreath(ii), t0s(ii) + w);
+% % end
+% % 
+% % % Group event indices by breath
+% % eventsByBreath = accumarray(evBreath, (1:nEv)', [nBreaths 1], @(x){x}, {[]});
+% % breathList     = find(~cellfun(@isempty, eventsByBreath));  % breaths with >=1 valid event
+% % 
+% % % Bootstrap: pick ONE event per breath, then average across breaths
+% % meanERP_boot = nan(nIter, numel(w));
+% % selEventIdx  = nan(nIter, numel(breathList)); % optional: which events were chosen each iteration
+% % 
+% % for it = 1:nIter
+% %     sel = zeros(numel(breathList), 1);
+% %     for jj = 1:numel(breathList)
+% %         b = breathList(jj);
+% %         idxs = eventsByBreath{b};
+% %         sel(jj) = idxs(randi(numel(idxs)));   % choose 1 event from that breath
+% %     end
+% %     selEventIdx(it,:)  = sel;
+% %     meanERP_boot(it,:) = mean(gamERP(sel,:), 1, 'omitnan');
+% % end
+% % 
+% % % meanERP_boot is [1000 x 2001], each row is a random mean ERP
+% % 
+% % % ============================================================
+% % % Condition-specific regular ERPs (no bootstrap)
+% % % Conditions: audio / focus / shadow
+% % % Uses only breaths where chanDat.use == 1
+% % % Mean ± SEM across events (breaths) within each condition
+% % % ============================================================
+% % 
+% % condNames = ["audio","focus","shadow"];
+% % 
+% % w  = -1000:1000;                           % window in chanDat samples
+% % data = chanDat.trial.data;                % [breaths x time]
+% % [nBreaths, nT] = size(data);
+% % 
+% % useBreath  = chanDat.use(:) == 1;         % [breaths x 1]
+% % taskBreath = string(chanDat.behDat.task(:));
+% % 
+% % % Use gammaBurst indices (as in your original block)
+% % t0s     = macChan.gammaBurst.t0_idx_full(:);   % per-breath event time (chanDat samples)
+% % evBreath = (1:numel(t0s))';                    % breath index
+% % 
+% % % Valid breaths/events
+% % valid = isfinite(evBreath) & isfinite(t0s) & ...
+% %         evBreath>=1 & evBreath<=nBreaths & ...
+% %         (t0s+w(1) >= 1) & (t0s+w(end) <= nT) & ...
+% %         useBreath(evBreath);
+% % 
+% % tSec = w / chanDat.fs;
+% % cols = lines(numel(condNames));
+% % 
+% % figure; hold on
+% % 
+% % for cc = 1:numel(condNames)
+% %     cond = condNames(cc);
+% % 
+% %     inCond = valid & (taskBreath(evBreath) == cond);
+% %     evB = evBreath(inCond);
+% %     t0  = t0s(inCond);
+% % 
+% %     nEv = numel(evB);
+% %     if nEv < 2
+% %         warning('Too few events for condition "%s" (n=%d).', cond, nEv);
+% %         continue
+% %     end
+% % 
+% %     % Extract ERP snippets (events x time)
+% %     gamERP = nan(nEv, numel(w));
+% %     for ii = 1:nEv
+% %         gamERP(ii,:) = data(evB(ii), t0(ii) + w);
+% %     end
+% % 
+% %     % Same normalization you had (global over this condition's events)
+% %     % gamERP = gamERP - prctile(gamERP(:), 2);
+% %     % gamERP = gamERP ./ prctile(gamERP(:), 98);
+% % 
+% %     mu  = mean(gamERP, 1, 'omitnan');
+% %     sem = std(gamERP, 0, 1, 'omitnan') ./ sqrt(nEv);
+% % 
+% %     % optional smoothing (keep consistent with your prior plot)
+% %     muS  = movmean(mu, 20);
+% %     semS = movmean(sem,20);
+% % 
+% %     x  = tSec(:);
+% %     lo = (muS - semS).';
+% %     hi = (muS + semS).';
+% % 
+% %     fill([x; flipud(x)], [lo; flipud(hi)], cols(cc,:), ...
+% %         'FaceAlpha', 0.2, 'EdgeColor','none', 'HandleVisibility','off');
+% %     plot(tSec, muS, 'LineWidth', 2, 'Color', cols(cc,:));
+% % end
+% % 
+% % xlabel('Time (s)'); ylabel('ERP (uV)');
+% % legend(condNames, 'Location','best'); box off
+% % title('Condition-specific mean ERP (mean ± SEM; use==1)');
+% % xlim([-.5 .5])
+% % 
+% % % --- Add null (t0-shuffle) lines: 100 shuffles -> 1 grey line per condition ---
+% % nShuf = 100;
+% % 
+% % figure; hold on
+% % cols = lines(numel(condNames));
+% % 
+% % for cc = 1:numel(condNames)
+% %     cond = condNames(cc);
+% % 
+% %     inCond = valid & (taskBreath(evBreath) == cond);
+% %     evB = evBreath(inCond);
+% %     t0  = t0s(inCond);
+% % 
+% %     nEv = numel(evB);
+% %     if nEv < 2
+% %         warning('Too few events for condition "%s" (n=%d).', cond, nEv);
+% %         continue
+% %     end
+% % 
+% %     % -------- Observed ERP (mean ± SEM across events) --------
+% %     gamERP = nan(nEv, numel(w));
+% %     for ii = 1:nEv
+% %         gamERP(ii,:) = data(evB(ii), t0(ii) + w);
+% %     end
+% %     % gamERP = gamERP - prctile(gamERP(:), 2);
+% %     % gamERP = gamERP ./ prctile(gamERP(:), 98);
+% % 
+% %     mu  = mean(gamERP, 1, 'omitnan');
+% %     sem = std(gamERP, 0, 1, 'omitnan') ./ sqrt(nEv);
+% % 
+% %     muS  = movmean(mu, 20);
+% %     semS = movmean(sem,20);
+% % 
+% %     x  = tSec(:);
+% %     lo = (muS - semS).';
+% %     hi = (muS + semS).';
+% % 
+% %     fill([x; flipud(x)], [lo; flipud(hi)], cols(cc,:), ...
+% %         'FaceAlpha', 0.2, 'EdgeColor','none', 'HandleVisibility','off');
+% %     plot(tSec, muS, 'LineWidth', 2, 'Color', cols(cc,:));
+% % 
+% %     % -------- Null ERP: shuffle t0 across breaths (break breath-event linkage) --------
+% %     nullMu = zeros(1, numel(w));
+% %     for ss = 1:nShuf
+% %         t0sh = t0(randperm(nEv));  % shuffle within condition
+% % 
+% %         tmp = nan(nEv, numel(w));
+% %         for ii = 1:nEv
+% %             tmp(ii,:) = data(evB(ii), t0sh(ii) + w);
+% %         end
+% %         tmp = tmp - prctile(tmp(:), 2);
+% %         tmp = tmp ./ prctile(tmp(:), 98);
+% % 
+% %         nullMu = nullMu + mean(tmp, 1, 'omitnan');
+% %     end
+% %     nullMu = nullMu / nShuf;
+% %     nullMuS = movmean(nullMu, 20);
+% % 
+% %     plot(tSec, nullMuS, 'LineWidth', 1.5, 'Color', [0.6 0.6 0.6], ...
+% %         'HandleVisibility','off');
+% % end
+% % 
+% % xlabel('Time (s)'); ylabel('ERP (uV)');
+% % legend(condNames, 'Location','best'); box off
+% % title('Condition-specific mean ERP (mean ± SEM) + t0-shuffle null (grey)');
+% % xlim([-.5 .5])
+% % 
+% % 
+% % 
+% % 
+% % %% 
+% % 
+% % 
+% % 
+% % %%
+% % % --- after you load chanDat ---
+% % chanDat = add_OB_gamma_features_to_behDat(chanDat);
+% % chanDat.behDat.subID = repmat({chanDat.subID}, height(chanDat.behDat), 1); 
+% % chanDat.behDat.type = repmat({chanDat.type}, height(chanDat.behDat), 1); 
+% % chanDat.behDat.sessType = repmat({chanDat.task}, height(chanDat.behDat), 1); 
+% % chanDat.behDat.sessNum = repmat({chanDat.sessNum}, height(chanDat.behDat), 1); 
+% % % --- resave chanDat back to original file ---
+% % saveDir = fullfile(stem,'CHANDAT_processed');
+% % save(fullfile(saveDir, chanFiles(filei).name), 'chanDat', '-v7.3');
+% % 
+% % % --- save behDat out (mat + csv) ---
+% % [~, baseName] = fileparts(chanFiles(filei).name);
+% % 
+% % saveDirBehDat = fullfile(stem,'CHANDAT_processed','BehFiles');
+% % if ~exist(saveDirBehDat,'dir'), mkdir(saveDirBehDat); end
+% % 
+% % behFileCsv = fullfile(saveDirBehDat, sprintf('%s_behFile.csv', baseName));
+% % 
+% % 
+% % writetable(chanDat.behDat, behFileCsv);
 
 
 

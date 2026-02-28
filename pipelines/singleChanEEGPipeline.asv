@@ -898,7 +898,8 @@ if ~isfield(chanDat, 'pac')
          macRaw, keyBreathIDX, gamMed, fs, bpHz, PACfrex);
     chanDat.pac = meta; 
     chanDat.pac.pac = pacOut; 
-    
+    saveDir = fullfile(stem,'CHANDAT_processed');
+    save(fullfile(saveDir, chanFiles(filei).name), 'chanDat', '-v7.3');
    
 end
 
@@ -1098,16 +1099,33 @@ for ii = 1:length(macChan.gammaEnv.evBreath)
 
 end
 
-nBreath = length(macChan.gammaBurstSecondary.t0_idx); 
 
+ev = macChan.pac_peaks.peakIDX_local;
+
+nBreath = length(ev); 
 gamERP = nan(nBreath, 2001); 
 w = -1000:1000; 
-us = chanDat.fs / macChan.gammaBurstSecondary.fs_tf; 
+% us = chanDat.fs / macChan.gammaBurstSecondary.fs_tf; 
 for ii = 1:nBreath
-    t0 = macChan.gammaBurstSecondary.t0_idx(ii); 
-    t0 = round(t0*us); 
+    t0 = ev(ii); 
+    % t0 = round(t0*us); 
     if t0>1001 && t0<4999
         gamERP(ii,:) = chanDat.trial.data(ii,t0+w);
+    end
+
+end
+
+ev = macChan.pac_peaks.minIDX_local;
+
+nBreath = length(ev); 
+gamERP2 = nan(nBreath, 2001); 
+w = -1000:1000; 
+% us = chanDat.fs / macChan.gammaBurstSecondary.fs_tf; 
+for ii = 1:nBreath
+    t0 = ev(ii); 
+    % t0 = round(t0*us); 
+    if t0>1001 && t0<4999
+        gamERP2(ii,:) = chanDat.trial.data(ii,t0+w);
     end
 
 end
