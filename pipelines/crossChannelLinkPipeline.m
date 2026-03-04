@@ -279,6 +279,7 @@ behDat.gamBackground = median(outSum.gamEnv, 2, 'omitnan');
 behDat.gamPeakidx50 = idx; 
 behDat.gamRspPACphase = macChan.pac.diag.fb_phase; 
 behDat.gamRspPACLock  = macChan.pac.diag.pac.z.fbRankPct; 
+behDat.gamRspPACStrength = macChan.pac.diag.pac.z.fb_pacZ; 
 %median over time, median over frequency to get theta band power: 
 behDat.(['thetaPow_1_' outSum.label]) = median(median(chanDat.tf.powZ(:,1:10,tm), [2] , 'omitnan'), 3); 
 behDat.(['thetaPow_2_' outSum.label]) = median(median(chanDat.tf.powZ(:,11:20,tm), [2] , 'omitnan'), 3); 
