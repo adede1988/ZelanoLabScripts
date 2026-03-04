@@ -60,6 +60,8 @@ allitpcBandMax= nan([length(chanFiles), 3, 3, 50]);
 allPowShuf    = nan([length(chanFiles), 3, 3, 50]); %convert values to percentile
 allitpcShuf= nan([length(chanFiles), 3, 3, 50]); 
 
+
+
 parfor start = 1:length(chanFiles)
     disp(start)
     try
@@ -98,6 +100,6 @@ end
 
 plot_group_topos(allPowShuf, allSubIDs, eegLocs)
 
-plot_group_topos(allitpcShuf, allSubIDs, eegLocs)
+plot_group_topos(allitpcBandMax, allSubIDs, eegLocs)
 
 

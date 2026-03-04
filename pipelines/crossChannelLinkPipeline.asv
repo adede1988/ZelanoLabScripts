@@ -337,6 +337,14 @@ outSum.behDat = behDat;
 
 
 
+
+
+
+
+
+
+
+
  fpath = fullfile(pathStem, 'CHANDAT_processed/', 'scalpPow_itpc');
  if ~isdir(fpath)
      mkdir(fpath)

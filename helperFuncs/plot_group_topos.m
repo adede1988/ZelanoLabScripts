@@ -128,7 +128,8 @@ for gi = 1:numel(groupDefs)
     groupTopo = meanOmit(partTopo, 5);  % [nLoc x nBand x nCond x nEpoch]
 
     % ---- plot 3 figures (one per band) for this group ----
-    for b = 1:nBand
+    % for b = 1:nBand
+    b = 1
         figure('Color','w', 'Name', sprintf('%s | %s', gname, bandNames{b}));
         t = tiledlayout(nEpoch, nCond, 'TileSpacing','compact', 'Padding','compact');
         title(t, sprintf('%s | %s', gname, bandNames{b}), 'Interpreter','none');
@@ -142,7 +143,7 @@ for gi = 1:numel(groupDefs)
 
                 miniTopo(m, x, y);
                 colorbar
-                % clim([-2 2])
+                % clim([.4 .7])
 
                 % top row: condition titles
                 if e == 1
@@ -155,6 +156,6 @@ for gi = 1:numel(groupDefs)
                 end
             end
         end
-    end
+    % end
 end
 end

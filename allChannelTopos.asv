@@ -25,7 +25,7 @@ for ii = 1:length(chanFiles)
         subID = [nameBits{1} '_' nameBits{2} '_' ...
                  nameBits{3} '_' nameBits{4} '_' nameBits{5}];
         taskID = nameBits{6}; 
-        sessID = double(nameBits{5}); 
+        sessID = str2num(nameBits{5}); 
         chanID = split(nameBits{7}, '.mat');
         chanID = chanID{1}; 
         type   = nameBits{2}; 
@@ -57,7 +57,7 @@ eegLocs = readtable("G:\My Drive\GitHub\ZelanoLabScripts\eegLocs_standard_coords
 
 allPowBandMax = nan([length(chanFiles), 3, 3, 50]);
 allitpcBandMax= nan([length(chanFiles), 3, 3, 50]);
-allpowShuf    = nan([length(chanFiles), 3, 3, 50]); %convert values to percentile
+allPowShuf    = nan([length(chanFiles), 3, 3, 50]); %convert values to percentile
 allitpcShuf= nan([length(chanFiles), 3, 3, 50]); 
 
 parfor start = 1:length(chanFiles)
@@ -96,6 +96,8 @@ parfor start = 1:length(chanFiles)
 end
 
 
+plot_group_topos(allPowShuf, allSubIDs, eegLocs)
 
+plot_group_topos(allitpcBandMax, allSubIDs, eegLocs)
 
 
