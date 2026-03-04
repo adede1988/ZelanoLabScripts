@@ -85,9 +85,9 @@ outSum.rawN      = size(chanDat.behDat,1);
 %% find outlier breaths: 
 
 outlierSum = sum(chanDat.tf.powZ>=50, [2,3]); 
-chanDat.use(outlierSum>50) = 0; 
+chanDat.use(outlierSum>1000) = 0; 
 useVec = chanDat.use == 1; 
-outSum.numOutlier= sum(outlierSum>50); 
+outSum.numOutlier= sum(outlierSum>1000); 
 outSum.usable    = sum(useVec); 
 
 
