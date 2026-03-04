@@ -12,7 +12,7 @@
 
 
 module purge all
-module load matlab/r2024b
+module load matlab/r2024a
 
 echo "getting started: ${SLURM_ARRAY_TASK_ID}"
 
