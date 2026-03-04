@@ -67,7 +67,7 @@ if plotit > 0
     set(ax,'XLim',[-rmax rmax]*AXHEADFAC, 'YLim',[-rmax rmax]*AXHEADFAC);
 
     % stable color scaling
-    caxis(ax, [mn mx]);
+    % caxis(ax, [mn mx]);
   
 
     % blanking ring to hide grid edge jaggies

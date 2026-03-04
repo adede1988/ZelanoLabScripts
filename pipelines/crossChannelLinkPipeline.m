@@ -178,7 +178,7 @@ freqLabs = {'theta','alpha','beta'};
 %   powShuf, itpcShuf       : [nShuf x nBand x 3 x nTime]
 
 nShuf = 1000;
-nBoot = 1000;
+nBoot = 1;
 
 % --- make frex a row ---
 frex = frex(:)';
@@ -214,8 +214,14 @@ end
 
 for b = 1:nBoot
     % resample within each group (with replacement), preserving group sizes
-    lowS  = idxLow(  randi(numel(idxLow),  [numel(idxLow)  1]) );
-    highS = idxHigh( randi(numel(idxHigh), [numel(idxHigh) 1]) );
+    if nBoot > 1
+        lowS  = idxLow(  randi(numel(idxLow),  [numel(idxLow)  1]) );
+        highS = idxHigh( randi(numel(idxHigh), [numel(idxHigh) 1]) );
+    else
+        lowS  = idxLow;
+        highS = idxHigh;
+    end
+
 
     bootIdx = [lowS; highS];
 
