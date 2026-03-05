@@ -260,7 +260,17 @@ outSum.bandLabs = freqLabs;
 
 
 
+rawChanDat = load(fullfile(targFile.folder, targFile.name)); 
+rawChanDat = rawChanDat.chanDat; 
 
+bpFilt = designfilt('bandpassiir', ...
+                'FilterOrder', 8, ...
+                'HalfPowerFrequency1', 2, ...
+                'HalfPowerFrequency2', 10, ...
+                'SampleRate', rawChanDat.fs, ...
+                'DesignMethod', 'butter');
+
+thetaDat = filtfilt(bpFilt, rawChanDat.data);
 
 
 %% R - OB link 
@@ -277,9 +287,58 @@ behDat.gamFreq = macChan.gammaEnv.gamFreq;
 behDat.gamBackground = median(outSum.gamEnv, 2, 'omitnan'); 
 [~, idx] = max(outSum.gamEnv, [], 2); 
 behDat.gamPeakidx50 = idx; 
-behDat.gamRspPACphase = macChan.pac.diag.fb_phase; 
+idx = 1:length(behDat.gamPeakidx50); 
+behDat.gamPeakidxFull = arrayfun(@(x,y) macChan.behDat.finalOnset(x) +...
+                                            1000 +...
+                                            macChan.targIDX(x,y), ...
+                                            idx(:), ...
+                                            behDat.gamPeakidx50(:)); 
+
+
+%find the pac informed peak in the template index: 
+PACgamPeak = macChan.pac_peaks.peakIDX_local; 
+PACgamPeakOffset = macChan.targIDX - PACgamPeak;
+[~, PACgamPeakidx50] = min(abs(PACgamPeakOffset), [], 2); 
+behDat.PACgamPeakidx50 = PACgamPeakidx50; 
+idx = 1:length(PACgamPeakidx50); 
+behDat.PACgamPeakidxFull = arrayfun(@(x,y) macChan.behDat.finalOnset(x) +...
+                                            1000 +...
+                                            macChan.targIDX(x,y), ...
+                                            idx(:), ...
+                                            PACgamPeakidx50(:)); 
+
+%GET ERPs locked to the PAC informed peaks and to the full time informed
+%PEAKS: 
+win = -2000:2000; 
+
+ERPtmpidx = behDat.PACgamPeakidxFull + win; 
+ERPtmpidx(ERPtmpidx<1) = 1; 
+ERPtmpidx(ERPtmpidx>length(thetaDat)) = length(thetaDat); 
+goodidx = ~isnan(ERPtmpidx(:,1)); 
+ERPtmp = nan(size(ERPtmpidx)); 
+ERPtmp(goodidx, :) = thetaDat(ERPtmpidx(goodidx,:)); 
+
+outSum.ERP_pacPeak = ERPtmp; 
+
+win = -2000:2000; 
+
+ERPtmpidx = behDat.gamPeakidxFull + win; 
+ERPtmpidx(ERPtmpidx<1) = 1; 
+ERPtmpidx(ERPtmpidx>length(thetaDat)) = length(thetaDat); 
+goodidx = ~isnan(ERPtmpidx(:,1)); 
+ERPtmp = nan(size(ERPtmpidx)); 
+ERPtmp(goodidx, :) = thetaDat(ERPtmpidx(goodidx,:)); 
+
+outSum.ERP_allPeak = ERPtmp; 
+
+
+behDat.gamRspPACphase = macChan.pac.diag.fb_phase;
+
+phaseHilbert = []
+
+
 behDat.gamRspPACLock  = macChan.pac.diag.pac.z.fbRankPct; 
-b
+behDat.gamRspPACStrength = macChan.pac.diag.fb_pacZ; 
 %median over time, median over frequency to get theta band power: 
 behDat.(['thetaPow_1_' outSum.label]) = median(median(chanDat.tf.powZ(:,1:10,tm), [2] , 'omitnan'), 3); 
 behDat.(['thetaPow_2_' outSum.label]) = median(median(chanDat.tf.powZ(:,11:20,tm), [2] , 'omitnan'), 3); 
