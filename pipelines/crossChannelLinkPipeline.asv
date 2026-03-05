@@ -365,11 +365,13 @@ fs = chanDat.fs;   % <-- set this (or whatever your sampling rate variable is)
 x1 = double(macChan.trial.data);   % [breath x time]
 x2 = double(chanDat.trial.data);
 
-if sum(isnan(x1), 'all') > 0
+%hacky patch: 
+if sum(isnan(x2), 'all') > 0
     badidx = find(sum(isnan(x1), [2])>0);
     goodidx = find(sum(isnan(x1), [2])==0);
-    x1(badidx, :) = x1(goodidx(1:length(badidx)), :);
-    x2(badidx, :) = x2(goodidx(1:length(good)))
+    x1(badidx, :) = x1(goodidx(1:sum(badidx)), :);
+    x2(badidx, :) = x2(goodidx(1:sum(goodidx)), :); 
+end
 
 % --- IIR Butterworth bandpass (4–10 Hz), zero-phase ---
 ord = 4;
