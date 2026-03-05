@@ -106,7 +106,7 @@ end
 
 % ---------------- plotting params ----------------
 tVec = -4000:2:4000;            % replace with your real time vector if desired
-smoothWin = 25;            % 25-point moving average
+smoothWin = 50;            % 25-point moving average
 vlineX    = 0;          % vertical reference line index
 
 % make mini axes larger
@@ -132,7 +132,7 @@ for li = 1:nLoc
     left   = min(max(left,   0.001), 0.999-axW);
     bottom = min(max(bottom, 0.001), 0.999-axH);
 
-    ax = axes('Units','normalized', 'Position',[left bottom axW axH]); %#ok<LAXES>
+    ax = axes('Units','normalized', 'Position',[left bottom axW axH]); 
     hold(ax,'on');
 
     if any(mChan)
@@ -140,11 +140,12 @@ for li = 1:nLoc
 
         for k = 1:nERP
             mu = mean(dataArgs{k}(mChan,:), 1, 'omitnan');
-
+            test = dataArgs{k}(mChan,:); 
             % 25-pt moving average smoothing (fallback if movmean unavailable)
             mu = local_smooth1d(mu, smoothWin);
-            
-            h = plot(ax, tVec, mu, 'LineWidth', 1.5);
+            % plot(ax, tVec, movmean(test', smoothWin, 1), 'linewidth', .5)
+
+            h = plot(ax, tVec, mu, 'LineWidth', 2.5);
 
             if ~gotLegendHandles
                 legH(k) = h;
@@ -163,8 +164,8 @@ for li = 1:nLoc
         set(ax, 'XTick', [], 'YTick', [], ...
                 'XColor','none', 'YColor','none', ...
                 'Color','none');   % transparent background
-        ylim(ax, [-7 7])
-        xlim(ax, [-1000 4000])
+        ylim(ax, [0 .3])
+        xlim(ax, [-1000 1000])
         title(ax, char(lab), 'Interpreter','none', 'FontSize', 7);
 
     else

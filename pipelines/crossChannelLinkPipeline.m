@@ -273,7 +273,7 @@ bpFilt = designfilt('bandpassiir', ...
                 'SampleRate', rawChanDat.fs, ...
                 'DesignMethod', 'butter');
 
-thetaDat = filtfilt(bpFilt, rawChanDat.data);
+thetaDat = rawChanDat.data; %filtfilt(bpFilt, rawChanDat.data);
 
 
 %% R - OB link 

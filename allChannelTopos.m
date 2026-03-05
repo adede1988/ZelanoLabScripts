@@ -64,7 +64,15 @@ subERP_PAC_peak = nan([length(chanFiles), 4001]);
 subERP_PAC_noPeak=nan([length(chanFiles), 4001]); 
 subERP_noPAC_peak=nan([length(chanFiles), 4001]); 
 
+subERP_PAC_HRV  = nan([length(chanFiles), 4001]);
+subERP_PAC_noHRV  = nan([length(chanFiles), 4001]);
 
+allgamEnv = cell([length(chanFiles), 1]);
+allPACgamPeakidx50    = cell([length(chanFiles), 1]); 
+allTaskList =  cell([length(chanFiles), 1]); 
+
+taskERP = nan([3, length(chanFiles), 4001]);
+cndList = {'audio', 'focus', 'shadow'};
 parfor start = 1:length(chanFiles)
     disp(start)
     try
@@ -89,28 +97,91 @@ parfor start = 1:length(chanFiles)
             end
         end
 
+
     allPowShuf(start,:,:,:) = perValP; 
     allitpcShuf(start,:,:,:) = perValI; 
 
 
 
+
+    useVec = outSum.useVec; 
+
+    allGamEnv{start} = outSum.gamEnv(outSum.useVec==1, :); 
+    allPACgamPeakidx50{start}    = outSum.behDat.PACgamPeakidx50(outSum.useVec==1);
+    allTaskList{start} = string(outSum.behDat.task(outSum.useVec==1)); 
+
+
+    HRV_RMS  = outSum.behDat.HRV_RMSSD30(useVec);
+    HRV_SDNN = outSum.behDat.HRV_SDNN30(useVec);
+    HRV_RSA  = outSum.behDat.HRV_RSAamp(useVec); 
+    HRV_mm   = outSum.behDat.RR_max_min(useVec); 
+    HR       = outSum.behDat.HR_mean(useVec); 
+
+    minmax01 = @(v) local_minmax01(v);
+    rms01  = minmax01(HRV_RMS);
+    sdnn01 = minmax01(HRV_SDNN);
+    rsa01  = minmax01(HRV_RSA);
+    
+    % --- overall state = mean of the 3 scaled measures ---
+    overall = mean([rms01 sdnn01 rsa01], 2, 'omitnan');
+    
+    
+    HRVidx = overall > median(overall); 
+
+    taskVec = string(outSum.behDat.task); 
+
+    %get ERP for PAC HRV+ breaths
+    test = outSum.ERP_pacPeak(outSum.useVec, :); 
+    subERP_PAC_HRV(start, :) = abs(mean(exp(1i*angle(hilbert(test(HRVidx,:).'))).', 1, 'omitnan'));
+
+    %get ERP for PAC HRV- breaths
+    test = outSum.ERP_pacPeak(outSum.useVec, :); 
+    subERP_PAC_noHRV(start, :) = abs(mean(exp(1i*angle(hilbert(test(~HRVidx,:).'))).', 1, 'omitnan'));
+
     %get ERP for PAC_peak
     useVec = outSum.behDat.goodBreath == 1 & abs(outSum.behDat.PACgamPeakidx50 - outSum.behDat.gamPeakidx50)<=3; 
-    subERP_PAC_peak(start, :) = mean(outSum.ERP_pacPeak(useVec,:), 1, 'omitnan'); 
+    useVec = useVec & outSum.useVec; 
+    subERP_PAC_peak(start, :) = abs(mean(exp(1i*angle(hilbert(outSum.ERP_pacPeak(useVec,:).'))).', 1, 'omitnan'));
 
     %get ERP for PAC max that is not the breath-wise peak
     useVec = outSum.behDat.goodBreath == 1 & abs(outSum.behDat.PACgamPeakidx50 - outSum.behDat.gamPeakidx50)>3; 
-    subERP_PAC_noPeak(start, :) = mean(outSum.ERP_pacPeak(useVec,:), 1, 'omitnan'); 
+    useVec = useVec & outSum.useVec; 
+    subERP_PAC_noPeak(start, :) = abs(mean(exp(1i*angle(hilbert(outSum.ERP_pacPeak(useVec,:).'))).', 1, 'omitnan'));
   
     %get ERP for breath-wise max that is not in PAC window
     useVec = outSum.behDat.goodBreath == 1 & abs(outSum.behDat.PACgamPeakidx50 - outSum.behDat.gamPeakidx50)>3; 
-    subERP_noPAC_peak(start, :) = mean(outSum.ERP_allPeak(useVec,:), 1, 'omitnan'); 
+    useVec = useVec & outSum.useVec; 
+    subERP_noPAC_peak(start, :) = abs(mean(exp(1i*angle(hilbert(outSum.ERP_allPeak(useVec,:).'))).', 1, 'omitnan'));
        
+
+    for c = 1:3
+        idx = taskVec == cndList{c}; 
+        if sum(idx)>5
+            taskERP(c, start, :) = abs(mean(exp(1i*angle(hilbert(outSum.ERP_pacPeak(idx & outSum.useVec, :).'))).', 1, 'omitnan'));
+        end
+    end
+
+
+
+
     catch
         disp(['failure on ' allSubIDs{start, 4}  allSubIDs{start,1} ' ' allSubIDs{start,2} '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'])
     end
 
 end
+
+
+idx = cellfun(@(x) strcmp('Cz', x), allSubIDs(:,4));
+test = allGamEnv(idx);
+test2= allPACgamPeakidx50(idx); 
+
+figure;
+[~, order] = sort(test2); 
+imagesc(test(order, :))
+
+
+test = cat(1, test{:}); 
+test2= cat(1, test2{:}); 
 
 
 plot_group_topos(allPowShuf, allSubIDs, eegLocs)
@@ -119,6 +190,8 @@ plot_group_topos(allitpcBandMax, allSubIDs, eegLocs)
 
 
 
-plotERP(subERP_PAC_peak, subERP_noPAC_peak, eegLocs, allSubIDs, "OBE", 1,8, {'peak', 'noPeak'})
+plotERP(squeeze(taskERP(1,:,:)),squeeze(taskERP(2,:,:)) , eegLocs, allSubIDs, "OBE", 1,9, {'audio', 'focus'})
+
+
 
 
