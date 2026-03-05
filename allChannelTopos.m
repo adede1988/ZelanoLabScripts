@@ -119,6 +119,6 @@ plot_group_topos(allitpcBandMax, allSubIDs, eegLocs)
 
 
 
-plotERP(subERP_PAC_peak, subERP_PAC_noPeak, eegLocs, allSubIDs, "Dupi", 2,6, {'peak', 'noPeak'})
+plotERP(subERP_PAC_peak, subERP_noPAC_peak, eegLocs, allSubIDs, "OBE", 1,8, {'peak', 'noPeak'})
 
 

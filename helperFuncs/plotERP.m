@@ -105,9 +105,9 @@ if ~isempty(subSel)
 end
 
 % ---------------- plotting params ----------------
-tVec = 1:nTime;            % replace with your real time vector if desired
+tVec = -4000:2:4000;            % replace with your real time vector if desired
 smoothWin = 25;            % 25-point moving average
-vlineX    = 2001;          % vertical reference line index
+vlineX    = 0;          % vertical reference line index
 
 % make mini axes larger
 scale = sqrt(32 / max(1,nLoc));
@@ -143,8 +143,8 @@ for li = 1:nLoc
 
             % 25-pt moving average smoothing (fallback if movmean unavailable)
             mu = local_smooth1d(mu, smoothWin);
-
-            h = plot(ax, tVec, mu, 'LineWidth', 1);
+            
+            h = plot(ax, tVec, mu, 'LineWidth', 1.5);
 
             if ~gotLegendHandles
                 legH(k) = h;
@@ -164,7 +164,7 @@ for li = 1:nLoc
                 'XColor','none', 'YColor','none', ...
                 'Color','none');   % transparent background
         ylim(ax, [-7 7])
-        xlim(ax, [1500 4000])
+        xlim(ax, [-1000 4000])
         title(ax, char(lab), 'Interpreter','none', 'FontSize', 7);
 
     else
@@ -172,9 +172,56 @@ for li = 1:nLoc
     end
 end
 
-% legend (attach to an existing mini-axes so MATLAB doesn't make a big axes)
-if gotLegendHandles && ~isempty(axLegendParent)
-    lg = legend(axLegendParent, legH, erpLabels, 'Interpreter','none', ...
+
+%% ---- Reference axes with labeled units (ms, µV) ----
+% Drop this in AFTER you’ve plotted all inset ERPs.
+
+% 1) Find an example inset axis that has ERP lines on it
+axAll = findall(gcf, 'Type','axes');
+axEx  = [];
+
+for a = axAll(:)'
+    % pick an axis that is visible and contains at least one line
+    if strcmp(get(a,'Visible'),'on') && ~isempty(findobj(a,'Type','line'))
+        axEx = a;
+        break
+    end
+end
+
+if ~isempty(axEx) && isgraphics(axEx)
+    xl = get(axEx,'XLim');
+    yl = get(axEx,'YLim');
+
+    % 2) Create a new small axis (bottom-left); adjust Position as desired
+    axRef = axes('Units','normalized', 'Position',[0.04 0.02 axW axH], ...
+                 'Color','none', 'Box','off', 'TickDir','out', ...
+                 'LineWidth',1);
+
+    xlim(axRef, xl);
+    ylim(axRef, yl);
+
+    % 3) Sensible ticks (min/0/max if 0 is inside range; else just min/max)
+    xt = [xl(1) xl(2)];
+    yt = [yl(1) yl(2)];
+    if xl(1) < 0 && xl(2) > 0, xt = [xl(1) 0 xl(2)]; end
+    if yl(1) < 0 && yl(2) > 0, yt = [yl(1) 0 yl(2)]; end
+    set(axRef, 'XTick', xt, 'YTick', yt);
+
+    % 4) Labels
+    xlabel(axRef, 'Time (ms)');
+    ylabel(axRef, 'Voltage (\muV)');
+
+    % (Optional) draw baseline on the reference axis
+    hold(axRef,'on');
+    yline(axRef, 0, ':');
+    % If your time-zero is at x=0 ms and you want it marked:
+    xline(axRef, 0, ':');
+end
+
+
+% ---- legend attached to the reference axis ----
+if gotLegendHandles && exist('axRef','var') && isgraphics(axRef)
+    lg = legend(axRef, legH, erpLabels, 'Interpreter','none', ...
         'Box','off', 'Orientation','horizontal', 'Location','southoutside');
     lg.ItemTokenSize = [10 10];
 end

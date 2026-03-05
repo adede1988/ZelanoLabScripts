@@ -90,7 +90,7 @@ useVec = chanDat.use == 1;
 outSum.numOutlier= sum(outlierSum>1000); 
 outSum.usable    = sum(useVec); 
 
-
+disp('here1')
 
 %% Summarize HRV
 
@@ -156,6 +156,7 @@ overall = mean([rms01 sdnn01 rsa01], 2, 'omitnan');
 HRVidx = overall > median(overall); 
 
 
+disp('here2')
 
 %% get band power and ITPC values 
 
@@ -237,6 +238,8 @@ end
 powBandMax  = squeeze(mean(powBoot,  1, 'omitnan'));   % [nBand x 3 x nTime]
 itpcBandMax = squeeze(mean(itpcBoot, 1, 'omitnan'));   % [nBand x 3 x nTime]
 
+
+disp('here3')
 %% ---------------- SHUFFLES (permute labels; no resampling) ----------------
 powShuf  = nan(nShuf, nBand, 3, nTime);
 itpcShuf = nan(nShuf, nBand, 3, nTime);
@@ -353,6 +356,7 @@ behDat.(['thetaPow_4_' outSum.label]) = median(median(chanDat.tf.powZ(:,31:40,tm
 behDat.(['thetaPow_5_' outSum.label]) = median(median(chanDat.tf.powZ(:,41:50,tm), [2] , 'omitnan'), 3); 
 
 
+disp('here4')
 
 %% === Breath-wise ISPC between macChan and chanDat (4–10 Hz) ===
 % Assumes:
@@ -405,6 +409,7 @@ outSum.behDat = behDat;
 
 
 
+disp('here5')
 
 
 
@@ -425,6 +430,7 @@ save(fullfile(fpath, [outSum.sessID '_' outSum.task '_' outSum.label  '.mat'] ),
 
 
 
+disp('here6')
 
 
 
