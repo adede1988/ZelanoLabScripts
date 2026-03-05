@@ -163,7 +163,7 @@ for li = 1:nLoc
         set(ax, 'XTick', [], 'YTick', [], ...
                 'XColor','none', 'YColor','none', ...
                 'Color','none');   % transparent background
-        ylim(ax, [-3 3])
+        ylim(ax, [-7 7])
         xlim(ax, [1500 4000])
         title(ax, char(lab), 'Interpreter','none', 'FontSize', 7);
 

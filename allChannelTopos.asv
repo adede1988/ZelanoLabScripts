@@ -104,10 +104,10 @@ parfor start = 1:length(chanFiles)
   
     %get ERP for breath-wise max that is not in PAC window
     useVec = outSum.behDat.goodBreath == 1 & abs(outSum.behDat.PACgamPeakidx50 - outSum.behDat.gamPeakidx50)>3; 
-    subERP_PAC_noPeak(start, :) = mean(outSum.ERP_pacPeak(useVec,:), 1, 'omitnan'); 
+    subERP_noPAC_peak(start, :) = mean(outSum.ERP_allPeak(useVec,:), 1, 'omitnan'); 
        
     catch
-        disp(['failure on '  allSubIDs{subIDX(1),1} ' ' allSubIDs{subIDX(1),2} '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'])
+        disp(['failure on ' allSubIDs{start, 4}  allSubIDs{start,1} ' ' allSubIDs{start,2} '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'])
     end
 
 end
@@ -116,5 +116,9 @@ end
 plot_group_topos(allPowShuf, allSubIDs, eegLocs)
 
 plot_group_topos(allitpcBandMax, allSubIDs, eegLocs)
+
+
+
+plotERP(subERP_PAC_peak, subERP_noPAC_peak, eegLocs, allSubIDs, "OBE", 1,8, {'peak', 'noPeak'})
 
 

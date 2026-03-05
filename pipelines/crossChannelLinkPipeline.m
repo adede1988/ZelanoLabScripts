@@ -277,7 +277,7 @@ thetaDat = filtfilt(bpFilt, rawChanDat.data);
 
 outSum.gamEnv = macChan.gammaEnv.gamEnv; 
 outSum.flatSpec= macChan.fooof.spectra_flat_log10; 
-
+outSum.useVec = useVec; 
 
 tm = chanDat.tf.frex>=4 & chanDat.tf.frex<=10; 
 
