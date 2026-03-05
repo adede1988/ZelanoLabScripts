@@ -60,6 +60,9 @@ allitpcBandMax= nan([length(chanFiles), 3, 3, 50]);
 allPowShuf    = nan([length(chanFiles), 3, 3, 50]); %convert values to percentile
 allitpcShuf= nan([length(chanFiles), 3, 3, 50]); 
 
+subERP_PAC_peak = nan([length(chanFiles), 4001]);
+subERP_PAC_noPeak=nan([length(chanFiles), 4001]); 
+subERP_noPAC_peak=nan([length(chanFiles), 4001]); 
 
 
 parfor start = 1:length(chanFiles)
@@ -89,10 +92,22 @@ parfor start = 1:length(chanFiles)
     allPowShuf(start,:,:,:) = perValP; 
     allitpcShuf(start,:,:,:) = perValI; 
 
+
+
+    %get ERP for PAC_peak
+    useVec = outSum.behDat.goodBreath == 1 & abs(outSum.behDat.PACgamPeakidx50 - outSum.behDat.gamPeakidx50)<=3; 
+    subERP_PAC_peak(start, :) = mean(outSum.ERP_pacPeak(useVec,:), 1, 'omitnan'); 
+
+    %get ERP for PAC max that is not the breath-wise peak
+    useVec = outSum.behDat.goodBreath == 1 & abs(outSum.behDat.PACgamPeakidx50 - outSum.behDat.gamPeakidx50)>3; 
+    subERP_PAC_noPeak(start, :) = mean(outSum.ERP_pacPeak(useVec,:), 1, 'omitnan'); 
   
+    %get ERP for breath-wise max that is not in PAC window
+    useVec = outSum.behDat.goodBreath == 1 & abs(outSum.behDat.PACgamPeakidx50 - outSum.behDat.gamPeakidx50)>3; 
+    subERP_noPAC_peak(start, :) = mean(outSum.ERP_allPeak(useVec,:), 1, 'omitnan'); 
        
     catch
-        disp(['failure on '  allSubIDs{subIDX(1),1} ' ' allSubIDs{subIDX(1),2} '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'])
+        disp(['failure on ' allSubIDs{start, 4}  allSubIDs{start,1} ' ' allSubIDs{start,2} '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'])
     end
 
 end
