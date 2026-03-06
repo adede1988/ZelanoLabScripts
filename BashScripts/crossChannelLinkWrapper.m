@@ -60,8 +60,8 @@ allSubIDs(:,4) = arrayfun(@(x) x, comboIdx, 'uniformoutput', false);
 
 %% run the pipeline
 
-% parfor start = 1:length(eegFiles)
-    % try
+parfor start = 1:length(eegFiles)
+    try
         
         subIDX = find(comboIdx == allSubIDs{start,4}); 
         subFiles = eegFiles(subIDX);
@@ -72,8 +72,8 @@ allSubIDs(:,4) = arrayfun(@(x) x, comboIdx, 'uniformoutput', false);
        %input subFiles, datPre, subID, taskID for macro search
         crossChannelLinkPipeline(targFile, subFiles, datPre, allSubIDs{subIDX(1),1}, allSubIDs{subIDX(1),2}); 
        
-    % catch
-    %     disp(['failure on '  allSubIDs{subIDX(1),1} ' ' allSubIDs{subIDX(1),2} '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'])
-    % end
+    catch
+        disp(['failure on '  allSubIDs{subIDX(1),1} ' ' allSubIDs{subIDX(1),2} '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'])
+    end
 
-% end
+end

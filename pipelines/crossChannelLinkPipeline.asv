@@ -87,7 +87,7 @@ if ~exist(fullfile(fpath, [subID '_' taskID '_' chanDat.labels{chanDat.chi}  '.m
     outSum.fn        = targFile.name;
     outSum.chi       = chanDat.chi; 
     outSum.rawN      = size(chanDat.behDat,1);
-    
+    outSum.macChan   = 
 else
     outSum = load(fullfile(fpath, [subID '_' taskID '_' chanDat.labels{chanDat.chi}  '.mat'] ));
     outSum = outSum.outSum; 
