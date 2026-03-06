@@ -29,6 +29,7 @@ for ii = 1:length(chanFiles)
         chanID = split(nameBits{7}, '.mat');
         chanID = chanID{1}; 
         type   = nameBits{2}; 
+        shortID = nameBits{4};
     else
         subID = [nameBits{1} '_' nameBits{2} '_' ...
                  nameBits{3} '_' nameBits{4}];
@@ -37,6 +38,7 @@ for ii = 1:length(chanFiles)
         chanID = split(nameBits{6}, '.mat');
         chanID = chanID{1}; 
         type   = nameBits{2}; 
+        shortID= nameBits{4};
     end
    
     allSubIDs{ii,2} = taskID; 
@@ -45,6 +47,8 @@ for ii = 1:length(chanFiles)
     allSubIDs{ii,4} = chanID; 
     allSubIDs{ii,5} = sessID; 
     allSubIDs{ii,6} = type; 
+    allSubIDs{ii,8} = shortID; 
+
 
 
 end
@@ -59,7 +63,10 @@ eegLocs = readtable("G:\My Drive\GitHub\ZelanoLabScripts\eegLocs_standard_coords
 %% pre specify variables to extract 
 
 % evidence that there is a gamma oscillation: 
-allFlatSpec = cell([length(chanFiles), 1]); 
+allFlatSpec  = cell([length(chanFiles), 1]); 
+allNormalSpec= cell([length(chanFiles), 1]); 
+allRawDat    = cell([length(chanFiles), 1]); 
+allResp      = cell([length(chanFiles), 1]);
 
 
 % other stuff: 
@@ -99,6 +106,10 @@ parfor start = 1:length(chanFiles)
 
         % Evidence that there is a gamma oscillation: 
         allFlatSpec{start} = outSum.flatSpec; 
+        allNormalSpec{start}= outSum.spec; 
+        allRawDat{start}    = outSum.data; 
+        allResp{start}     = outSum.rsp;
+
 
 
 
@@ -212,9 +223,217 @@ conIDX = cellfun(@(chan,type,sess,subID) strcmp('Cz', chan) & ...
                        allSubIDs(:,4), allSubIDs(:,6), ...
                        allSubIDs(:,5), allSubIDs(:,7));
 
-conFlatSpec = allFlatSpec(conIDX); 
+conIDXall = conIDX; 
+% cellfun(@(chan,type,sess) strcmp('Cz', chan) & ...
+%                        strcmpi('obe', type) & ...
+%                        sess==1, ...
+%                        allSubIDs(:,4), allSubIDs(:,6), ...
+%                        allSubIDs(:,5));
+
+fig = plotFlatSpec_bySubjectBlocks(conIDXall, allSubIDs, allFlatSpec); 
+title('controls')
+
+% raw breath with ob gamma in raw data
+conRawDat = allRawDat(conIDX); 
+conRawDat = cat(1, conRawDat{:}); 
+conRawRsp = allResp(conIDX); 
+conRawRsp = cat(1, conRawRsp{:}); 
+conRawDat(isnan(conRawDat)) = 1; 
+conRawDat = highpass(double(conRawDat).', 1, 500); 
+conRawDat = conRawDat .';
 
 
+
+figure; 
+tim = .002:.002:12; 
+plot(tim(130:end), conRawDat(133,130:end), 'color', 'k')
+hold on 
+plot(tim(130:end), highpass(conRawDat(133,130:end), 20, 500), 'color', 'blue', 'linewidth', 1)
+yyaxis right
+plot(tim(130:end), smoothdata(conRawRsp(133,130:end), 'gaussian', 30),...
+    'linewidth', 3)
+
+
+
+% power spectra raw
+frex = logspace(log10(.1),log10(200),300);
+conSpec = allNormalSpec(conIDXall); 
+conSpec = cat(1, conSpec{:}); 
+conSpec = squeeze(mean(conSpec, 2));
+conSpec(isnan(conSpec(:,3)), :) = []; 
+figure; 
+plot(frex, log(conSpec)')
+
+
+
+
+% SEARCH CODE TO FIND GOOD SINGLE RAW TRIAL, ALREADY DONE.
+% 
+% figure; 
+% tim = .002:.002:12; 
+% plot(tim, conRawDat(139,:))
+% yyaxis right
+% plot(tim, conRawRsp(139,:))
+% 
+% 
+% for ii = 1:575
+%     if max(conRawDat(ii,:))<100 && min(conRawDat(ii,:))>-100
+%         figure; 
+%         plot(tim, conRawDat(ii,:))
+%         yyaxis right
+%         plot(tim, conRawRsp(ii,:))
+%         title(ii)
+%     end
+% end
+allSubIDs{104,4} = 'Fz'; %hard code hack to get JH and KS in session 1
+dup1IDX = cellfun(@(chan,type,sess,subID) strcmp('Fz', chan) & ...
+                       strcmpi('dupi', type) & ...
+                       sess==1, ...
+                       allSubIDs(:,4), allSubIDs(:,6), ...
+                       allSubIDs(:,5), allSubIDs(:,7));
+
+fig = plotFlatSpec_bySubjectBlocks(dup1IDX, allSubIDs, allFlatSpec); 
+title('session 1')
+
+%use JH session 3 rather than 2 because it has a better gamma oscillation: 
+allSubIDs(129:160, 5) = {3};
+allSubIDs(161:192, 5) = {2};
+dup2IDX = cellfun(@(chan,type,sess,subID) strcmp('P3', chan) & ...
+                       strcmpi('dupi', type) & ...
+                       sess==2 &  ...
+                       subID~=3, ...
+                       allSubIDs(:,4), allSubIDs(:,6), ...
+                       allSubIDs(:,5), allSubIDs(:,7));
+
+
+
+
+fig = plotFlatSpec_bySubjectBlocks(dup2IDX, allSubIDs, allFlatSpec); 
+title('session 2')
+
+[hFig, conInfo]  = plot_gamRspPACphase_circDensity(conIDXall, allSubIDs, allBehDat)
+[hFig, dup1Info] = plot_gamRspPACphase_circDensity(dup1IDX, allSubIDs, allBehDat)
+[hFig, dup2Info] = plot_gamRspPACphase_circDensity(dup2IDX, allSubIDs, allBehDat)
+
+hFig = plot_gamRspPACphase_byTask_tiled(conIDXall, allSubIDs, allBehDat)
+hFig = plot_gamRspPACphase_byTask_tiled(dup1IDX, allSubIDs, allBehDat)
+hFig = plot_gamRspPACphase_byTask_tiled(dup2IDX, allSubIDs, allBehDat)
+
+
+hFig = plot_task_vs_HRVindex(conIDXall, allSubIDs, allBehDat)
+hFig = plot_task_vs_HRVindex(dup1IDX, allSubIDs, allBehDat)
+hFig = plot_task_vs_HRVindex(dup2IDX, allSubIDs, allBehDat)
+
+
+hFig  = plot_phaseDev110_vs_HRV(conIDXall, allSubIDs, allBehDat)
+hFig = plot_phaseDev110_vs_HRV(dup1IDX, allSubIDs, allBehDat)
+hFig = plot_phaseDev110_vs_HRV(dup2IDX, allSubIDs, allBehDat)
+
+hFig  = plot_packStrength_vs_HRV(conIDXall, allSubIDs, allBehDat)
+hFig = plot_packStrength_vs_HRV(dup1IDX, allSubIDs, allBehDat)
+hFig = plot_packStrength_vs_HRV(dup2IDX, allSubIDs, allBehDat)
+
+
+hFig = plot_dumbbell_sess1_sess2(allSubIDs, allBehDat, 'gamPeak')
+
+
+hFig = plot_dumbbell_sess1_sess2(allSubIDs, allBehDat, 'upset_affective')
+
+
+
+conIDX = cellfun(@(type,sess,subID)  ...
+                       strcmpi('obe', type) & ...
+                       sess==1 &  ...
+                       subID~=14, ...
+                        allSubIDs(:,6), ...
+                       allSubIDs(:,5), allSubIDs(:,7));
+
+conIDX = cellfun(@(type,sess,subID)  ...
+                       strcmpi('obe', type) & ...
+                       sess==1 &  ...
+                       subID==8, ...
+                        allSubIDs(:,6), ...
+                       allSubIDs(:,5), allSubIDs(:,7));
+
+hFig = topo_fromBehVarStem(allSubIDs, allBehDat, conIDX, 'theta_theta_phase')
+hFig = topo_fromBehVarStem(allSubIDs, allBehDat, conIDX, 'thetaPow_5_')
+colorbar
+
+
+dup1IDX = cellfun(@(type,sess,subID)  ...
+                       strcmpi('dupi', type) & ...
+                       sess==2 &  ...
+                       subID~=8, ...
+                        allSubIDs(:,6), ...
+                       allSubIDs(:,5), allSubIDs(:,7));
+
+hFig = topo_fromBehVarStem(allSubIDs, allBehDat, dup1IDX, 'thetaPow_1_')
+% clim([-2 2])
+colorbar
+
+% power spectra raw
+frex = logspace(log10(.1),log10(200),300);
+dup1Spec = allNormalSpec(dup1IDX); 
+dup1Spec = cat(1, dup1Spec{:}); 
+dup1Spec = squeeze(mean(dup1Spec, 2));
+dup1Spec(isnan(dup1Spec(:,3)), :) = []; 
+figure; 
+plot(frex, log(dup1Spec)')
+
+
+% power spectra flattened as heatmap
+dup1FlatSpec = allFlatSpec(dup1IDX); 
+dup1FlatSpec = cat(1, dup1FlatSpec{:}); 
+dup1FlatSpec = squeeze(mean(dup1FlatSpec, 2));
+dup1FlatSpec(isnan(dup1FlatSpec(:,3)), :) = []; 
+figure; 
+imagesc(dup1FlatSpec(:,frex>4))
+plotFrex = frex(frex>4); 
+xticklabels(plotFrex(20:20:140))
+clim([-.5 1.5])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+dup2IDX = cellfun(@(chan,type,sess,subID) strcmp('P3', chan) & ...
+                       strcmpi('dupi', type) & ...
+                       sess==2 &  ...
+                       subID~=3, ...
+                       allSubIDs(:,4), allSubIDs(:,6), ...
+                       allSubIDs(:,5), allSubIDs(:,7));
+
+% power spectra raw
+frex = logspace(log10(.1),log10(200),300);
+dup1Spec = allNormalSpec(dup2IDX); 
+dup1Spec = cat(1, dup1Spec{:}); 
+dup1Spec = squeeze(mean(dup1Spec, 2));
+dup1Spec(isnan(dup1Spec(:,3)), :) = []; 
+figure; 
+plot(frex, log(dup1Spec)')
+
+
+% power spectra flattened as heatmap
+dup1FlatSpec = allFlatSpec(dup2IDX); 
+dup1FlatSpec = cat(1, dup1FlatSpec{:}); 
+dup1FlatSpec = squeeze(mean(dup1FlatSpec, 2));
+dup1FlatSpec(isnan(dup1FlatSpec(:,3)), :) = []; 
+figure; 
+imagesc(dup1FlatSpec(:,frex>4))
+plotFrex = frex(frex>4); 
+xticklabels(plotFrex(20:20:140))
+clim([-.5 1.5])
 
 
 
@@ -320,7 +539,7 @@ plot_group_topos(allitpcBandMax, allSubIDs, eegLocs)
 
 
 
-plotERP(squeeze(taskERP(1,:,:)),squeeze(taskERP(2,:,:)) , eegLocs, allSubIDs, "OBE", 1,9, {'audio', 'focus'})
+plotERP(squeeze(taskERP(1,:,:)),squeeze(taskERP(2,:,:)) , eegLocs, allSubIDs, "OBE", 1, {'audio', 'focus'})
 
 
 plotERP(subERP_PAC_peak,subERP_PAC_noPeak , eegLocs, allSubIDs, "OBE", 1,8, {'PAC_peak', 'PAC_noPeak'})

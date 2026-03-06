@@ -371,11 +371,11 @@ behDat.gamRspPACphase_idx50 = idx;
 behDat.gamRspPACLock  = macChan.pac.diag.pac.z.fbRankPct; 
 behDat.gamRspPACStrength = macChan.pac.diag.fb_pacZ; 
 %median over time, median over frequency to get theta band power: 
-behDat.(['thetaPow_1_' outSum.label]) = median(median(chanDat.tf.powZ(:,1:10,tm), [2] , 'omitnan'), 3); 
-behDat.(['thetaPow_2_' outSum.label]) = median(median(chanDat.tf.powZ(:,11:20,tm), [2] , 'omitnan'), 3); 
-behDat.(['thetaPow_3_' outSum.label]) = median(median(chanDat.tf.powZ(:,21:30,tm), [2] , 'omitnan'), 3); 
-behDat.(['thetaPow_4_' outSum.label]) = median(median(chanDat.tf.powZ(:,31:40,tm), [2] , 'omitnan'), 3); 
-behDat.(['thetaPow_5_' outSum.label]) = median(median(chanDat.tf.powZ(:,41:50,tm), [2] , 'omitnan'), 3); 
+behDat.(['thetaPow_1_' outSum.label]) = median(max(chanDat.tf.powZ(:,1 :10,tm),[], [2] , 'omitnan'), 3); 
+behDat.(['thetaPow_2_' outSum.label]) = median(max(chanDat.tf.powZ(:,11:20,tm),[], [2] , 'omitnan'), 3); 
+behDat.(['thetaPow_3_' outSum.label]) = median(max(chanDat.tf.powZ(:,21:30,tm),[], [2] , 'omitnan'), 3); 
+behDat.(['thetaPow_4_' outSum.label]) = median(max(chanDat.tf.powZ(:,31:40,tm),[], [2] , 'omitnan'), 3); 
+behDat.(['thetaPow_5_' outSum.label]) = median(max(chanDat.tf.powZ(:,41:50,tm),[], [2] , 'omitnan'), 3); 
 
 
 disp('here4')
