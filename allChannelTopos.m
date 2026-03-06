@@ -371,29 +371,26 @@ hFig = topo_fromBehVarStem(allSubIDs, allBehDat, dup1IDX, 'thetaPow_1_')
 % clim([-2 2])
 colorbar
 
-% power spectra raw
-frex = logspace(log10(.1),log10(200),300);
-dup1Spec = allNormalSpec(dup1IDX); 
-dup1Spec = cat(1, dup1Spec{:}); 
-dup1Spec = squeeze(mean(dup1Spec, 2));
-dup1Spec(isnan(dup1Spec(:,3)), :) = []; 
-figure; 
-plot(frex, log(dup1Spec)')
-
-
-% power spectra flattened as heatmap
-dup1FlatSpec = allFlatSpec(dup1IDX); 
-dup1FlatSpec = cat(1, dup1FlatSpec{:}); 
-dup1FlatSpec = squeeze(mean(dup1FlatSpec, 2));
-dup1FlatSpec(isnan(dup1FlatSpec(:,3)), :) = []; 
-figure; 
-imagesc(dup1FlatSpec(:,frex>4))
-plotFrex = frex(frex>4); 
-xticklabels(plotFrex(20:20:140))
-clim([-.5 1.5])
-
-
-
+% % % power spectra raw
+% % frex = logspace(log10(.1),log10(200),300);
+% % dup1Spec = allNormalSpec(dup1IDX); 
+% % dup1Spec = cat(1, dup1Spec{:}); 
+% % dup1Spec = squeeze(mean(dup1Spec, 2));
+% % dup1Spec(isnan(dup1Spec(:,3)), :) = []; 
+% % figure; 
+% % plot(frex, log(dup1Spec)')
+% % 
+% % 
+% % % power spectra flattened as heatmap
+% % dup1FlatSpec = allFlatSpec(dup1IDX); 
+% % dup1FlatSpec = cat(1, dup1FlatSpec{:}); 
+% % dup1FlatSpec = squeeze(mean(dup1FlatSpec, 2));
+% % dup1FlatSpec(isnan(dup1FlatSpec(:,3)), :) = []; 
+% % figure; 
+% % imagesc(dup1FlatSpec(:,frex>4))
+% % plotFrex = frex(frex>4); 
+% % xticklabels(plotFrex(20:20:140))
+% % clim([-.5 1.5])
 
 
 
@@ -406,70 +403,73 @@ clim([-.5 1.5])
 
 
 
-
-dup2IDX = cellfun(@(chan,type,sess,subID) strcmp('P3', chan) & ...
-                       strcmpi('dupi', type) & ...
-                       sess==2 &  ...
-                       subID~=3, ...
-                       allSubIDs(:,4), allSubIDs(:,6), ...
-                       allSubIDs(:,5), allSubIDs(:,7));
-
-% power spectra raw
-frex = logspace(log10(.1),log10(200),300);
-dup1Spec = allNormalSpec(dup2IDX); 
-dup1Spec = cat(1, dup1Spec{:}); 
-dup1Spec = squeeze(mean(dup1Spec, 2));
-dup1Spec(isnan(dup1Spec(:,3)), :) = []; 
-figure; 
-plot(frex, log(dup1Spec)')
-
-
-% power spectra flattened as heatmap
-dup1FlatSpec = allFlatSpec(dup2IDX); 
-dup1FlatSpec = cat(1, dup1FlatSpec{:}); 
-dup1FlatSpec = squeeze(mean(dup1FlatSpec, 2));
-dup1FlatSpec(isnan(dup1FlatSpec(:,3)), :) = []; 
-figure; 
-imagesc(dup1FlatSpec(:,frex>4))
-plotFrex = frex(frex>4); 
-xticklabels(plotFrex(20:20:140))
-clim([-.5 1.5])
-
-
-
-
-idx = cellfun(@(x) strcmp('P3', x), allSubIDs(:,4));
-
-uniSub = allSubIDs(idx,3); 
-types = allSubIDs(idx,6); 
-sess  = allSubIDs(idx,5); 
-n = length(uniSub); 
-idx = find(idx); 
-allSubGamTim = nan(n, 4);
-prcTilVals = [10 20 30 40];
-
-figure;
-hold on 
-for ii = 1:length(idx)
-    behDat = allBehDat{idx(ii)}; 
-    orderedVals = sort(behDat.gamPeakidx50);
-    orderedVals = [1; orderedVals(:); 50]; 
-    valsUntil = arrayfun(@(x) find(orderedVals>x,1), prcTilVals) ./ ...
-        length(orderedVals);
-    allSubGamTim(ii,:) = valsUntil; 
-    valsUntil = [0 valsUntil 1]; 
-    
-    if strcmpi(types{ii}, 'obe')
-        plot([0 prcTilVals 50] , valsUntil, 'color', 'k', 'linewidth', 2)
-    elseif strcmpi(types{ii}, 'dupi')
-        if sess{ii} == 1
-            plot([0 prcTilVals 50] , valsUntil, 'color', 'red', 'linewidth', 1)
-        elseif sess{ii} == 2
-            plot([0 prcTilVals 50] , valsUntil, 'color', 'green', 'linewidth', 1)
-        end
-    end
-
-end
+% 
+% 
+% 
+% 
+% dup2IDX = cellfun(@(chan,type,sess,subID) strcmp('P3', chan) & ...
+%                        strcmpi('dupi', type) & ...
+%                        sess==2 &  ...
+%                        subID~=3, ...
+%                        allSubIDs(:,4), allSubIDs(:,6), ...
+%                        allSubIDs(:,5), allSubIDs(:,7));
+% 
+% % power spectra raw
+% frex = logspace(log10(.1),log10(200),300);
+% dup1Spec = allNormalSpec(dup2IDX); 
+% dup1Spec = cat(1, dup1Spec{:}); 
+% dup1Spec = squeeze(mean(dup1Spec, 2));
+% dup1Spec(isnan(dup1Spec(:,3)), :) = []; 
+% figure; 
+% plot(frex, log(dup1Spec)')
+% 
+% 
+% % power spectra flattened as heatmap
+% dup1FlatSpec = allFlatSpec(dup2IDX); 
+% dup1FlatSpec = cat(1, dup1FlatSpec{:}); 
+% dup1FlatSpec = squeeze(mean(dup1FlatSpec, 2));
+% dup1FlatSpec(isnan(dup1FlatSpec(:,3)), :) = []; 
+% figure; 
+% imagesc(dup1FlatSpec(:,frex>4))
+% plotFrex = frex(frex>4); 
+% xticklabels(plotFrex(20:20:140))
+% clim([-.5 1.5])
+% 
+% 
+% 
+% 
+% idx = cellfun(@(x) strcmp('P3', x), allSubIDs(:,4));
+% 
+% uniSub = allSubIDs(idx,3); 
+% types = allSubIDs(idx,6); 
+% sess  = allSubIDs(idx,5); 
+% n = length(uniSub); 
+% idx = find(idx); 
+% allSubGamTim = nan(n, 4);
+% prcTilVals = [10 20 30 40];
+% 
+% figure;
+% hold on 
+% for ii = 1:length(idx)
+%     behDat = allBehDat{idx(ii)}; 
+%     orderedVals = sort(behDat.gamPeakidx50);
+%     orderedVals = [1; orderedVals(:); 50]; 
+%     valsUntil = arrayfun(@(x) find(orderedVals>x,1), prcTilVals) ./ ...
+%         length(orderedVals);
+%     allSubGamTim(ii,:) = valsUntil; 
+%     valsUntil = [0 valsUntil 1]; 
+% 
+%     if strcmpi(types{ii}, 'obe')
+%         plot([0 prcTilVals 50] , valsUntil, 'color', 'k', 'linewidth', 2)
+%     elseif strcmpi(types{ii}, 'dupi')
+%         if sess{ii} == 1
+%             plot([0 prcTilVals 50] , valsUntil, 'color', 'red', 'linewidth', 1)
+%         elseif sess{ii} == 2
+%             plot([0 prcTilVals 50] , valsUntil, 'color', 'green', 'linewidth', 1)
+%         end
+%     end
+% 
+% end
 
 
 

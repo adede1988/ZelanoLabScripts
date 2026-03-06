@@ -425,7 +425,47 @@ meanPhi  = angle(mvec);             % [breath x 1]  (radians)
 behDat.(['theta_theta_ISPC' outSum.label]) = ISPC; 
 behDat.(['theta_theta_phase' outSum.label]) = meanPhi; 
 
+%% === Null via circular shuffling + z-scored ISPC ===
+% Circularly shifts the within-breath phase-difference time series so that
+% the marginal phase structure/autocorrelation is preserved, but the
+% timepoint-wise alignment is broken.
 
+nShuf = 1000;
+
+[nBreath, nTime] = size(dphi);
+
+ISPC_null = nan(nBreath, nShuf);
+
+for s = 1:nShuf
+    dphi_shuf = nan(nBreath, nTime);
+
+    for b = 1:nBreath
+        % random non-zero circular shift
+        sh = randi(nTime-1);
+        dphi_shuf(b,:) = circshift(dphi(b,:), [0 sh]);
+    end
+
+    % shuffled ISPC per breath
+    mvec_shuf        = mean(exp(1i*dphi_shuf), 2);
+    ISPC_null(:,s)   = abs(mvec_shuf);
+end
+
+% null mean / sd per breath
+ISPC_null_mu = mean(ISPC_null, 2, 'omitnan');
+ISPC_null_sd = std(ISPC_null, 0, 2, 'omitnan');
+
+% z-score observed ISPC relative to null
+ISPC_z = (ISPC - ISPC_null_mu) ./ ISPC_null_sd;
+ISPC_z(ISPC_null_sd == 0 | isnan(ISPC_null_sd)) = NaN;
+
+% optional empirical p-value (right-tailed)
+ISPC_p = (sum(ISPC_null >= ISPC, 2) + 1) ./ (nShuf + 1);
+
+% store
+behDat.(['theta_theta_ISPCz' outSum.label])      = ISPC_z;
+behDat.(['theta_theta_ISPCnullMu' outSum.label]) = ISPC_null_mu;
+behDat.(['theta_theta_ISPCnullSd' outSum.label]) = ISPC_null_sd;
+behDat.(['theta_theta_ISPCp' outSum.label])      = ISPC_p;
 
 outSum.behDat = behDat; 
 

@@ -42,7 +42,7 @@ for s = 1:nSub
     T = allBehDat{repRow(s)};
 
     % --- PAC strength (raw) ---
-    pac = double(T.PACgamPeakidx50(:));   %%%%%%%%%%%%%%%edit here%%%%%%%%%%%%%%%%%%%%%%%%%%
+    pac = double(T.gamRspPACLock(:));   %%%%%%%%%%%%%%%edit here%%%%%%%%%%%%%%%%%%%%%%%%%%
 
     % --- HRV index ---
     hrv = 1000*double(T.HRV_RMSSD30(:)) + 100*double(T.HRV_SDNN30(:)) + double(T.HRV_RSAamp(:));
