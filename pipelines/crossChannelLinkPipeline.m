@@ -289,6 +289,11 @@ bpFilt = designfilt('bandpassiir', ...
 thetaDat = rawChanDat.data; %filtfilt(bpFilt, rawChanDat.data);
 
 
+outSum.data = macChan.trial.data; 
+outSum.rsp  = macChan.trial.rsp; 
+
+
+
 outlierSum = sum(chanDat.tf.powZ>=50, [2,3]); 
 chanDat.use(outlierSum>1000) = 0; 
 useVec = chanDat.use == 1; 
