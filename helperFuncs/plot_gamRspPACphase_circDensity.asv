@@ -120,16 +120,16 @@ box(ax, 'off');
 
 % ---------- faint unit circle ----------
 tt = linspace(-pi, pi, 400);
-plot(ax, cos(tt), sin(tt), '-', 'Color', circleCol, 'LineWidth', 2.5, ...
+plot(ax, cos(tt), sin(tt), '-', 'Color', circleCol, 'LineWidth', 1.8, ...
     'HandleVisibility', 'off');
 
 % ---------- edge tick labels ----------
 tickDeg  = [0 90 180 270];
 tickText = { ...
-    '0 = inhale start', ...
+    '0 = inhale peak', ...
     '90 = inhale/exhale transition', ...
     '180 = exhale trough', ...
-    '270 = exhale/pause transition' ...
+    '270 = exhale/inhale transition' ...
     };
 
 rLab  = 1.18;
@@ -141,7 +141,7 @@ for k = 1:numel(tickDeg)
 
     [x1,y1] = pol2cart(ang, rTck2);
     [x2,y2] = pol2cart(ang, rTck1);
-    plot(ax, [x1 x2], [y1 y2], '-', 'Color', tickCol, 'LineWidth', 4, ...
+    plot(ax, [x1 x2], [y1 y2], '-', 'Color', tickCol, 'LineWidth', 2.2, ...
         'HandleVisibility', 'off');
 
     [xl,yl] = pol2cart(ang, rLab);
@@ -160,14 +160,14 @@ for k = 1:numel(tickDeg)
         'HorizontalAlignment', ha, ...
         'VerticalAlignment', va, ...
         'Interpreter', 'none', ...
-        'FontSize', 16, ...
+        'FontSize', 13, ...
         'FontWeight', 'bold', ...
         'FontName', 'Dotum', ...
         'Color', tickCol);
 end
 
 % ---------- draw all background density patches first ----------
-grayAlpha = 1 / nSub;
+grayAlpha = 0.11;
 
 for s = 1:nSub
     phi = phiCell{s};
@@ -225,8 +225,8 @@ for s = 1:nSub
 
     [xv, yv] = pol2cart(mu, R);
 
-    lw = 5.0;
-    ms = 7;
+    lw = 3.0;
+    ms = 6;
     if ~isempty(boldIdx) && s == boldIdx
         lw = 4.0;
         ms = 7;
@@ -254,7 +254,7 @@ if any(hasVec)
     lgd = legend(ax, hVec(hasVec), cellstr(uName(hasVec)), ...
         'Interpreter', 'none', ...
         'Box', 'off', ...
-        'Location', 'southeastoutside');
+        'Location', 'eastoutside');
 
     lgd.TextColor = labCol;
     lgd.Color     = bgCol;
@@ -265,7 +265,7 @@ end
 % ---------- subjects x 10 table output ----------
 repInfo = allSubIDs(repRow, 1:8);
 subTab  = cell2table(repInfo, 'VariableNames', ...
-    {'sessID','task','comboID','unusedChan','SessNum2','TYPE','GlobalID','subID2'});
+    {'col1','col2','col3','col4','col5','col6','col7','col8'});
 
 subTab.R     = Rvec;
 subTab.muDeg = muDeg;

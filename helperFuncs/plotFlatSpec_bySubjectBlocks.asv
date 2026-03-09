@@ -1,4 +1,4 @@
-function [hFig, subInfo] = plotFlatSpec_bySubjectBlocks(idxVec, subjectInfo, dataCell, ...
+function hFig = plotFlatSpec_bySubjectBlocks(idxVec, subjectInfo, dataCell, ...
     bgCol, labCol)
 % Drop-in wrapper around the exact block-labeling logic.
 % Keeps all hard-codes exactly as previously written.
@@ -10,14 +10,6 @@ subNames  = strtrim(subNames);
 
 % --- preprocess each cell exactly like your pipeline (mean over dim2, drop NaN rows) ---
 cleanCells = cell(size(dup1Cells));
-
-% preallocate subject-level summary table
-subInfo = table( ...
-    strings(numel(dup1Cells),1), ...
-    nan(numel(dup1Cells),1), ...
-    nan(numel(dup1Cells),1), ...
-    'VariableNames', {'subName','peakProm','peakSD'});
-
 for i = 1:numel(dup1Cells)
     tmp = dup1Cells{i};
 
@@ -31,21 +23,8 @@ for i = 1:numel(dup1Cells)
     else
         tmp(any(isnan(tmp),2), :) = [];
     end
-
-    test = max(tmp(:,219:252), [], 2);
-
-    curName = string(subNames(i));
-    curMean = mean(test, 'omitnan');
-    curSD   = std(test,  'omitnan');
-
-    disp(['subName: ' char(curName) ...
-          ' peakProm: ' num2str(curMean) ...
-          ' peakSD: ' num2str(curSD)])
-
-    subInfo.subName(i)  = curName;
-    subInfo.peakProm(i) = curMean;
-    subInfo.peakSD(i)   = curSD;
-
+    test = max(tmp(:,219:252), [],2);
+    disp(['subName: ' subNames(i) ' peakProm: ' num2str(me)])
     cleanCells{i} = tmp;
 end
 

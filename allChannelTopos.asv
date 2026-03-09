@@ -2,7 +2,7 @@
 
 codePre = 'G:\My Drive\GitHub\';
 datPre = 'R:\Neurology\Zelano_Lab\Lab_Common\QuestMirror\';
-
+figSaveDir = 'G:\My Drive\cZelano\FigsStanford';
 %% set paths
 
 addpath(genpath([codePre 'ZelanoLabScripts']))
@@ -13,6 +13,8 @@ addpath([codePre 'myFrequentUse'])
 datFolder = [datPre 'CHANDAT_processed/scalpPow_itpc']; 
 chanFiles = dir(datFolder);
 test = cellfun(@(x) length(x)>0, strfind({chanFiles.name}, '.mat'));
+chanFiles = chanFiles(test); 
+test = cellfun(@(x) length(x)>0, strfind({chanFiles.name}, 'breathing'));
 chanFiles = chanFiles(test); 
 
 
@@ -230,9 +232,11 @@ conIDXall = conIDX;
 %                        allSubIDs(:,4), allSubIDs(:,6), ...
 %                        allSubIDs(:,5));
 
-fig = plotFlatSpec_bySubjectBlocks(conIDXall, allSubIDs, allFlatSpec); 
-title('controls')
 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% RAW DATA PLOT EXAMPLE: %%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % raw breath with ob gamma in raw data
 conRawDat = allRawDat(conIDX); 
 conRawDat = cat(1, conRawDat{:}); 
@@ -244,14 +248,1458 @@ conRawDat = conRawDat .';
 
 
 
-figure; 
-tim = .002:.002:12; 
-plot(tim(130:end), conRawDat(133,130:end), 'color', 'k')
-hold on 
-plot(tim(130:end), highpass(conRawDat(133,130:end), 20, 500), 'color', 'blue', 'linewidth', 1)
+% --- colors ---
+bgCol   = [26 24 56]/255;      % #1A1838
+labCol  = [255 234 177]/255;   % #FFEAB1
+
+rawCol  = [255 92 92]/255;    % warm orange
+hpCol   = [255 92 92]/255;     % warm coral-red
+rspCol  = [	223	230	218]/255;    % light sage green
+
+% --- data ---
+tim    = .002:.002:12;
+x      = tim(130:end);
+yRaw   = conRawDat(133,130:end);
+yHP    = highpass(conRawDat(133,130:end), 20, 500);
+yResp  = smoothdata(conRawRsp(133,130:end), 'gaussian', 30);
+
+% --- figure / axes ---
+fig = figure('Color', bgCol, 'position', [0,0,1000, 600]);
+ax = axes;
+hold(ax, 'on');
+ax.Color      = bgCol;
+ax.LineWidth  = 2.2;       % bolder axes
+ax.FontSize   = 16;        % larger tick labels
+ax.FontWeight = 'bold';    % bolder ticks
+ax.FontName   = 'Dotum';
+ax.XColor     = labCol;
+ax.YColor     = labCol;
+box(ax, 'off');
+
+% --- left axis: voltage ---
+yyaxis left
+plot(x, yRaw, '-', 'Color', rawCol, 'LineWidth', 1);
+% plot(x, yHP,  '-', 'Color', hpCol,  'LineWidth', 1);
+
+ylabel('voltage (\muV)', ...
+    'FontSize', 20, ...
+    'FontWeight', 'bold', ...
+    'FontName', 'Dotum', ...
+    'Color', labCol);
+
+% --- right axis: respiration ---
 yyaxis right
-plot(tim(130:end), smoothdata(conRawRsp(133,130:end), 'gaussian', 30),...
-    'linewidth', 3)
+plot(x, yResp, '-', 'Color', rspCol, 'LineWidth', 3.2);
+ax.YColor = labCol;
+yyaxis left
+ax.YColor = labCol;
+
+yyaxis right
+ax.YColor = labCol;
+ylabel('Respiration (flow rate L/min)', ...
+    'FontSize', 20, ...
+    'FontWeight', 'bold', ...
+    'FontName', 'Dotum', ...
+    'Color', labCol);
+
+% --- x axis label ---
+xlabel('time (seconds)', ...
+    'FontSize', 20, ...
+    'FontWeight', 'bold', ...
+    'FontName', 'Dotum', ...
+    'Color', labCol);
+
+% --- final polish ---
+ax.TickDir = 'out';
+ax.TickLength = [0.018 0.018];
+title('','Color',labCol,'FontName','Dotum');
+
+% Optional: make plot area a bit cleaner
+set(gca, 'Layer', 'top');
+
+outFile = fullfile(figSaveDir, 'rawDatExamp.jpg');
+
+exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
+
+
+fig = figure('Color', bgCol, 'position', [0,0,1000, 600]);
+ax = axes;
+hold(ax, 'on');
+ax.Color      = bgCol;
+ax.LineWidth  = 2.2;       % bolder axes
+ax.FontSize   = 16;        % larger tick labels
+ax.FontWeight = 'bold';    % bolder ticks
+ax.FontName   = 'Dotum';
+ax.XColor     = labCol;
+ax.YColor     = labCol;
+box(ax, 'off');
+
+% --- left axis: voltage ---
+yyaxis left
+plot(x(x>6 & x<9.5), yRaw(x>6 & x<9.5), '-', 'Color', rawCol, 'LineWidth', 1);
+% plot(x, yHP,  '-', 'Color', hpCol,  'LineWidth', 1);
+
+ylabel('voltage (\muV)', ...
+    'FontSize', 20, ...
+    'FontWeight', 'bold', ...
+    'FontName', 'Dotum', ...
+    'Color', labCol);
+
+% --- right axis: respiration ---
+yyaxis right
+plot(x(x>6 & x<9.5), yResp(x>6 & x<9.5), '-', 'Color', rspCol, 'LineWidth', 3.2);
+ax.YColor = labCol;
+yyaxis left
+ax.YColor = labCol;
+
+yyaxis right
+ax.YColor = labCol;
+ylabel('Respiration (flow rate L/min)', ...
+    'FontSize', 20, ...
+    'FontWeight', 'bold', ...
+    'FontName', 'Dotum', ...
+    'Color', labCol);
+
+% --- x axis label ---
+xlabel('time (seconds)', ...
+    'FontSize', 20, ...
+    'FontWeight', 'bold', ...
+    'FontName', 'Dotum', ...
+    'Color', labCol);
+
+% --- final polish ---
+ax.TickDir = 'out';
+ax.TickLength = [0.018 0.018];
+title('','Color',labCol,'FontName','Dotum');
+
+% Optional: make plot area a bit cleaner
+set(gca, 'Layer', 'top');
+
+outFile = fullfile(figSaveDir, 'rawDatExampZoom.jpg');
+
+exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
+
+
+
+%%%%%%%%%%%%%%%%%%%%% SINGLE BREATH LEVEL POWER SPECTRA SHOWING GAMMA%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+[fig, subInfo] = plotFlatSpec_bySubjectBlocks(conIDXall, allSubIDs, allFlatSpec, ...
+    bgCol, labCol); 
+subInfo.SESSNUM = ones(height(subInfo), 1);
+allSubInfo = subInfo; 
+c = colorbar;
+c.Color = labCol;
+c.Label.String = 'Spectral Prominence (log10(power / aperiodic fit))';
+c.Label.FontSize = 16;
+c.Label.FontWeight = 'bold';
+c.Label.FontName = 'Dotum';
+c.Label.Color = labCol;
+% title('controls')
+outFile = fullfile(figSaveDir, 'controlPowerSpectra.jpg');
+
+exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%% CONSISTENT PREFERRED PHASE OF GAMMA OSCILLATION%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+conColors = [255 190 120;
+ 190 160 255] / 255
+
+
+[hFig, subInfo]  = plot_gamRspPACphase_circDensity(conIDXall, allSubIDs, allBehDat, ...
+                    conColors, labCol, bgCol)
+allSubInfo = [allSubInfo subInfo];
+
+outFile = fullfile(figSaveDir, 'controlPhasePref.png');
+
+
+exportgraphics(hFig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
+
+
+
+%%%%%%%%%%%%%%%%%%%%% PEAKS IN VERSUS OUT OF PREFERRED PHASE %%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+chanDat = load('R:\Neurology\Zelano_Lab\Lab_Common\QuestMirror\CHANDAT_processed\250904_OBE_NWU_TI_macro_breathingTask_48.mat');
+chanDat = chanDat.chanDat; 
+
+idx = cellfun(@(x,y,z,q) strcmp('Cz', x) & ...
+                       strcmp('obe', lower(y)) & ...
+                       z==1 & q ~= 14,     allSubIDs(:,4), allSubIDs(:,6), ...
+                                 allSubIDs(:,5), allSubIDs(:,7));
+
+idx = find(idx); 
+test = allGamEnv(idx);
+test = cat(1, test{:}); 
+
+nSub = length(idx); 
+gamRspPACphase_idx50 = nan(size(test,1),1); 
+gamPeakidx50         = nan(size(test,1),1); 
+HRV_RSA              = nan(size(test,1),1); 
+HRV_SDNN             = nan(size(test,1),1); 
+HRV_RMS              = nan(size(test,1),1); 
+bLen                 = nan(size(test,1),1); 
+bAmp                 = nan(size(test,1),1); 
+gamFreq              = nan(size(test,1),1); 
+subidx         = nan(size(test,1),1); 
+phiBins = linspace(-pi,pi,51); 
+jj = 1; 
+for ii = 1:length(idx)
+    T = allBehDat{idx(ii)}; 
+    Uv= T.useVec; 
+    L = sum(Uv); 
+    tmp = T.gamRspPACphase(Uv); 
+    binidx = arrayfun(@(x) find(phiBins>x,1), tmp, 'uniformoutput', false);
+    emptyCells = cellfun(@(x)  isempty(x), binidx); 
+    binidx(emptyCells) = {1}; 
+    binidx = cell2mat(binidx); 
+    binidx2 = mod(binidx+25, 50); 
+    gamRspPACphase_idx50(jj:jj+L-1) = binidx2;
+    gamPeakidx50(jj:jj+L-1)         = T.gamPeakidx50(Uv); 
+    HRV_RSA(jj:jj+L-1)              = T.HRV_RSAamp(Uv); 
+    HRV_SDNN(jj:jj+L-1)             = T.HRV_SDNN30(Uv); 
+    HRV_RMS(jj:jj+L-1)              = T.HRV_RMSSD30(Uv); 
+    bLen(jj:jj+L-1)                 = T.length(Uv); 
+    bAmp(jj:jj+L-1)                 = T.amp(Uv); 
+    gamFreq(jj:jj+L-1)                 = T.gamFreq(Uv); 
+    subidx(jj:jj+L-1)               = idx(ii); 
+    jj = jj+L; 
+end
+nanidx = isnan(test(:,2)); 
+gamPeakidx50(nanidx) = []; 
+gamRspPACphase_idx50(nanidx) = []; 
+test(nanidx,:) = []; 
+subidx(nanidx) = []; 
+HRV_RMS(nanidx) = []; 
+HRV_SDNN(nanidx)= []; 
+HRV_RSA(nanidx) = []; 
+bLen(nanidx)= []; 
+bAmp(nanidx) = []; 
+gamFreq(nanidx) = []; 
+rawGam = allGamEnv(idx);
+rawGam = cat(1, rawGam{:});
+rawGam(nanidx,:) = []; 
+
+test   = sqrt(test); 
+nSub   = length(unique(subidx));
+subKeys = unique(subidx); 
+for ii = 1:nSub
+    tmp = test(subidx==subKeys(ii),:); 
+    overallM = mean(tmp, 'all'); 
+    overallS = std(tmp, [], 'all'); 
+    tmp = (tmp - overallM) ./ overallS; 
+    test(subidx==subKeys(ii),:) = tmp; 
+end
+% --- circular mean on 1..50 scale ---
+x = gamRspPACphase_idx50(~isnan(gamRspPACphase_idx50));   % values on 1..50 circular scale
+ang = (x-1) / 50 * 2*pi;                                  % map to 0..2pi
+muAng = angle(mean(exp(1i*ang)));                         % circular mean angle
+mu50  = mod(muAng, 2*pi) / (2*pi) * 50 + 1;
+
+% --- sorted image data ---
+[sortedPeakidx50, order] = sort(gamPeakidx50);
+imgDat = test(order, :);
+xImg   = 1:size(imgDat,2);
+yImg   = 1:size(imgDat,1);
+
+respMean = mean(chanDat.tf.breathSeg, 1, 'omitnan');
+xResp    = 1:numel(respMean);
+
+% --- figure / axes ---
+fig = figure('Color', bgCol, 'Position', [80 80 1000 700], 'InvertHardcopy', 'off');
+ax = axes('Parent', fig);
+hold(ax, 'on');
+
+ax.Color      = bgCol;
+ax.LineWidth  = 2.2;
+ax.FontSize   = 16;
+ax.FontWeight = 'bold';
+ax.FontName   = 'Dotum';
+ax.XColor     = labCol;
+ax.TickDir    = 'out';
+ax.TickLength = [0.018 0.018];
+box(ax, 'off');
+
+% --- left axis: heatmap ---
+yyaxis left
+imagesc(xImg, yImg, movmean(imgDat, 3, 2))
+set(ax, 'YDir', 'normal')
+clim([-1 3])
+colormap(ax, turbo)
+
+ax.YAxis(1).Color = labCol;
+xlim([1 50])
+xlabel('respiratory phase bin', ...
+    'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Dotum', 'Color', labCol);
+
+ylabel('Breaths Sorted by \gamma Maximum Timing', ...
+    'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Dotum', 'Color', labCol);
+
+% circular mean marker
+xline(mu50, '--', 'Color', rspCol, 'LineWidth', 4);
+xline([mu50-5 mu50+5],'--', 'color', 'red', 'linewidth', 2, 'linestyle', '--')
+
+% --- colorbar styling ---
+c = colorbar;
+c.Color = labCol;
+c.LineWidth = 2;
+c.FontSize = 16;
+c.FontWeight = 'bold';
+c.FontName = 'Dotum';
+c.Label.String = '\gamma power (z-scored)';
+c.Label.Color = labCol;
+c.Label.FontSize = 18;
+c.Label.FontWeight = 'bold';
+c.Label.FontName = 'Dotum';
+
+% --- right axis: mean respiration trace ---
+yyaxis right
+plot(xResp, respMean, 'Color', rspCol, 'LineWidth', 3.2)
+
+ax.YAxis(2).Color = bgCol;
+% ylabel('mean respiration', ...
+%     'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Dotum', 'Color', labCol);
+
+% title('Sorted heatmap with circular-mean respiratory phase and mean respiration trace', ...
+%     'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Dotum', 'Color', labCol);
+
+set(gca, 'Layer', 'top');
+
+outFile = fullfile(figSaveDir, 'peakSortedHeatmap.png');
+
+
+exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
+
+
+
+%%%%%%%%%%%% STATISTICAL COMPARISON OF IN PHASE V. OUT OF PHASE BREATH
+%%%%%%%%%%%% GAMMA
+inPhaseBreaths = gamPeakidx50>mu50-5 & gamPeakidx50<mu50+5;
+
+sum(inPhaseBreaths) / length(inPhaseBreaths)
+
+tmp = gamPeakidx50; 
+tmp(tmp<4) = 4; 
+tmp(tmp>47) = 47; 
+bidx = 1:size(test,1); 
+bidx = bidx(:); 
+peakVals = arrayfun(@(x,y) median(test(x,y-3:y+3))-...
+    median(test(x,[1:y-3 y+3:50])), bidx, tmp(:)); 
+
+mean(peakVals(inPhaseBreaths))
+mean(peakVals(~inPhaseBreaths))
+
+vars = {'HRV_RMS','HRV_RSA','HRV_SDNN', 'peakVals', 'bLen', 'bAmp', 'gamFreq'};
+
+for i = 1:numel(vars)
+    for s = 1:2
+        allSubInfo.inPhase(s) = sum(inPhaseBreaths(subidx==subKeys(s))) /...
+            sum(subidx==subKeys(s));
+        x = eval(vars{i});
+        x = x(subidx==subKeys(s)); 
+        tmpPhase = inPhaseBreaths(subidx==subKeys(s)); 
+        g1 = x(tmpPhase);
+        g0 = x(~tmpPhase);
+    
+        m1 = mean(g1, 'omitnan');
+        m0 = mean(g0, 'omitnan');
+        s1 = std(g1); 
+        s0 = std(g0); 
+        [h,p,ci,stats] = ttest2(g1, g0);
+
+        % Cohen's d for independent samples
+        n1 = numel(g1);
+        n0 = numel(g0);
+        sp = sqrt(((n1-1)*s1^2 + (n0-1)*s0^2) / (n1+n0-2));
+        d = (m1 - m0) / sp;
+    
+        fprintf('\n%s\n', vars{i});
+        fprintf('  in-phase mean:    %.4f (%.4f)\n', m1, s1);
+        fprintf('  out-of-phase mean %.4f (%.4f)\n', m0, s0);
+        fprintf('  t(%0.1f) = %.4f, p = %.6f\n', stats.df, stats.tstat, p);
+        fprintf('  Cohen''s d = %.4f\n', d);
+
+        allSubInfo.([vars{i} '_inPhase'])(s) = m1; 
+        allSubInfo.([vars{i} '_outPhase'])(s) = m0; 
+    end
+end
+
+
+breakVals = -7.8248:10:60;
+
+%%%%%%% SHOW IN AND OUT OF PHASE MEAN AMPLITUDE ENVELOPE: 
+
+fig = figure('Color', bgCol, 'Position', [80 80 900 400], 'InvertHardcopy', 'off');
+ax = axes('Parent', fig);
+hold(ax, 'on');
+
+ax.Color      = bgCol;
+ax.LineWidth  = 2.2;
+ax.FontSize   = 16;
+ax.FontWeight = 'bold';
+ax.FontName   = 'Dotum';
+ax.XColor     = labCol;
+ax.YColor     = labCol;
+ax.TickDir    = 'out';
+ax.TickLength = [0.018 0.018];
+box(ax, 'off');
+
+% warm line colors
+plotCols = [ ...
+    255 190 120;
+    255 140  66;
+    255  92  92;
+    223 160 255;
+    255 214 102;
+    255 160 122;
+    190 160 255] / 255;
+
+xVec   = 1:size(test,2);
+legTxt = {};
+hLine  = gobjects(0);
+cc     = 1;
+
+inLeg = {"early", "in phase", "late 1", "late 2", "late 3"};
+
+for ii = 1:length(breakVals)-1
+    useIdx = gamPeakidx50 > breakVals(ii) & gamPeakidx50 < breakVals(ii+1);
+    tmp = test(useIdx, :);
+
+    if size(tmp,1) > 10
+        curMean = mean(tmp, 1, 'omitnan');
+        curN    = sum(~isnan(tmp), 1);
+        curSEM  = std(tmp, 0, 1, 'omitnan') ./ sqrt(curN);
+
+        thisCol = plotCols(mod(cc-1,size(plotCols,1))+1,:);
+        % --- line width: make ii == 3 bolder ---
+        if ii == 3
+            lw = 5;
+            thisCol = rspCol; 
+        else
+            lw = 2.8;
+        end
+        % --- SEM shading ---
+        hp = patch(ax, ...
+            [xVec fliplr(xVec)], ...
+            [curMean-curSEM fliplr(curMean+curSEM)], ...
+            thisCol, ...
+            'FaceAlpha', 0.18, ...
+            'EdgeColor', 'none');
+        hp.HandleVisibility = 'off';
+
+        
+
+        hLine(cc) = plot(ax, xVec, curMean, ...
+            'LineWidth', lw, ...
+            'Color', thisCol);
+
+        legTxt{cc} = sprintf('%s (n = %d)', ...
+            inLeg{cc}, size(tmp,1));
+        cc = cc + 1;
+    end
+end
+
+xlabel('Respiratory phase bin', ...
+    'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Dotum', 'Color', labCol);
+
+ylabel('Mean power (z-scored)', ...
+    'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Dotum', 'Color', labCol);
+
+% title('Mean profiles across gamma-peak bins', ...
+%     'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Dotum', 'Color', labCol);
+
+xlim([1 size(test,2)])
+
+
+lgd = legend(ax, hLine, legTxt, ...
+    'Location', 'eastoutside', ...
+    'Box', 'off', ...
+    'TextColor', labCol, ...
+    'Color', bgCol, ...
+    'FontName', 'Dotum', ...
+    'FontSize', 13, 'AutoUpdate','off');
+
+xline(mu50, '--', 'Color', rspCol, 'LineWidth', 4);
+
+set(gca, 'Layer', 'top');
+outFile = fullfile(figSaveDir, 'ampLinePlotsByEpoch.png');
+
+
+exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
+
+writetable(allSubInfo, 'G:\My Drive\cZelano\FigsStanford\ConDat.csv')
+
+
+%%%%%%%%%%%%%%%%%%%%% IS ANYTHING DIFFERENT FOR IN PHASE/OUT OF PHASE %%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+conIDX = cellfun(@(type,sess,subID)  ...
+                       strcmpi('obe', type) & ...
+                       sess==1 &  ...
+                       subID~=14, ...
+                        allSubIDs(:,6), ...
+                       allSubIDs(:,5), allSubIDs(:,7));
+hFig = topo_fromBehVarStem_inOutPhase(allSubIDs, allBehDat, conIDX, 'thetaPow_1_', 17)
+
+
+
+%% %%%%%%%%%%%%%%%%%%% PATIENT SESSION 1 %%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+allSubIDs{104,4} = 'Fz'; %hard code hack to get JH and KS in session 1
+dup1IDX = cellfun(@(chan,type,sess,subID) strcmp('Fz', chan) & ...
+                       strcmpi('dupi', type) & ...
+                       sess==1 & ...
+                       ismember(subID, [2,3,5,10,12,17]),...
+                       allSubIDs(:,4), allSubIDs(:,6), ...
+                       allSubIDs(:,5), allSubIDs(:,7));
+
+
+%use JH session 3 rather than 2 because it has a better gamma oscillation:
+allSubIDs{104,4} = 'Fz'; %hard code hack to get JH and KS in session 1
+allSubIDs(129:160, 5) = {3};
+allSubIDs(161:192, 5) = {2};
+dup2IDX = cellfun(@(chan,type,sess,subID) strcmp('P3', chan) & ...
+                       strcmpi('dupi', type) & ...
+                       sess==2 & ...
+                       ismember(subID, [1,4,7,11,13,18]),...
+                       allSubIDs(:,4), allSubIDs(:,6), ...
+                       allSubIDs(:,5), allSubIDs(:,7));
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% RAW DATA PLOT EXAMPLE: %%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% raw breath with ob gamma in raw data
+dup1RawDat = allRawDat(dup1IDX); 
+dup1RawDat = cat(1, dup1RawDat{:}); 
+conRawRsp = allResp(dup1IDX); 
+conRawRsp = cat(1, conRawRsp{:}); 
+dup1RawDat(isnan(dup1RawDat)) = 1; 
+dup1RawDat = highpass(double(dup1RawDat).', 1, 500); 
+dup1RawDat = dup1RawDat .';
+
+
+% 
+% 
+% 
+% % SEARCH CODE TO FIND GOOD SINGLE RAW TRIAL, ALREADY DONE.
+% 
+% figure; 
+% tim = .002:.002:12; 
+% plot(tim, dup1RawDat(139,:))
+% yyaxis right
+% plot(tim, dup1RawDat(139,:))
+% 
+% 
+% for ii = 1:1000
+%     if max(dup1RawDat(ii,:))<50 && min(dup1RawDat(ii,:))>-50
+%         figure; 
+%         plot(tim, dup1RawDat(ii,:))
+%         yyaxis right
+%         plot(tim, conRawRsp(ii,:))
+%         title(ii)
+%     end
+% end
+
+
+
+
+ploti = 813; 
+
+% --- colors ---
+bgCol   = [26 24 56]/255;      % #1A1838
+labCol  = [255 234 177]/255;   % #FFEAB1
+
+rawCol  = [255 92 92]/255;    % warm orange
+hpCol   = [255 92 92]/255;     % warm coral-red
+rspCol  = [	223	230	218]/255;    % light sage green
+
+% --- data ---
+tim    = .002:.002:12;
+x      = tim(130:end);
+yRaw   = dup1RawDat(ploti,130:end);
+yHP    = highpass(dup1RawDat(ploti,130:end), 20, 500);
+yResp  = smoothdata(conRawRsp(ploti,130:end), 'gaussian', 30);
+
+% --- figure / axes ---
+fig = figure('Color', bgCol, 'position', [0,0,1000, 600]);
+ax = axes;
+hold(ax, 'on');
+ax.Color      = bgCol;
+ax.LineWidth  = 2.2;       % bolder axes
+ax.FontSize   = 16;        % larger tick labels
+ax.FontWeight = 'bold';    % bolder ticks
+ax.FontName   = 'Dotum';
+ax.XColor     = labCol;
+ax.YColor     = labCol;
+box(ax, 'off');
+
+% --- left axis: voltage ---
+yyaxis left
+plot(x, yRaw, '-', 'Color', rawCol, 'LineWidth', 1);
+ylim([-30 40])
+% plot(x, yHP,  '-', 'Color', hpCol,  'LineWidth', 1);
+
+ylabel('voltage (\muV)', ...
+    'FontSize', 20, ...
+    'FontWeight', 'bold', ...
+    'FontName', 'Dotum', ...
+    'Color', labCol);
+
+% --- right axis: respiration ---
+yyaxis right
+plot(x, yResp, '-', 'Color', rspCol, 'LineWidth', 3.2);
+ax.YColor = labCol;
+yyaxis left
+ax.YColor = labCol;
+
+yyaxis right
+ax.YColor = labCol;
+ylabel('Respiration (flow rate L/min)', ...
+    'FontSize', 20, ...
+    'FontWeight', 'bold', ...
+    'FontName', 'Dotum', ...
+    'Color', labCol);
+
+% --- x axis label ---
+xlabel('time (seconds)', ...
+    'FontSize', 20, ...
+    'FontWeight', 'bold', ...
+    'FontName', 'Dotum', ...
+    'Color', labCol);
+
+% --- final polish ---
+ax.TickDir = 'out';
+ax.TickLength = [0.018 0.018];
+title('','Color',labCol,'FontName','Dotum');
+
+% Optional: make plot area a bit cleaner
+set(gca, 'Layer', 'top');
+
+outFile = fullfile(figSaveDir, 'rawDatExampDupi.jpg');
+
+exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
+
+
+fig = figure('Color', bgCol, 'position', [0,0,1000, 600]);
+ax = axes;
+hold(ax, 'on');
+ax.Color      = bgCol;
+ax.LineWidth  = 2.2;       % bolder axes
+ax.FontSize   = 16;        % larger tick labels
+ax.FontWeight = 'bold';    % bolder ticks
+ax.FontName   = 'Dotum';
+ax.XColor     = labCol;
+ax.YColor     = labCol;
+box(ax, 'off');
+
+% --- left axis: voltage ---
+yyaxis left
+plot(x(x>.26 & x<4.7), yRaw(x>.26 & x<4.7), '-', 'Color', rawCol, 'LineWidth', 1);
+% plot(x, yHP,  '-', 'Color', hpCol,  'LineWidth', 1);
+ylim([-25 20])
+ylabel('voltage (\muV)', ...
+    'FontSize', 20, ...
+    'FontWeight', 'bold', ...
+    'FontName', 'Dotum', ...
+    'Color', labCol);
+
+% --- right axis: respiration ---
+yyaxis right
+plot(x(x>.26 & x<4.7), yResp(x>.26 & x<4.7), '-', 'Color', rspCol, 'LineWidth', 3.2);
+ax.YColor = labCol;
+yyaxis left
+ax.YColor = labCol;
+
+yyaxis right
+ax.YColor = labCol;
+ylabel('Respiration (flow rate L/min)', ...
+    'FontSize', 20, ...
+    'FontWeight', 'bold', ...
+    'FontName', 'Dotum', ...
+    'Color', labCol);
+
+% --- x axis label ---
+xlabel('time (seconds)', ...
+    'FontSize', 20, ...
+    'FontWeight', 'bold', ...
+    'FontName', 'Dotum', ...
+    'Color', labCol);
+
+% --- final polish ---
+ax.TickDir = 'out';
+ax.TickLength = [0.018 0.018];
+title('','Color',labCol,'FontName','Dotum');
+
+% Optional: make plot area a bit cleaner
+set(gca, 'Layer', 'top');
+
+outFile = fullfile(figSaveDir, 'rawDatExampZoomDupi.jpg');
+
+exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
+
+
+
+%%%%%%%%%%%%%%%%%%%%% SINGLE BREATH LEVEL POWER SPECTRA SHOWING GAMMA%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+[fig, subInfo] = plotFlatSpec_bySubjectBlocks(dup1IDX, allSubIDs, allFlatSpec, ...
+    bgCol, labCol); 
+subInfo.SESSNUM = ones(height(subInfo), 1);
+allSubInfo = subInfo; 
+c = colorbar;
+c.Color = labCol;
+c.Label.String = 'Spectral Prominence (log10(power / aperiodic fit))';
+c.Label.FontSize = 16;
+c.Label.FontWeight = 'bold';
+c.Label.FontName = 'Dotum';
+c.Label.Color = labCol;
+% title('controls')
+outFile = fullfile(figSaveDir, 'dup1PowerSpectra.jpg');
+
+exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
+
+[fig, subInfo] = plotFlatSpec_bySubjectBlocks(dup2IDX, allSubIDs, allFlatSpec, ...
+    bgCol, labCol); 
+subInfo.SESSNUM = ones(height(subInfo), 1)*2;
+allSubInfo = [allSubInfo ; subInfo]; 
+c = colorbar;
+c.Color = labCol;
+c.Label.String = 'Spectral Prominence (log10(power / aperiodic fit))';
+c.Label.FontSize = 16;
+c.Label.FontWeight = 'bold';
+c.Label.FontName = 'Dotum';
+c.Label.Color = labCol;
+% title('controls')
+outFile = fullfile(figSaveDir, 'dup2PowerSpectra.jpg');
+
+exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
+
+
+%%%%%%%%%%%%%%%%%%%%% CONSISTENT PREFERRED PHASE OF GAMMA OSCILLATION%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+cols = [
+    0.86 0.74 0.58   % sand
+    0.49 0.73 0.78   % seafoam
+    0.85 0.45 0.38   % sunset red
+    0.78 0.62 0.24   % yellow ocher
+    0.72 0.67 0.84   % muted lavender
+    0.38 0.72 0.32   % plant green
+];
+
+
+[hFig, subInfo]  = plot_gamRspPACphase_circDensity(dup1IDX, allSubIDs, allBehDat, ...
+                    cols, labCol, bgCol)
+
+
+
+
+outFile = fullfile(figSaveDir, 'dup1PhasePref.png');
+
+
+exportgraphics(hFig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
+
+
+[hFig, subInfo2]  = plot_gamRspPACphase_circDensity(dup2IDX, allSubIDs, allBehDat, ...
+                    cols, labCol, bgCol)
+
+
+
+
+outFile = fullfile(figSaveDir, 'dup2PhasePref.png');
+
+
+exportgraphics(hFig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
+
+subInfo = [ subInfo; subInfo2]; 
+
+allSubInfo = [allSubInfo subInfo];
+
+
+%%%%%%%%%%%%%%%%%%%%% PEAKS IN VERSUS OUT OF PREFERRED PHASE %%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% chanDat = load('R:\Neurology\Zelano_Lab\Lab_Common\QuestMirror\CHANDAT_processed\250904_OBE_NWU_TI_macro_breathingTask_48.mat');
+% chanDat = chanDat.chanDat; 
+
+idx = dup1IDX; 
+
+idx = find(idx); 
+test = allGamEnv(idx);
+test = cat(1, test{:}); 
+
+nSub = length(idx); 
+gamRspPACphase_idx50 = nan(size(test,1),1); 
+gamPeakidx50         = nan(size(test,1),1); 
+HRV_RSA              = nan(size(test,1),1); 
+HRV_SDNN             = nan(size(test,1),1); 
+HRV_RMS              = nan(size(test,1),1); 
+bLen                 = nan(size(test,1),1); 
+bAmp                 = nan(size(test,1),1); 
+gamFreq              = nan(size(test,1),1); 
+subidx         = nan(size(test,1),1); 
+phiBins = linspace(-pi,pi,51); 
+jj = 1; 
+for ii = 1:length(idx)
+    T = allBehDat{idx(ii)}; 
+    Uv= T.useVec; 
+    L = sum(Uv); 
+    tmp = T.gamRspPACphase(Uv); 
+    binidx = arrayfun(@(x) find(phiBins>x,1), tmp, 'uniformoutput', false);
+    emptyCells = cellfun(@(x)  isempty(x), binidx); 
+    binidx(emptyCells) = {1}; 
+    binidx = cell2mat(binidx); 
+    binidx2 = mod(binidx+25, 50); 
+    gamRspPACphase_idx50(jj:jj+L-1) = binidx2;
+    gamPeakidx50(jj:jj+L-1)         = T.gamPeakidx50(Uv); 
+    HRV_RSA(jj:jj+L-1)              = T.HRV_RSAamp(Uv); 
+    HRV_SDNN(jj:jj+L-1)             = T.HRV_SDNN30(Uv); 
+    HRV_RMS(jj:jj+L-1)              = T.HRV_RMSSD30(Uv); 
+    bLen(jj:jj+L-1)                 = T.length(Uv); 
+    bAmp(jj:jj+L-1)                 = T.amp(Uv); 
+    gamFreq(jj:jj+L-1)                 = T.gamFreq(Uv); 
+    subidx(jj:jj+L-1)               = idx(ii); 
+    jj = jj+L; 
+end
+nanidx = isnan(test(:,2)); 
+gamPeakidx50(nanidx) = []; 
+gamRspPACphase_idx50(nanidx) = []; 
+test(nanidx,:) = []; 
+subidx(nanidx) = []; 
+HRV_RMS(nanidx) = []; 
+HRV_SDNN(nanidx)= []; 
+HRV_RSA(nanidx) = []; 
+bLen(nanidx)= []; 
+bAmp(nanidx) = []; 
+gamFreq(nanidx) = []; 
+rawGam = allGamEnv(idx);
+rawGam = cat(1, rawGam{:});
+rawGam(nanidx,:) = []; 
+
+test   = sqrt(test); 
+nSub   = length(unique(subidx));
+subKeys = unique(subidx); 
+for ii = 1:nSub
+    tmp = test(subidx==subKeys(ii),:); 
+    overallM = mean(tmp, 'all'); 
+    overallS = std(tmp, [], 'all'); 
+    tmp = (tmp - overallM) ./ overallS; 
+    test(subidx==subKeys(ii),:) = tmp; 
+end
+% --- circular mean on 1..50 scale ---
+x = gamRspPACphase_idx50(~isnan(gamRspPACphase_idx50));   % values on 1..50 circular scale
+ang = (x-1) / 50 * 2*pi;                                  % map to 0..2pi
+muAng = angle(mean(exp(1i*ang)));                         % circular mean angle
+% mu50  = mod(muAng, 2*pi) / (2*pi) * 50 + 1; %%%%%%KEEPING CONTROL MEAN!!!
+
+% --- sorted image data ---
+[sortedPeakidx50, order] = sort(gamPeakidx50);
+imgDat = test(order, :);
+xImg   = 1:size(imgDat,2);
+yImg   = 1:size(imgDat,1);
+
+respMean = mean(chanDat.tf.breathSeg, 1, 'omitnan');
+xResp    = 1:numel(respMean);
+
+% --- figure / axes ---
+fig = figure('Color', bgCol, 'Position', [80 80 1000 700], 'InvertHardcopy', 'off');
+ax = axes('Parent', fig);
+hold(ax, 'on');
+
+ax.Color      = bgCol;
+ax.LineWidth  = 2.2;
+ax.FontSize   = 16;
+ax.FontWeight = 'bold';
+ax.FontName   = 'Dotum';
+ax.XColor     = labCol;
+ax.TickDir    = 'out';
+ax.TickLength = [0.018 0.018];
+box(ax, 'off');
+
+% --- left axis: heatmap ---
+yyaxis left
+imagesc(xImg, yImg, movmean(imgDat, 3, 2))
+set(ax, 'YDir', 'normal')
+clim([-1 3])
+colormap(ax, turbo)
+
+ax.YAxis(1).Color = labCol;
+xlim([1 50])
+xlabel('respiratory phase bin', ...
+    'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Dotum', 'Color', labCol);
+
+ylabel('Breaths Sorted by \gamma Maximum Timing', ...
+    'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Dotum', 'Color', labCol);
+
+% circular mean marker
+xline(mu50, '--', 'Color', rspCol, 'LineWidth', 4);
+xline([mu50-5 mu50+5],'--', 'color', 'red', 'linewidth', 2, 'linestyle', '--')
+
+% --- colorbar styling ---
+c = colorbar;
+c.Color = labCol;
+c.LineWidth = 2;
+c.FontSize = 16;
+c.FontWeight = 'bold';
+c.FontName = 'Dotum';
+c.Label.String = '\gamma power (z-scored)';
+c.Label.Color = labCol;
+c.Label.FontSize = 18;
+c.Label.FontWeight = 'bold';
+c.Label.FontName = 'Dotum';
+
+% --- right axis: mean respiration trace ---
+yyaxis right
+plot(xResp, respMean, 'Color', rspCol, 'LineWidth', 3.2)
+
+ax.YAxis(2).Color = bgCol;
+% ylabel('mean respiration', ...
+%     'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Dotum', 'Color', labCol);
+
+% title('Sorted heatmap with circular-mean respiratory phase and mean respiration trace', ...
+%     'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Dotum', 'Color', labCol);
+
+set(gca, 'Layer', 'top');
+
+outFile = fullfile(figSaveDir, 'peakSortedHeatmap_dup1.png');
+
+
+exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
+
+
+
+%%%%%%%%%%%% STATISTICAL COMPARISON OF IN PHASE V. OUT OF PHASE BREATH
+%%%%%%%%%%%% GAMMA
+inPhaseBreaths = gamPeakidx50>mu50-5 & gamPeakidx50<mu50+5;
+
+sum(inPhaseBreaths) / length(inPhaseBreaths)
+
+tmp = gamPeakidx50; 
+tmp(tmp<4) = 4; 
+tmp(tmp>47) = 47; 
+bidx = 1:size(test,1); 
+bidx = bidx(:); 
+peakVals = arrayfun(@(x,y) median(test(x,y-3:y+3))-...
+    median(test(x,[1:y-3 y+3:50])), bidx, tmp(:)); 
+
+mean(peakVals(inPhaseBreaths))
+mean(peakVals(~inPhaseBreaths))
+
+vars = {'HRV_RMS','HRV_RSA','HRV_SDNN', 'peakVals', 'bLen', 'bAmp', 'gamFreq'};
+subInfo1 = table; 
+for i = 1:numel(vars)
+    for s = 1:nSub
+        subInfo1.inPhase(s) = sum(inPhaseBreaths(subidx==subKeys(s))) /...
+            sum(subidx==subKeys(s));
+        x = eval(vars{i});
+        x = x(subidx==subKeys(s)); 
+        tmpPhase = inPhaseBreaths(subidx==subKeys(s)); 
+        g1 = x(tmpPhase);
+        g0 = x(~tmpPhase);
+    
+        m1 = mean(g1, 'omitnan');
+        m0 = mean(g0, 'omitnan');
+        s1 = std(g1); 
+        s0 = std(g0); 
+        [h,p,ci,stats] = ttest2(g1, g0);
+
+        % Cohen's d for independent samples
+        n1 = numel(g1);
+        n0 = numel(g0);
+        sp = sqrt(((n1-1)*s1^2 + (n0-1)*s0^2) / (n1+n0-2));
+        d = (m1 - m0) / sp;
+    
+        fprintf('\n%s\n', vars{i});
+        fprintf('  in-phase mean:    %.4f (%.4f)\n', m1, s1);
+        fprintf('  out-of-phase mean %.4f (%.4f)\n', m0, s0);
+        fprintf('  t(%0.1f) = %.4f, p = %.6f\n', stats.df, stats.tstat, p);
+        fprintf('  Cohen''s d = %.4f\n', d);
+
+        subInfo1.([vars{i} '_inPhase'])(s) = m1; 
+        subInfo1.([vars{i} '_outPhase'])(s) = m0; 
+    end
+end
+
+
+breakVals = -7.8248:10:60;
+
+%%%%%%% SHOW IN AND OUT OF PHASE MEAN AMPLITUDE ENVELOPE: 
+
+fig = figure('Color', bgCol, 'Position', [80 80 900 400], 'InvertHardcopy', 'off');
+ax = axes('Parent', fig);
+hold(ax, 'on');
+
+ax.Color      = bgCol;
+ax.LineWidth  = 2.2;
+ax.FontSize   = 16;
+ax.FontWeight = 'bold';
+ax.FontName   = 'Dotum';
+ax.XColor     = labCol;
+ax.YColor     = labCol;
+ax.TickDir    = 'out';
+ax.TickLength = [0.018 0.018];
+box(ax, 'off');
+
+% warm line colors
+plotCols = [ ...
+    255 190 120;
+    255 140  66;
+    255  92  92;
+    223 160 255;
+    255 214 102;
+    255 160 122;
+    190 160 255] / 255;
+
+xVec   = 1:size(test,2);
+legTxt = {};
+hLine  = gobjects(0);
+cc     = 1;
+
+inLeg = {"early", "in phase", "late 1", "late 2", "late 3"};
+
+for ii = 1:length(breakVals)-1
+    useIdx = gamPeakidx50 > breakVals(ii) & gamPeakidx50 < breakVals(ii+1);
+    tmp = test(useIdx, :);
+
+    if size(tmp,1) > 10
+        curMean = mean(tmp, 1, 'omitnan');
+        curN    = sum(~isnan(tmp), 1);
+        curSEM  = std(tmp, 0, 1, 'omitnan') ./ sqrt(curN);
+
+        thisCol = plotCols(mod(cc-1,size(plotCols,1))+1,:);
+        % --- line width: make ii == 3 bolder ---
+        if ii == 3
+            lw = 5;
+            thisCol = rspCol; 
+        else
+            lw = 2.8;
+        end
+        % --- SEM shading ---
+        hp = patch(ax, ...
+            [xVec fliplr(xVec)], ...
+            [curMean-curSEM fliplr(curMean+curSEM)], ...
+            thisCol, ...
+            'FaceAlpha', 0.18, ...
+            'EdgeColor', 'none');
+        hp.HandleVisibility = 'off';
+
+        
+
+        hLine(cc) = plot(ax, xVec, curMean, ...
+            'LineWidth', lw, ...
+            'Color', thisCol);
+
+        legTxt{cc} = sprintf('%s (n = %d)', ...
+            inLeg{cc}, size(tmp,1));
+        cc = cc + 1;
+    end
+end
+
+xlabel('Respiratory phase bin', ...
+    'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Dotum', 'Color', labCol);
+
+ylabel('Mean power (z-scored)', ...
+    'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Dotum', 'Color', labCol);
+
+% title('Mean profiles across gamma-peak bins', ...
+%     'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Dotum', 'Color', labCol);
+
+xlim([1 size(test,2)])
+
+
+lgd = legend(ax, hLine, legTxt, ...
+    'Location', 'eastoutside', ...
+    'Box', 'off', ...
+    'TextColor', labCol, ...
+    'Color', bgCol, ...
+    'FontName', 'Dotum', ...
+    'FontSize', 13, 'AutoUpdate','off');
+
+xline(mu50, '--', 'Color', rspCol, 'LineWidth', 4);
+
+set(gca, 'Layer', 'top');
+outFile = fullfile(figSaveDir, 'ampLinePlotsByEpoch_dup1.png');
+
+
+exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%DO IT AGAIN FOR DUPI 2! 
+
+%%%%%%%%%%%%%%%%%%%%% PEAKS IN VERSUS OUT OF PREFERRED PHASE %%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% chanDat = load('R:\Neurology\Zelano_Lab\Lab_Common\QuestMirror\CHANDAT_processed\250904_OBE_NWU_TI_macro_breathingTask_48.mat');
+% chanDat = chanDat.chanDat; 
+
+idx = dup2IDX; 
+
+idx = find(idx); 
+test = allGamEnv(idx);
+test = cat(1, test{:}); 
+
+nSub = length(idx); 
+gamRspPACphase_idx50 = nan(size(test,1),1); 
+gamPeakidx50         = nan(size(test,1),1); 
+HRV_RSA              = nan(size(test,1),1); 
+HRV_SDNN             = nan(size(test,1),1); 
+HRV_RMS              = nan(size(test,1),1); 
+bLen                 = nan(size(test,1),1); 
+bAmp                 = nan(size(test,1),1); 
+gamFreq              = nan(size(test,1),1); 
+subidx         = nan(size(test,1),1); 
+phiBins = linspace(-pi,pi,51); 
+jj = 1; 
+for ii = 1:length(idx)
+    T = allBehDat{idx(ii)}; 
+    Uv= T.useVec; 
+    L = sum(Uv); 
+    tmp = T.gamRspPACphase(Uv); 
+    binidx = arrayfun(@(x) find(phiBins>x,1), tmp, 'uniformoutput', false);
+    emptyCells = cellfun(@(x)  isempty(x), binidx); 
+    binidx(emptyCells) = {1}; 
+    binidx = cell2mat(binidx); 
+    binidx2 = mod(binidx+25, 50); 
+    gamRspPACphase_idx50(jj:jj+L-1) = binidx2;
+    gamPeakidx50(jj:jj+L-1)         = T.gamPeakidx50(Uv); 
+    HRV_RSA(jj:jj+L-1)              = T.HRV_RSAamp(Uv); 
+    HRV_SDNN(jj:jj+L-1)             = T.HRV_SDNN30(Uv); 
+    HRV_RMS(jj:jj+L-1)              = T.HRV_RMSSD30(Uv); 
+    bLen(jj:jj+L-1)                 = T.length(Uv); 
+    bAmp(jj:jj+L-1)                 = T.amp(Uv); 
+    gamFreq(jj:jj+L-1)                 = T.gamFreq(Uv); 
+    subidx(jj:jj+L-1)               = idx(ii); 
+    jj = jj+L; 
+end
+nanidx = isnan(test(:,2)); 
+gamPeakidx50(nanidx) = []; 
+gamRspPACphase_idx50(nanidx) = []; 
+test(nanidx,:) = []; 
+subidx(nanidx) = []; 
+HRV_RMS(nanidx) = []; 
+HRV_SDNN(nanidx)= []; 
+HRV_RSA(nanidx) = []; 
+bLen(nanidx)= []; 
+bAmp(nanidx) = []; 
+gamFreq(nanidx) = []; 
+rawGam = allGamEnv(idx);
+rawGam = cat(1, rawGam{:});
+rawGam(nanidx,:) = []; 
+
+test   = sqrt(test); 
+nSub   = length(unique(subidx));
+subKeys = unique(subidx); 
+for ii = 1:nSub
+    tmp = test(subidx==subKeys(ii),:); 
+    overallM = mean(tmp, 'all'); 
+    overallS = std(tmp, [], 'all'); 
+    tmp = (tmp - overallM) ./ overallS; 
+    test(subidx==subKeys(ii),:) = tmp; 
+end
+% --- circular mean on 1..50 scale ---
+x = gamRspPACphase_idx50(~isnan(gamRspPACphase_idx50));   % values on 1..50 circular scale
+ang = (x-1) / 50 * 2*pi;                                  % map to 0..2pi
+muAng = angle(mean(exp(1i*ang)));                         % circular mean angle
+% mu50  = mod(muAng, 2*pi) / (2*pi) * 50 + 1; %%%%%%KEEPING CONTROL MEAN!!!
+
+% --- sorted image data ---
+[sortedPeakidx50, order] = sort(gamPeakidx50);
+imgDat = test(order, :);
+xImg   = 1:size(imgDat,2);
+yImg   = 1:size(imgDat,1);
+
+respMean = mean(chanDat.tf.breathSeg, 1, 'omitnan');
+xResp    = 1:numel(respMean);
+
+% --- figure / axes ---
+fig = figure('Color', bgCol, 'Position', [80 80 1000 700], 'InvertHardcopy', 'off');
+ax = axes('Parent', fig);
+hold(ax, 'on');
+
+ax.Color      = bgCol;
+ax.LineWidth  = 2.2;
+ax.FontSize   = 16;
+ax.FontWeight = 'bold';
+ax.FontName   = 'Dotum';
+ax.XColor     = labCol;
+ax.TickDir    = 'out';
+ax.TickLength = [0.018 0.018];
+box(ax, 'off');
+
+% --- left axis: heatmap ---
+yyaxis left
+imagesc(xImg, yImg, movmean(imgDat, 3, 2))
+set(ax, 'YDir', 'normal')
+clim([-1 3])
+colormap(ax, turbo)
+
+ax.YAxis(1).Color = labCol;
+xlim([1 50])
+xlabel('respiratory phase bin', ...
+    'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Dotum', 'Color', labCol);
+
+ylabel('Breaths Sorted by \gamma Maximum Timing', ...
+    'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Dotum', 'Color', labCol);
+
+% circular mean marker
+xline(mu50, '--', 'Color', rspCol, 'LineWidth', 4);
+xline([mu50-5 mu50+5],'--', 'color', 'red', 'linewidth', 2, 'linestyle', '--')
+
+% --- colorbar styling ---
+c = colorbar;
+c.Color = labCol;
+c.LineWidth = 2;
+c.FontSize = 16;
+c.FontWeight = 'bold';
+c.FontName = 'Dotum';
+c.Label.String = '\gamma power (z-scored)';
+c.Label.Color = labCol;
+c.Label.FontSize = 18;
+c.Label.FontWeight = 'bold';
+c.Label.FontName = 'Dotum';
+
+% --- right axis: mean respiration trace ---
+yyaxis right
+plot(xResp, respMean, 'Color', rspCol, 'LineWidth', 3.2)
+
+ax.YAxis(2).Color = bgCol;
+% ylabel('mean respiration', ...
+%     'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Dotum', 'Color', labCol);
+
+% title('Sorted heatmap with circular-mean respiratory phase and mean respiration trace', ...
+%     'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Dotum', 'Color', labCol);
+
+set(gca, 'Layer', 'top');
+
+outFile = fullfile(figSaveDir, 'peakSortedHeatmap_dup2.png');
+
+
+exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
+
+
+
+%%%%%%%%%%%% STATISTICAL COMPARISON OF IN PHASE V. OUT OF PHASE BREATH
+%%%%%%%%%%%% GAMMA
+inPhaseBreaths = gamPeakidx50>mu50-5 & gamPeakidx50<mu50+5;
+
+sum(inPhaseBreaths) / length(inPhaseBreaths)
+
+tmp = gamPeakidx50; 
+tmp(tmp<4) = 4; 
+tmp(tmp>47) = 47; 
+bidx = 1:size(test,1); 
+bidx = bidx(:); 
+peakVals = arrayfun(@(x,y) median(test(x,y-3:y+3))-...
+    median(test(x,[1:y-3 y+3:50])), bidx, tmp(:)); 
+
+mean(peakVals(inPhaseBreaths))
+mean(peakVals(~inPhaseBreaths))
+
+vars = {'HRV_RMS','HRV_RSA','HRV_SDNN', 'peakVals', 'bLen', 'bAmp', 'gamFreq'};
+subInfo2 = table; 
+for i = 1:numel(vars)
+    for s = 1:nSub
+        subInfo2.inPhase(s) = sum(inPhaseBreaths(subidx==subKeys(s))) /...
+            sum(subidx==subKeys(s));
+        x = eval(vars{i});
+        x = x(subidx==subKeys(s)); 
+        tmpPhase = inPhaseBreaths(subidx==subKeys(s)); 
+        g1 = x(tmpPhase);
+        g0 = x(~tmpPhase);
+    
+        m1 = mean(g1, 'omitnan');
+        m0 = mean(g0, 'omitnan');
+        s1 = std(g1); 
+        s0 = std(g0); 
+        [h,p,ci,stats] = ttest2(g1, g0);
+
+        % Cohen's d for independent samples
+        n1 = numel(g1);
+        n0 = numel(g0);
+        sp = sqrt(((n1-1)*s1^2 + (n0-1)*s0^2) / (n1+n0-2));
+        d = (m1 - m0) / sp;
+    
+        fprintf('\n%s\n', vars{i});
+        fprintf('  in-phase mean:    %.4f (%.4f)\n', m1, s1);
+        fprintf('  out-of-phase mean %.4f (%.4f)\n', m0, s0);
+        fprintf('  t(%0.1f) = %.4f, p = %.6f\n', stats.df, stats.tstat, p);
+        fprintf('  Cohen''s d = %.4f\n', d);
+
+        subInfo2.([vars{i} '_inPhase'])(s) = m1; 
+        subInfo2.([vars{i} '_outPhase'])(s) = m0; 
+    end
+end
+
+
+breakVals = -7.8248:10:60;
+
+%%%%%%% SHOW IN AND OUT OF PHASE MEAN AMPLITUDE ENVELOPE: 
+
+fig = figure('Color', bgCol, 'Position', [80 80 900 400], 'InvertHardcopy', 'off');
+ax = axes('Parent', fig);
+hold(ax, 'on');
+
+ax.Color      = bgCol;
+ax.LineWidth  = 2.2;
+ax.FontSize   = 16;
+ax.FontWeight = 'bold';
+ax.FontName   = 'Dotum';
+ax.XColor     = labCol;
+ax.YColor     = labCol;
+ax.TickDir    = 'out';
+ax.TickLength = [0.018 0.018];
+box(ax, 'off');
+
+% warm line colors
+plotCols = [ ...
+    255 190 120;
+    255 140  66;
+    255  92  92;
+    223 160 255;
+    255 214 102;
+    255 160 122;
+    190 160 255] / 255;
+
+xVec   = 1:size(test,2);
+legTxt = {};
+hLine  = gobjects(0);
+cc     = 1;
+
+inLeg = {"early", "in phase", "late 1", "late 2", "late 3"};
+
+for ii = 1:length(breakVals)-1
+    useIdx = gamPeakidx50 > breakVals(ii) & gamPeakidx50 < breakVals(ii+1);
+    tmp = test(useIdx, :);
+
+    if size(tmp,1) > 10
+        curMean = mean(tmp, 1, 'omitnan');
+        curN    = sum(~isnan(tmp), 1);
+        curSEM  = std(tmp, 0, 1, 'omitnan') ./ sqrt(curN);
+
+        thisCol = plotCols(mod(cc-1,size(plotCols,1))+1,:);
+        % --- line width: make ii == 3 bolder ---
+        if ii == 3
+            lw = 5;
+            thisCol = rspCol; 
+        else
+            lw = 2.8;
+        end
+        % --- SEM shading ---
+        hp = patch(ax, ...
+            [xVec fliplr(xVec)], ...
+            [curMean-curSEM fliplr(curMean+curSEM)], ...
+            thisCol, ...
+            'FaceAlpha', 0.18, ...
+            'EdgeColor', 'none');
+        hp.HandleVisibility = 'off';
+
+        
+
+        hLine(cc) = plot(ax, xVec, curMean, ...
+            'LineWidth', lw, ...
+            'Color', thisCol);
+
+        legTxt{cc} = sprintf('%s (n = %d)', ...
+            inLeg{cc}, size(tmp,1));
+        cc = cc + 1;
+    end
+end
+
+xlabel('Respiratory phase bin', ...
+    'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Dotum', 'Color', labCol);
+
+ylabel('Mean power (z-scored)', ...
+    'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Dotum', 'Color', labCol);
+
+% title('Mean profiles across gamma-peak bins', ...
+%     'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Dotum', 'Color', labCol);
+
+xlim([1 size(test,2)])
+
+
+lgd = legend(ax, hLine, legTxt, ...
+    'Location', 'eastoutside', ...
+    'Box', 'off', ...
+    'TextColor', labCol, ...
+    'Color', bgCol, ...
+    'FontName', 'Dotum', ...
+    'FontSize', 13, 'AutoUpdate','off');
+
+xline(mu50, '--', 'Color', rspCol, 'LineWidth', 4);
+
+set(gca, 'Layer', 'top');
+outFile = fullfile(figSaveDir, 'ampLinePlotsByEpoch_dup1.png');
+
+
+exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+writetable(allSubInfo, 'G:\My Drive\cZelano\FigsStanford\PatDat.csv')
+
+
+
+
+
+%% 
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -263,28 +1711,11 @@ conSpec = squeeze(mean(conSpec, 2));
 conSpec(isnan(conSpec(:,3)), :) = []; 
 figure; 
 plot(frex, log(conSpec)')
+set(gca, 'background', 'w')
 
 
 
 
-% SEARCH CODE TO FIND GOOD SINGLE RAW TRIAL, ALREADY DONE.
-% 
-% figure; 
-% tim = .002:.002:12; 
-% plot(tim, conRawDat(139,:))
-% yyaxis right
-% plot(tim, conRawRsp(139,:))
-% 
-% 
-% for ii = 1:575
-%     if max(conRawDat(ii,:))<100 && min(conRawDat(ii,:))>-100
-%         figure; 
-%         plot(tim, conRawDat(ii,:))
-%         yyaxis right
-%         plot(tim, conRawRsp(ii,:))
-%         title(ii)
-%     end
-% end
 allSubIDs{104,4} = 'Fz'; %hard code hack to get JH and KS in session 1
 dup1IDX = cellfun(@(chan,type,sess,subID) strcmp('Fz', chan) & ...
                        strcmpi('dupi', type) & ...
@@ -295,7 +1726,8 @@ dup1IDX = cellfun(@(chan,type,sess,subID) strcmp('Fz', chan) & ...
 fig = plotFlatSpec_bySubjectBlocks(dup1IDX, allSubIDs, allFlatSpec); 
 title('session 1')
 
-%use JH session 3 rather than 2 because it has a better gamma oscillation: 
+%use JH session 3 rather than 2 because it has a better gamma oscillation:
+allSubIDs{104,4} = 'Fz'; %hard code hack to get JH and KS in session 1
 allSubIDs(129:160, 5) = {3};
 allSubIDs(161:192, 5) = {2};
 dup2IDX = cellfun(@(chan,type,sess,subID) strcmp('P3', chan) & ...
@@ -325,9 +1757,9 @@ hFig = plot_task_vs_HRVindex(dup1IDX, allSubIDs, allBehDat)
 hFig = plot_task_vs_HRVindex(dup2IDX, allSubIDs, allBehDat)
 
 
-hFig  = plot_phaseDev110_vs_HRV(conIDXall, allSubIDs, allBehDat)
-hFig = plot_phaseDev110_vs_HRV(dup1IDX, allSubIDs, allBehDat)
-hFig = plot_phaseDev110_vs_HRV(dup2IDX, allSubIDs, allBehDat)
+hFig  = plot_phaseDev110_vs_HRV_binned(conIDXall, allSubIDs, allBehDat)
+hFig = plot_phaseDev110_vs_HRV_binned(dup1IDX, allSubIDs, allBehDat)
+hFig = plot_phaseDev110_vs_HRV_binned(dup2IDX, allSubIDs, allBehDat)
 
 hFig  = plot_packStrength_vs_HRV(conIDXall, allSubIDs, allBehDat)
 hFig = plot_packStrength_vs_HRV(dup1IDX, allSubIDs, allBehDat)
@@ -351,11 +1783,11 @@ conIDX = cellfun(@(type,sess,subID)  ...
 conIDX = cellfun(@(type,sess,subID)  ...
                        strcmpi('obe', type) & ...
                        sess==1 &  ...
-                       subID==8, ...
+                       subID==9, ...
                         allSubIDs(:,6), ...
                        allSubIDs(:,5), allSubIDs(:,7));
 
-hFig = topo_fromBehVarStem(allSubIDs, allBehDat, conIDX, 'theta_theta_phase')
+hFig = topo_fromBehVarStem(allSubIDs, allBehDat, conIDX, 'theta_theta_ISPCz')
 hFig = topo_fromBehVarStem(allSubIDs, allBehDat, conIDX, 'thetaPow_5_')
 colorbar
 
@@ -371,29 +1803,26 @@ hFig = topo_fromBehVarStem(allSubIDs, allBehDat, dup1IDX, 'thetaPow_1_')
 % clim([-2 2])
 colorbar
 
-% power spectra raw
-frex = logspace(log10(.1),log10(200),300);
-dup1Spec = allNormalSpec(dup1IDX); 
-dup1Spec = cat(1, dup1Spec{:}); 
-dup1Spec = squeeze(mean(dup1Spec, 2));
-dup1Spec(isnan(dup1Spec(:,3)), :) = []; 
-figure; 
-plot(frex, log(dup1Spec)')
-
-
-% power spectra flattened as heatmap
-dup1FlatSpec = allFlatSpec(dup1IDX); 
-dup1FlatSpec = cat(1, dup1FlatSpec{:}); 
-dup1FlatSpec = squeeze(mean(dup1FlatSpec, 2));
-dup1FlatSpec(isnan(dup1FlatSpec(:,3)), :) = []; 
-figure; 
-imagesc(dup1FlatSpec(:,frex>4))
-plotFrex = frex(frex>4); 
-xticklabels(plotFrex(20:20:140))
-clim([-.5 1.5])
-
-
-
+% % % power spectra raw
+% % frex = logspace(log10(.1),log10(200),300);
+% % dup1Spec = allNormalSpec(dup1IDX); 
+% % dup1Spec = cat(1, dup1Spec{:}); 
+% % dup1Spec = squeeze(mean(dup1Spec, 2));
+% % dup1Spec(isnan(dup1Spec(:,3)), :) = []; 
+% % figure; 
+% % plot(frex, log(dup1Spec)')
+% % 
+% % 
+% % % power spectra flattened as heatmap
+% % dup1FlatSpec = allFlatSpec(dup1IDX); 
+% % dup1FlatSpec = cat(1, dup1FlatSpec{:}); 
+% % dup1FlatSpec = squeeze(mean(dup1FlatSpec, 2));
+% % dup1FlatSpec(isnan(dup1FlatSpec(:,3)), :) = []; 
+% % figure; 
+% % imagesc(dup1FlatSpec(:,frex>4))
+% % plotFrex = frex(frex>4); 
+% % xticklabels(plotFrex(20:20:140))
+% % clim([-.5 1.5])
 
 
 
@@ -406,70 +1835,73 @@ clim([-.5 1.5])
 
 
 
-
-dup2IDX = cellfun(@(chan,type,sess,subID) strcmp('P3', chan) & ...
-                       strcmpi('dupi', type) & ...
-                       sess==2 &  ...
-                       subID~=3, ...
-                       allSubIDs(:,4), allSubIDs(:,6), ...
-                       allSubIDs(:,5), allSubIDs(:,7));
-
-% power spectra raw
-frex = logspace(log10(.1),log10(200),300);
-dup1Spec = allNormalSpec(dup2IDX); 
-dup1Spec = cat(1, dup1Spec{:}); 
-dup1Spec = squeeze(mean(dup1Spec, 2));
-dup1Spec(isnan(dup1Spec(:,3)), :) = []; 
-figure; 
-plot(frex, log(dup1Spec)')
-
-
-% power spectra flattened as heatmap
-dup1FlatSpec = allFlatSpec(dup2IDX); 
-dup1FlatSpec = cat(1, dup1FlatSpec{:}); 
-dup1FlatSpec = squeeze(mean(dup1FlatSpec, 2));
-dup1FlatSpec(isnan(dup1FlatSpec(:,3)), :) = []; 
-figure; 
-imagesc(dup1FlatSpec(:,frex>4))
-plotFrex = frex(frex>4); 
-xticklabels(plotFrex(20:20:140))
-clim([-.5 1.5])
-
-
-
-
-idx = cellfun(@(x) strcmp('P3', x), allSubIDs(:,4));
-
-uniSub = allSubIDs(idx,3); 
-types = allSubIDs(idx,6); 
-sess  = allSubIDs(idx,5); 
-n = length(uniSub); 
-idx = find(idx); 
-allSubGamTim = nan(n, 4);
-prcTilVals = [10 20 30 40];
-
-figure;
-hold on 
-for ii = 1:length(idx)
-    behDat = allBehDat{idx(ii)}; 
-    orderedVals = sort(behDat.gamPeakidx50);
-    orderedVals = [1; orderedVals(:); 50]; 
-    valsUntil = arrayfun(@(x) find(orderedVals>x,1), prcTilVals) ./ ...
-        length(orderedVals);
-    allSubGamTim(ii,:) = valsUntil; 
-    valsUntil = [0 valsUntil 1]; 
-    
-    if strcmpi(types{ii}, 'obe')
-        plot([0 prcTilVals 50] , valsUntil, 'color', 'k', 'linewidth', 2)
-    elseif strcmpi(types{ii}, 'dupi')
-        if sess{ii} == 1
-            plot([0 prcTilVals 50] , valsUntil, 'color', 'red', 'linewidth', 1)
-        elseif sess{ii} == 2
-            plot([0 prcTilVals 50] , valsUntil, 'color', 'green', 'linewidth', 1)
-        end
-    end
-
-end
+% 
+% 
+% 
+% 
+% dup2IDX = cellfun(@(chan,type,sess,subID) strcmp('P3', chan) & ...
+%                        strcmpi('dupi', type) & ...
+%                        sess==2 &  ...
+%                        subID~=3, ...
+%                        allSubIDs(:,4), allSubIDs(:,6), ...
+%                        allSubIDs(:,5), allSubIDs(:,7));
+% 
+% % power spectra raw
+% frex = logspace(log10(.1),log10(200),300);
+% dup1Spec = allNormalSpec(dup2IDX); 
+% dup1Spec = cat(1, dup1Spec{:}); 
+% dup1Spec = squeeze(mean(dup1Spec, 2));
+% dup1Spec(isnan(dup1Spec(:,3)), :) = []; 
+% figure; 
+% plot(frex, log(dup1Spec)')
+% 
+% 
+% % power spectra flattened as heatmap
+% dup1FlatSpec = allFlatSpec(dup2IDX); 
+% dup1FlatSpec = cat(1, dup1FlatSpec{:}); 
+% dup1FlatSpec = squeeze(mean(dup1FlatSpec, 2));
+% dup1FlatSpec(isnan(dup1FlatSpec(:,3)), :) = []; 
+% figure; 
+% imagesc(dup1FlatSpec(:,frex>4))
+% plotFrex = frex(frex>4); 
+% xticklabels(plotFrex(20:20:140))
+% clim([-.5 1.5])
+% 
+% 
+% 
+% 
+% idx = cellfun(@(x) strcmp('P3', x), allSubIDs(:,4));
+% 
+% uniSub = allSubIDs(idx,3); 
+% types = allSubIDs(idx,6); 
+% sess  = allSubIDs(idx,5); 
+% n = length(uniSub); 
+% idx = find(idx); 
+% allSubGamTim = nan(n, 4);
+% prcTilVals = [10 20 30 40];
+% 
+% figure;
+% hold on 
+% for ii = 1:length(idx)
+%     behDat = allBehDat{idx(ii)}; 
+%     orderedVals = sort(behDat.gamPeakidx50);
+%     orderedVals = [1; orderedVals(:); 50]; 
+%     valsUntil = arrayfun(@(x) find(orderedVals>x,1), prcTilVals) ./ ...
+%         length(orderedVals);
+%     allSubGamTim(ii,:) = valsUntil; 
+%     valsUntil = [0 valsUntil 1]; 
+% 
+%     if strcmpi(types{ii}, 'obe')
+%         plot([0 prcTilVals 50] , valsUntil, 'color', 'k', 'linewidth', 2)
+%     elseif strcmpi(types{ii}, 'dupi')
+%         if sess{ii} == 1
+%             plot([0 prcTilVals 50] , valsUntil, 'color', 'red', 'linewidth', 1)
+%         elseif sess{ii} == 2
+%             plot([0 prcTilVals 50] , valsUntil, 'color', 'green', 'linewidth', 1)
+%         end
+%     end
+% 
+% end
 
 
 
@@ -541,17 +1973,16 @@ plot_group_topos(allitpcBandMax, allSubIDs, eegLocs)
 
 plotERP(squeeze(taskERP(1,:,:)),squeeze(taskERP(2,:,:)) , eegLocs, allSubIDs, "OBE", 1, {'audio', 'focus'})
 
+plotERP(subERP_PAC_peak,subERP_PAC_noPeak , eegLocs, allSubIDs, "OBE", 1,9, {'PAC_peak', 'PAC_noPeak'})
 
-plotERP(subERP_PAC_peak,subERP_PAC_noPeak , eegLocs, allSubIDs, "OBE", 1,8, {'PAC_peak', 'PAC_noPeak'})
 
-
-plotERP(subERP_PAC_peak,subERP_noPAC_peak , eegLocs, allSubIDs, "OBE", 1,8, {'PAC_peak', 'Peak_noPAC'})
+plotERP(subERP_PAC_peak,subERP_noPAC_peak , eegLocs, allSubIDs, "OBE", 1,9, {'PAC_peak', 'Peak_noPAC'})
 
 
 plotERP(subERP_PAC_peak,subERP_noPAC_peak , eegLocs, allSubIDs, "Dupi", 1, {'PAC_peak', 'Peak_noPAC'})
 
 
-plotERP(subERP_PAC_HRV,subERP_PAC_noHRV , eegLocs, allSubIDs, "OBE", 1, 14, {'HRV', 'no HRV'})
+plotERP(subERP_PAC_HRV,subERP_PAC_noHRV , eegLocs, allSubIDs, "OBE", 1,9, {'HRV', 'no HRV'})
 
 
 

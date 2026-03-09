@@ -183,6 +183,8 @@ parfor ii = 1:length(allPreProcFiles)
             chanTmp.baseEmotion = outDat.baseEmotion;
         case 'cueTask'
             chanTmp.behDat = outDat.behDat; 
+        case 'EmotionalMovieTask'
+            chanTmp.behDat = outDat.behDat; 
         otherwise
             error('unknown behavior')
     end  
@@ -211,6 +213,8 @@ parfor ii = 1:length(allPreProcFiles)
             idx = cellfun(@(x) contains(x, 'targTrace'), outDat.labels);
             chanTmp.targTrace = squeeze(outDat.data(idx, :)); 
         case 'cueTask'
+            %fully integrated behavior in behDat, no extras
+        case 'EmotionalMovieTask'
             %fully integrated behavior in behDat, no extras
         otherwise
             error('unknown extra')

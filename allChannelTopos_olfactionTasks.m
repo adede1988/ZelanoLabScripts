@@ -15,7 +15,7 @@ chanFiles = dir(datFolder);
 test = cellfun(@(x) length(x)>0, strfind({chanFiles.name}, '.mat'));
 chanFiles = chanFiles(test); 
 test = cellfun(@(x) length(x)>0, strfind({chanFiles.name}, 'breathing'));
-chanFiles = chanFiles(test); 
+chanFiles = chanFiles(~test); 
 
 
 allSubIDs = cell(length(chanFiles),4); 
@@ -72,10 +72,10 @@ allResp      = cell([length(chanFiles), 1]);
 
 
 % other stuff: 
-allPowBandMax = nan([length(chanFiles), 3, 3, 50]);
-allitpcBandMax= nan([length(chanFiles), 3, 3, 50]);
-allPowShuf    = nan([length(chanFiles), 3, 3, 50]); %convert values to percentile
-allitpcShuf= nan([length(chanFiles), 3, 3, 50]); 
+% allPowBandMax = nan([length(chanFiles), 3, 3, 50]);
+% allitpcBandMax= nan([length(chanFiles), 3, 3, 50]);
+% allPowShuf    = nan([length(chanFiles), 3, 3, 50]); %convert values to percentile
+% allitpcShuf= nan([length(chanFiles), 3, 3, 50]); 
 
 subERP_PAC_peak = nan([length(chanFiles), 4001]);
 subERP_PAC_noPeak=nan([length(chanFiles), 4001]); 
@@ -92,8 +92,8 @@ allTaskList =  cell([length(chanFiles), 1]);
 
 allBehDat = cell([length(chanFiles),1]); 
 
-taskERP = nan([3, length(chanFiles), 4001]);
-cndList = {'audio', 'focus', 'shadow'};
+% taskERP = nan([3, length(chanFiles), 4001]);
+% cndList = {'audio', 'focus', 'shadow'};
 
 
 %% extraction loop: 
@@ -116,92 +116,95 @@ parfor start = 1:length(chanFiles)
 
 
         
-        allpowBandMax(start,:,:,:)  = outSum.powBandMax; 
-        allitpcBandMax(start,:,:,:) = outSum.itpcBandMax; 
-        perValP = nan(size(outSum.powBandMax)); 
-        perValI = nan(size(outSum.powBandMax)); 
-        [nBand, nCnd, nTim] = size(outSum.powBandMax); 
-        nSh = size(outSum.powShuf, 1); 
-        for b = 1:nBand
-            for c = 1:nCnd
-                for t = 1:nTim
+    %     allpowBandMax(start,:,:,:)  = outSum.powBandMax; 
+    %     allitpcBandMax(start,:,:,:) = outSum.itpcBandMax; 
+    %     perValP = nan(size(outSum.powBandMax)); 
+    %     perValI = nan(size(outSum.powBandMax)); 
+    %     [nBand, nCnd, nTim] = size(outSum.powBandMax); 
+    %     nSh = size(outSum.powShuf, 1); 
+    %     for b = 1:nBand
+    %         for c = 1:nCnd
+    %             for t = 1:nTim
+    % 
+    %                 perValP(b,c,t) = squeeze(sum(outSum.powBandMax(b,c,t) > ...
+    %                     outSum.powShuf(:,b,c,t), 1)) / nSh; 
+    %                 perValI(b,c,t) = squeeze(sum(outSum.itpcBandMax(b,c,t) > ...
+    %                     outSum.itpcShuf(:,b,c,t),1)) / nSh; 
+    %             end
+    %         end
+    %     end
+    % 
+    % 
+    % allPowShuf(start,:,:,:) = perValP; 
+    % allitpcShuf(start,:,:,:) = perValI; 
 
-                    perValP(b,c,t) = squeeze(sum(outSum.powBandMax(b,c,t) > ...
-                        outSum.powShuf(:,b,c,t), 1)) / nSh; 
-                    perValI(b,c,t) = squeeze(sum(outSum.itpcBandMax(b,c,t) > ...
-                        outSum.itpcShuf(:,b,c,t),1)) / nSh; 
-                end
-            end
-        end
 
+    if strcmp(outSum.task, 'O15')
+        outSum.useVec(~strcmp(outSum.behDat.sniffType, 'start')) = 0; 
+        outSum.useVec = outSum.useVec == 1; 
+    end
 
-    allPowShuf(start,:,:,:) = perValP; 
-    allitpcShuf(start,:,:,:) = perValI; 
-
-
-    
-
-    % get theta power: 
     outSum.behDat.useVec = outSum.useVec; 
     allBehDat{start, 1} = outSum.behDat;
 
+    
 
     useVec = outSum.useVec; 
 
     allGamEnv{start} = outSum.gamEnv(outSum.useVec==1, :); 
     allPACgamPeakidx50{start}    = outSum.behDat.PACgamPeakidx50(outSum.useVec==1);
-    allTaskList{start} = string(outSum.behDat.task(outSum.useVec==1)); 
+    allTaskList{start} = string(outSum.task); 
 
+    % 
+    % HRV_RMS  = outSum.behDat.HRV_RMSSD30(useVec);
+    % HRV_SDNN = outSum.behDat.HRV_SDNN30(useVec);
+    % HRV_RSA  = outSum.behDat.HRV_RSAamp(useVec); 
+    % HRV_mm   = outSum.behDat.RR_max_min(useVec); 
+    % HR       = outSum.behDat.HR_mean(useVec); 
+    % 
+    % minmax01 = @(v) local_minmax01(v);
+    % rms01  = minmax01(HRV_RMS);
+    % sdnn01 = minmax01(HRV_SDNN);
+    % rsa01  = minmax01(HRV_RSA);
+    % 
+    % % --- overall state = mean of the 3 scaled measures ---
+    % overall = mean([rms01 sdnn01 rsa01], 2, 'omitnan');
+    % 
+    % 
+    % HRVidx = overall > median(overall); 
 
-    HRV_RMS  = outSum.behDat.HRV_RMSSD30(useVec);
-    HRV_SDNN = outSum.behDat.HRV_SDNN30(useVec);
-    HRV_RSA  = outSum.behDat.HRV_RSAamp(useVec); 
-    HRV_mm   = outSum.behDat.RR_max_min(useVec); 
-    HR       = outSum.behDat.HR_mean(useVec); 
-
-    minmax01 = @(v) local_minmax01(v);
-    rms01  = minmax01(HRV_RMS);
-    sdnn01 = minmax01(HRV_SDNN);
-    rsa01  = minmax01(HRV_RSA);
-    
-    % --- overall state = mean of the 3 scaled measures ---
-    overall = mean([rms01 sdnn01 rsa01], 2, 'omitnan');
-    
-    
-    HRVidx = overall > median(overall); 
-
-    taskVec = string(outSum.behDat.task); 
+    % taskVec = string(outSum.behDat.task); 
 
     %get ERP for PAC HRV+ breaths
-    test = outSum.ERP_pacPeak(outSum.useVec, :); 
-    subERP_PAC_HRV(start, :) = mean(test(HRVidx,:), 1, 'omitnan');
-
-    %get ERP for PAC HRV- breaths
-    test = outSum.ERP_pacPeak(outSum.useVec, :); 
-    subERP_PAC_noHRV(start, :) = mean(test(~HRVidx,:), 1, 'omitnan');
+    % test = outSum.ERP_pacPeak(outSum.useVec, :); 
+    % subERP_PAC_HRV(start, :) = mean(test(HRVidx,:), 1, 'omitnan');
+    % 
+    % %get ERP for PAC HRV- breaths
+    % test = outSum.ERP_pacPeak(outSum.useVec, :); 
+    % subERP_PAC_noHRV(start, :) = mean(test(~HRVidx,:), 1, 'omitnan');
 
     %get ERP for PAC_peak
-    useVec = outSum.behDat.goodBreath == 1 & abs(outSum.behDat.PACgamPeakidx50 - outSum.behDat.gamPeakidx50)<=3; 
+    useVec =  abs(outSum.behDat.PACgamPeakidx50 - outSum.behDat.gamPeakidx50)<=3; 
     useVec = useVec & outSum.useVec; 
     subERP_PAC_peak(start, :) = mean(outSum.ERP_pacPeak(useVec,:), 1, 'omitnan');
 
     %get ERP for PAC max that is not the breath-wise peak
-    useVec = outSum.behDat.goodBreath == 1 & abs(outSum.behDat.PACgamPeakidx50 - outSum.behDat.gamPeakidx50)>3; 
+    useVec = abs(outSum.behDat.PACgamPeakidx50 - outSum.behDat.gamPeakidx50)>3; 
     useVec = useVec & outSum.useVec; 
     subERP_PAC_noPeak(start, :) = mean(outSum.ERP_pacPeak(useVec,:), 1, 'omitnan');
   
     %get ERP for breath-wise max that is not in PAC window
-    useVec = outSum.behDat.goodBreath == 1 & abs(outSum.behDat.PACgamPeakidx50 - outSum.behDat.gamPeakidx50)>3; 
+    useVec = abs(outSum.behDat.PACgamPeakidx50 - outSum.behDat.gamPeakidx50)>3; 
     useVec = useVec & outSum.useVec; 
     subERP_noPAC_peak(start, :) = mean(outSum.ERP_allPeak(useVec,:), 1, 'omitnan');
        
-
-    for c = 1:3
-        idx = taskVec == cndList{c}; 
-        if sum(idx)>5
-            taskERP(c, start, :) = mean(outSum.ERP_pacPeak(idx & outSum.useVec, :), 1, 'omitnan');
-        end
-    end
+    % 
+    % for c = 1:3
+    %     idx = taskVec == cndList{c}; 
+    %     if sum(idx)>5
+    %         taskERP(c, start, :) = mean(outSum.ERP_pacPeak(idx & outSum.useVec, :), 1, 'omitnan');
+    %     end
+    % end
 
 
 
@@ -218,12 +221,13 @@ end
 
 %evidence that there is a gamma oscillation:
 %get one index into each control (TI and AS only)
-conIDX = cellfun(@(chan,type,sess,subID) strcmp('Cz', chan) & ...
+conIDX = cellfun(@(type,sess, limitSub) ...
                        strcmpi('obe', type) & ...
-                       sess==1 &  ...
-                       subID~=14, ...
-                       allSubIDs(:,4), allSubIDs(:,6), ...
-                       allSubIDs(:,5), allSubIDs(:,7));
+                       sess==1  & ...
+                       limitSub ~= 41, ...
+                       allSubIDs(:,6), ...
+                       allSubIDs(:,5), ...
+                       allSubIDs(:,7));
 
 conIDXall = conIDX; 
 % cellfun(@(chan,type,sess) strcmp('Cz', chan) & ...
@@ -246,8 +250,60 @@ conRawDat(isnan(conRawDat)) = 1;
 conRawDat = highpass(double(conRawDat).', 1, 500); 
 conRawDat = conRawDat .';
 
+allUse = cellfun(@(x) x.useVec, allBehDat(conIDX), 'uniformoutput', false); 
+allUse = cat(1, allUse{:}); 
 
 
+Ls     = cellfun(@(x) length(x.useVec), allBehDat(conIDX)); 
+nSub   = length(Ls); 
+ii     = 1:nSub; 
+subidx = arrayfun(@(x,y) ones(x,1)*y, Ls(:), ii(:), 'uniformoutput', false); 
+subidx = cat(1, subidx{:}); 
+subidx = subidx(allUse); 
+
+cleanRawDat = conRawDat(allUse, :); 
+highFrex = linspace(60, 150, 50); 
+[phase, pow] = multiphasevec3(highFrex, conRawDat(allUse, :), 500, 6);
+
+powZ = zeros(size(conRawDat(allUse,:)) );
+for fi = 1:length(highFrex)
+    fi
+    tmp = arrayfun(@(x) myChanZscore(squeeze(pow(subidx==x, fi, :)).', [500 950],...
+                        1:sum(subidx==x), [0 400000]),...
+                        ii(:), 'uniformoutput', false); 
+    tmp = cat(2, tmp{:}); 
+    tmp = tmp.'; 
+    powZ = powZ + tmp; 
+end
+powZ = powZ ./ 50; 
+
+
+figure; 
+hold on 
+for ii = 1:nSub
+    plot(movmean(mean(powZ(subidx==ii, :)), 300), 'linewidth', 2)
+    
+end
+legend(allSubIDs(conIDX,8), 'autoupdate', 'off')
+yyaxis right
+plot(mean(conRawRsp(allUse, :)))
+plot(mean(conRawRsp(allUse, :)), 'linewidth', 4)
+plot(mean(conRawRsp(allUse, :)), 'linewidth', 4, 'color', 'k')
+
+
+% tim    = .002:.002:12;
+% for ii =1:514
+%     ii
+%     if max(conRawDat(ii,:))<60 & min(conRawDat(ii,:))>-60
+%     figure
+%     plot(tim, conRawDat(ii,:))
+%     yyaxis right
+%     plot(tim, conRawRsp(ii,:))
+%     title(ii)
+%     end
+% end
+
+ploti = 194; 
 % --- colors ---
 bgCol   = [26 24 56]/255;      % #1A1838
 labCol  = [255 234 177]/255;   % #FFEAB1
@@ -258,10 +314,10 @@ rspCol  = [	223	230	218]/255;    % light sage green
 
 % --- data ---
 tim    = .002:.002:12;
-x      = tim(130:end);
-yRaw   = conRawDat(133,130:end);
-yHP    = highpass(conRawDat(133,130:end), 20, 500);
-yResp  = smoothdata(conRawRsp(133,130:end), 'gaussian', 30);
+x      = tim;
+yRaw   = conRawDat(ploti,:);
+yHP    = highpass(conRawDat(ploti,:), 20, 500);
+yResp  = smoothdata(conRawRsp(ploti,:), 'gaussian', 30);
 
 % --- figure / axes ---
 fig = figure('Color', bgCol, 'position', [0,0,1000, 600]);
@@ -280,7 +336,7 @@ box(ax, 'off');
 yyaxis left
 plot(x, yRaw, '-', 'Color', rawCol, 'LineWidth', 1);
 % plot(x, yHP,  '-', 'Color', hpCol,  'LineWidth', 1);
-
+ylim([-30 40])
 ylabel('voltage (\muV)', ...
     'FontSize', 20, ...
     'FontWeight', 'bold', ...
@@ -314,10 +370,11 @@ ax.TickDir = 'out';
 ax.TickLength = [0.018 0.018];
 title('','Color',labCol,'FontName','Dotum');
 
+
 % Optional: make plot area a bit cleaner
 set(gca, 'Layer', 'top');
 
-outFile = fullfile(figSaveDir, 'rawDatExamp.jpg');
+outFile = fullfile(figSaveDir, 'rawDatExamp_olfaction.jpg');
 
 exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
 
@@ -336,9 +393,9 @@ box(ax, 'off');
 
 % --- left axis: voltage ---
 yyaxis left
-plot(x(x>6 & x<9.5), yRaw(x>6 & x<9.5), '-', 'Color', rawCol, 'LineWidth', 1);
+plot(x(x>1.5 & x<6), yRaw(x>1.5 & x<6), '-', 'Color', rawCol, 'LineWidth', 1);
 % plot(x, yHP,  '-', 'Color', hpCol,  'LineWidth', 1);
-
+ylim([-25 20])
 ylabel('voltage (\muV)', ...
     'FontSize', 20, ...
     'FontWeight', 'bold', ...
@@ -347,7 +404,7 @@ ylabel('voltage (\muV)', ...
 
 % --- right axis: respiration ---
 yyaxis right
-plot(x(x>6 & x<9.5), yResp(x>6 & x<9.5), '-', 'Color', rspCol, 'LineWidth', 3.2);
+plot(x(x>1.5 & x<6), yResp(x>1.5 & x<6), '-', 'Color', rspCol, 'LineWidth', 3.2);
 ax.YColor = labCol;
 yyaxis left
 ax.YColor = labCol;
@@ -375,7 +432,7 @@ title('','Color',labCol,'FontName','Dotum');
 % Optional: make plot area a bit cleaner
 set(gca, 'Layer', 'top');
 
-outFile = fullfile(figSaveDir, 'rawDatExampZoom.jpg');
+outFile = fullfile(figSaveDir, 'rawDatExampZoom_olfaction.jpg');
 
 exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
 
@@ -397,7 +454,7 @@ c.Label.FontWeight = 'bold';
 c.Label.FontName = 'Dotum';
 c.Label.Color = labCol;
 % title('controls')
-outFile = fullfile(figSaveDir, 'controlPowerSpectra.jpg');
+outFile = fullfile(figSaveDir, 'controlPowerSpectra_olfaction.jpg');
 
 exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
 
@@ -409,15 +466,28 @@ exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
-conColors = [255 190 120;
- 190 160 255] / 255
+conColors = [ ...
+    0/255   200/255  255/255 ;   % AZ
+    255/255  80/255  120/255 ;   % HRM
+    190/255 160/255  255/255 ;   % AS
+    60/255  220/255  120/255 ;   % FS
+    255/255 0/255    200/255 ;   % CS
+    255/255 190/255  120/255 ;   % TI
+    190/255 160/255  255/255 ;   % AS
+    0/255   140/255  255/255 ;   % RY
+    %    % CP
+];
+
+[hFig, subInfo] = plotPeakFreq_bySubjectBlocks(conIDX, allSubIDs, allFlatSpec, ...
+    bgCol, labCol, conColors)
+
 
 
 [hFig, subInfo]  = plot_gamRspPACphase_circDensity(conIDXall, allSubIDs, allBehDat, ...
                     conColors, labCol, bgCol)
 allSubInfo = [allSubInfo subInfo];
 
-outFile = fullfile(figSaveDir, 'controlPhasePref.png');
+outFile = fullfile(figSaveDir, 'controlPhasePref_olfaction.png');
 
 
 exportgraphics(hFig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
@@ -430,9 +500,9 @@ exportgraphics(hFig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
 chanDat = load('R:\Neurology\Zelano_Lab\Lab_Common\QuestMirror\CHANDAT_processed\250904_OBE_NWU_TI_macro_breathingTask_48.mat');
 chanDat = chanDat.chanDat; 
 
-idx = cellfun(@(x,y,z,q) strcmp('Cz', x) & ...
+idx = cellfun(@(y,z,q)  ...
                        strcmp('obe', lower(y)) & ...
-                       z==1 & q ~= 14,     allSubIDs(:,4), allSubIDs(:,6), ...
+                       z==1 & q ~= 41,     allSubIDs(:,6), ...
                                  allSubIDs(:,5), allSubIDs(:,7));
 
 idx = find(idx); 
@@ -442,14 +512,12 @@ test = cat(1, test{:});
 nSub = length(idx); 
 gamRspPACphase_idx50 = nan(size(test,1),1); 
 gamPeakidx50         = nan(size(test,1),1); 
-HRV_RSA              = nan(size(test,1),1); 
-HRV_SDNN             = nan(size(test,1),1); 
-HRV_RMS              = nan(size(test,1),1); 
+accuracy             = nan(size(test,1),1); 
 bLen                 = nan(size(test,1),1); 
-bAmp                 = nan(size(test,1),1); 
+% bAmp                 = nan(size(test,1),1); 
 gamFreq              = nan(size(test,1),1); 
-subidx         = nan(size(test,1),1); 
-phiBins = linspace(-pi,pi,51); 
+subidx               = nan(size(test,1),1); 
+phiBins              = linspace(-pi,pi,51); 
 jj = 1; 
 for ii = 1:length(idx)
     T = allBehDat{idx(ii)}; 
@@ -463,11 +531,20 @@ for ii = 1:length(idx)
     binidx2 = mod(binidx+25, 50); 
     gamRspPACphase_idx50(jj:jj+L-1) = binidx2;
     gamPeakidx50(jj:jj+L-1)         = T.gamPeakidx50(Uv); 
-    HRV_RSA(jj:jj+L-1)              = T.HRV_RSAamp(Uv); 
-    HRV_SDNN(jj:jj+L-1)             = T.HRV_SDNN30(Uv); 
-    HRV_RMS(jj:jj+L-1)              = T.HRV_RMSSD30(Uv); 
+    
+    if strcmp('cueTask', allSubIDs{idx(ii), 2})
+         tmp = (T.cue == T.odor & ...
+                                    strcmp(T.respString, "Yes")) | ...
+                              (T.cue ~= T.odor & ...
+                                    strcmp(T.respString, "No"));
+         accuracy(jj:jj+L-1) = tmp(Uv); 
+    elseif strcmp('O15', allSubIDs{idx(ii), 2})
+        accuracy(jj:jj+L-1) = T.expScore(Uv) > 0; 
+    end
+
+
     bLen(jj:jj+L-1)                 = T.length(Uv); 
-    bAmp(jj:jj+L-1)                 = T.amp(Uv); 
+    % bAmp(jj:jj+L-1)                 = T.amp(Uv); 
     gamFreq(jj:jj+L-1)                 = T.gamFreq(Uv); 
     subidx(jj:jj+L-1)               = idx(ii); 
     jj = jj+L; 
@@ -477,11 +554,9 @@ gamPeakidx50(nanidx) = [];
 gamRspPACphase_idx50(nanidx) = []; 
 test(nanidx,:) = []; 
 subidx(nanidx) = []; 
-HRV_RMS(nanidx) = []; 
-HRV_SDNN(nanidx)= []; 
-HRV_RSA(nanidx) = []; 
+accuracy(nanidx) = []; 
 bLen(nanidx)= []; 
-bAmp(nanidx) = []; 
+% bAmp(nanidx) = []; 
 gamFreq(nanidx) = []; 
 rawGam = allGamEnv(idx);
 rawGam = cat(1, rawGam{:});
@@ -502,6 +577,67 @@ x = gamRspPACphase_idx50(~isnan(gamRspPACphase_idx50));   % values on 1..50 circ
 ang = (x-1) / 50 * 2*pi;                                  % map to 0..2pi
 muAng = angle(mean(exp(1i*ang)));                         % circular mean angle
 mu50  = mod(muAng, 2*pi) / (2*pi) * 50 + 1;
+
+% 
+% uSub = unique(subidx(~isnan(subidx)));
+% muAng_bySub = nan(size(uSub));
+% mu50_bySub  = nan(size(uSub));
+% muLookup    = nan(size(gamPeakidx50)); 
+% mi = 1; 
+% for s = 1:numel(uSub)
+%     m = subidx == uSub(s);
+% 
+%     curAng = ang(m);
+%     curAng = curAng(isfinite(curAng));
+% 
+%     if isempty(curAng)
+%         continue
+%     end
+% 
+%     muAng_bySub(s) = angle(mean(exp(1i*curAng)));
+%     mu50_bySub(s)  = mod(muAng_bySub(s), 2*pi) / (2*pi) * 50 + 1;
+%     muLookup(mi:mi+sum(m)-1) = s;
+%     mi = mi+sum(m); 
+% end
+% 
+% 
+% 
+% 
+% %phase distance predicts accuracy? 
+% phaseDist = nan(size(gamPeakidx50)); 
+% for ii = 1:length(phaseDist)
+%     phaseDist(ii) = abs(gamPeakidx50(ii) - mu50_bySub(muLookup(ii))); 
+% end
+% phaseDist(isnan(accuracy)) = []; 
+% accuracy(isnan(accuracy)) = []; 
+% 
+% mean(accuracy(phaseDist<10))
+% mean(accuracy(phaseDist>10))
+% 
+% 
+% % vectors must be same length
+% y = accuracy(:);        % 1 = correct, 0 = incorrect
+% score = -phaseDist(:);  % smaller phaseDist -> larger score -> predicts correct
+% 
+% % ROC + AUC
+% [Xroc, Yroc, T, AUC] = perfcurve(y, score, 1);
+% 
+% % plot
+% figure;
+% plot(Xroc, Yroc, 'LineWidth', 2);
+% hold on
+% plot([0 1], [0 1], '--k');
+% xlabel('False positive rate');
+% ylabel('True positive rate');
+% title(sprintf('ROC curve (AUC = %.3f)', AUC));
+% axis square
+% grid on
+% 
+% fprintf('AUC = %.4f\n', AUC);
+
+
+
+
 
 % --- sorted image data ---
 [sortedPeakidx50, order] = sort(gamPeakidx50);
@@ -574,7 +710,7 @@ ax.YAxis(2).Color = bgCol;
 
 set(gca, 'Layer', 'top');
 
-outFile = fullfile(figSaveDir, 'peakSortedHeatmap.png');
+outFile = fullfile(figSaveDir, 'peakSortedHeatmap_olfaction.png');
 
 
 exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
@@ -598,10 +734,10 @@ peakVals = arrayfun(@(x,y) median(test(x,y-3:y+3))-...
 mean(peakVals(inPhaseBreaths))
 mean(peakVals(~inPhaseBreaths))
 
-vars = {'HRV_RMS','HRV_RSA','HRV_SDNN', 'peakVals', 'bLen', 'bAmp', 'gamFreq'};
+vars = { 'peakVals', 'bLen', 'gamFreq'};
 
 for i = 1:numel(vars)
-    for s = 1:2
+    for s = 1:nSub
         allSubInfo.inPhase(s) = sum(inPhaseBreaths(subidx==subKeys(s))) /...
             sum(subidx==subKeys(s));
         x = eval(vars{i});
@@ -731,24 +867,24 @@ lgd = legend(ax, hLine, legTxt, ...
 xline(mu50, '--', 'Color', rspCol, 'LineWidth', 4);
 
 set(gca, 'Layer', 'top');
-outFile = fullfile(figSaveDir, 'ampLinePlotsByEpoch.png');
+outFile = fullfile(figSaveDir, 'ampLinePlotsByEpoch_olfaction.png');
 
 
 exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
 
-writetable(allSubInfo, 'G:\My Drive\cZelano\FigsStanford\ConDat.csv')
+writetable(allSubInfo, 'G:\My Drive\cZelano\FigsStanford\ConDat_olfaction.csv')
 
 
 %%%%%%%%%%%%%%%%%%%%% IS ANYTHING DIFFERENT FOR IN PHASE/OUT OF PHASE %%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-conIDX = cellfun(@(type,sess,subID)  ...
-                       strcmpi('obe', type) & ...
-                       sess==1 &  ...
-                       subID~=14, ...
-                        allSubIDs(:,6), ...
-                       allSubIDs(:,5), allSubIDs(:,7));
-hFig = topo_fromBehVarStem_inOutPhase(allSubIDs, allBehDat, conIDX, 'thetaPow_1_', 17)
+% conIDX = cellfun(@(type,sess,subID)  ...
+%                        strcmpi('obe', type) & ...
+%                        sess==1 &  ...
+%                        subID~=14, ...
+%                         allSubIDs(:,6), ...
+%                        allSubIDs(:,5), allSubIDs(:,7));
+% hFig = topo_fromBehVarStem_inOutPhase(allSubIDs, allBehDat, conIDX, 'thetaPow_1_', 17)
 
 
 
@@ -757,24 +893,34 @@ hFig = topo_fromBehVarStem_inOutPhase(allSubIDs, allBehDat, conIDX, 'thetaPow_1_
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
-allSubIDs{104,4} = 'Fz'; %hard code hack to get JH and KS in session 1
-dup1IDX = cellfun(@(chan,type,sess,subID) strcmp('Fz', chan) & ...
+
+dup1IDX = cellfun(@(type,sess,subID) ...
                        strcmpi('dupi', type) & ...
                        sess==1 & ...
-                       ismember(subID, [2,3,5,10,12,17]),...
-                       allSubIDs(:,4), allSubIDs(:,6), ...
+                       ismember(subID, [6,7,8,9,10,11,12, ... %ks
+                                        18,19,20,21,22,23,24,25, ... %JH
+                                        28,29,30,31,32,33, ... %GH
+                                        34, 35, 36,37,38,39,... %AB
+                                        45,46,47,48,49,50,... %DB
+                                        ]),...
+                        allSubIDs(:,6), ...
                        allSubIDs(:,5), allSubIDs(:,7));
 
 
 %use JH session 3 rather than 2 because it has a better gamma oscillation:
-allSubIDs{104,4} = 'Fz'; %hard code hack to get JH and KS in session 1
-allSubIDs(129:160, 5) = {3};
-allSubIDs(161:192, 5) = {2};
-dup2IDX = cellfun(@(chan,type,sess,subID) strcmp('P3', chan) & ...
+
+allSubIDs(23:25, 5) = {2};
+allSubIDs(21:22, 5) = {3};
+dup2IDX = cellfun(@(type,sess,subID)  ...
                        strcmpi('dupi', type) & ...
                        sess==2 & ...
-                       ismember(subID, [1,4,7,11,13,18]),...
-                       allSubIDs(:,4), allSubIDs(:,6), ...
+                       ismember(subID, [6,7,8,9,10,11,12, ... %ks
+                                        18,19,20,21,22,23,24,25, ... %JH
+                                        28,29,30,31,32,33, ... %GH
+                                        34, 35, 36,37,38,39,... %AB
+                                        45,46,47,48,49,50,... %DB
+                                        ]),...
+                       allSubIDs(:,6), ...
                        allSubIDs(:,5), allSubIDs(:,7));
 
 
@@ -794,6 +940,38 @@ dup1RawDat = highpass(double(dup1RawDat).', 1, 500);
 dup1RawDat = dup1RawDat .';
 
 
+allUse = cellfun(@(x) x.useVec, allBehDat(dup1IDX), 'uniformoutput', false); 
+allUse = cat(1, allUse{:}); 
+
+Ls     = cellfun(@(x) length(x.useVec), allBehDat(dup1IDX)); 
+nSub   = length(Ls); 
+ii     = 1:nSub; 
+subidx = arrayfun(@(x,y) ones(x,1)*y, Ls(:), ii(:), 'uniformoutput', false); 
+subidx = cat(1, subidx{:}); 
+subidx = subidx(allUse); 
+
+cleanRawDat = dup1RawDat(allUse, :); 
+highFrex = linspace(60, 150, 50); 
+[phase, pow] = multiphasevec3(highFrex, dup1RawDat(allUse, :), 500, 6);
+
+powZ = zeros(size(dup1RawDat(allUse,:)) );
+for fi = 1:length(highFrex)
+    fi
+    tmp = arrayfun(@(x) myChanZscore(squeeze(pow(subidx==x, fi, :)).', [500 950],...
+                        1:sum(subidx==x), [0 400000]),...
+                        ii(:), 'uniformoutput', false); 
+    tmp = cat(2, tmp{:}); 
+    tmp = tmp.'; 
+    powZ = powZ + tmp; 
+end
+powZ = powZ ./ 50; 
+
+
+figure; 
+hold on 
+for ii = nSub
+    plot(mean(powZ(subidx==ii, :)))
+end
 % 
 % 
 % 
@@ -806,8 +984,8 @@ dup1RawDat = dup1RawDat .';
 % plot(tim, dup1RawDat(139,:))
 % 
 % 
-% for ii = 1:1000
-%     if max(dup1RawDat(ii,:))<50 && min(dup1RawDat(ii,:))>-50
+% for ii = 1:500
+%     if max(dup1RawDat(ii,:))<60 && min(dup1RawDat(ii,:))>-60
 %         figure; 
 %         plot(tim, dup1RawDat(ii,:))
 %         yyaxis right
@@ -819,7 +997,7 @@ dup1RawDat = dup1RawDat .';
 
 
 
-ploti = 813; 
+ploti = 306; 
 
 % --- colors ---
 bgCol   = [26 24 56]/255;      % #1A1838
@@ -891,7 +1069,7 @@ title('','Color',labCol,'FontName','Dotum');
 % Optional: make plot area a bit cleaner
 set(gca, 'Layer', 'top');
 
-outFile = fullfile(figSaveDir, 'rawDatExampDupi.jpg');
+outFile = fullfile(figSaveDir, 'rawDatExampDupi_olfaction.jpg');
 
 exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
 
@@ -910,7 +1088,7 @@ box(ax, 'off');
 
 % --- left axis: voltage ---
 yyaxis left
-plot(x(x>.26 & x<4.7), yRaw(x>.26 & x<4.7), '-', 'Color', rawCol, 'LineWidth', 1);
+plot(x(x>0 & x<6), yRaw(x>0 & x<6), '-', 'Color', rawCol, 'LineWidth', 1);
 % plot(x, yHP,  '-', 'Color', hpCol,  'LineWidth', 1);
 ylim([-25 20])
 ylabel('voltage (\muV)', ...
@@ -921,7 +1099,7 @@ ylabel('voltage (\muV)', ...
 
 % --- right axis: respiration ---
 yyaxis right
-plot(x(x>.26 & x<4.7), yResp(x>.26 & x<4.7), '-', 'Color', rspCol, 'LineWidth', 3.2);
+plot(x(x>0 & x<6), yResp(x>0 & x<6), '-', 'Color', rspCol, 'LineWidth', 3.2);
 ax.YColor = labCol;
 yyaxis left
 ax.YColor = labCol;
@@ -949,7 +1127,7 @@ title('','Color',labCol,'FontName','Dotum');
 % Optional: make plot area a bit cleaner
 set(gca, 'Layer', 'top');
 
-outFile = fullfile(figSaveDir, 'rawDatExampZoomDupi.jpg');
+outFile = fullfile(figSaveDir, 'rawDatExampZoomDupi_olfaction.jpg');
 
 exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
 
@@ -971,7 +1149,7 @@ c.Label.FontWeight = 'bold';
 c.Label.FontName = 'Dotum';
 c.Label.Color = labCol;
 % title('controls')
-outFile = fullfile(figSaveDir, 'dup1PowerSpectra.jpg');
+outFile = fullfile(figSaveDir, 'dup1PowerSpectra_olfaction.jpg');
 
 exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
 
@@ -987,7 +1165,7 @@ c.Label.FontWeight = 'bold';
 c.Label.FontName = 'Dotum';
 c.Label.Color = labCol;
 % title('controls')
-outFile = fullfile(figSaveDir, 'dup2PowerSpectra.jpg');
+outFile = fullfile(figSaveDir, 'dup2PowerSpectra_olfaction.jpg');
 
 exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
 
@@ -998,22 +1176,32 @@ exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
 
 
 cols = [
-    0.86 0.74 0.58   % sand
-    0.49 0.73 0.78   % seafoam
-    0.85 0.45 0.38   % sunset red
-    0.78 0.62 0.24   % yellow ocher
-    0.72 0.67 0.84   % muted lavender
-    0.38 0.72 0.32   % plant green
+    0.86 0.74 0.58   % sand ks
+    0.86 0.74 0.58   % sand ks
+    0.86 0.74 0.58   % sand ks
+    0.49 0.73 0.78   % seafoam JH
+    0.49 0.73 0.78   % seafoam JH
+    0.49 0.73 0.78   % seafoam JH
+    0.85 0.45 0.38   % sunset red GH
+    0.85 0.45 0.38   % sunset red GH
+    0.85 0.45 0.38   % sunset red GH
+    0.72 0.67 0.84   % muted lavender AB
+    0.72 0.67 0.84   % muted lavender AB
+    0.72 0.67 0.84   % muted lavender AB
+    0.38 0.72 0.32   % plant green DB
+    0.38 0.72 0.32   % plant green DB
+    0.38 0.72 0.32   % plant green DB
 ];
 
 
 [hFig, subInfo]  = plot_gamRspPACphase_circDensity(dup1IDX, allSubIDs, allBehDat, ...
                     cols, labCol, bgCol)
 
+[hFig, subInfo] = plotPeakFreq_bySubjectBlocks(dup1IDX, allSubIDs, allFlatSpec, ...
+    bgCol, labCol, cols)
 
 
-
-outFile = fullfile(figSaveDir, 'dup1PhasePref.png');
+outFile = fullfile(figSaveDir, 'dup1PhasePref_olfaction.png');
 
 
 exportgraphics(hFig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
@@ -1025,7 +1213,7 @@ exportgraphics(hFig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
 
 
 
-outFile = fullfile(figSaveDir, 'dup2PhasePref.png');
+outFile = fullfile(figSaveDir, 'dup2PhasePref_olfaction.png');
 
 
 exportgraphics(hFig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
@@ -1050,11 +1238,8 @@ test = cat(1, test{:});
 nSub = length(idx); 
 gamRspPACphase_idx50 = nan(size(test,1),1); 
 gamPeakidx50         = nan(size(test,1),1); 
-HRV_RSA              = nan(size(test,1),1); 
-HRV_SDNN             = nan(size(test,1),1); 
-HRV_RMS              = nan(size(test,1),1); 
 bLen                 = nan(size(test,1),1); 
-bAmp                 = nan(size(test,1),1); 
+
 gamFreq              = nan(size(test,1),1); 
 subidx         = nan(size(test,1),1); 
 phiBins = linspace(-pi,pi,51); 
@@ -1071,11 +1256,8 @@ for ii = 1:length(idx)
     binidx2 = mod(binidx+25, 50); 
     gamRspPACphase_idx50(jj:jj+L-1) = binidx2;
     gamPeakidx50(jj:jj+L-1)         = T.gamPeakidx50(Uv); 
-    HRV_RSA(jj:jj+L-1)              = T.HRV_RSAamp(Uv); 
-    HRV_SDNN(jj:jj+L-1)             = T.HRV_SDNN30(Uv); 
-    HRV_RMS(jj:jj+L-1)              = T.HRV_RMSSD30(Uv); 
+    
     bLen(jj:jj+L-1)                 = T.length(Uv); 
-    bAmp(jj:jj+L-1)                 = T.amp(Uv); 
     gamFreq(jj:jj+L-1)                 = T.gamFreq(Uv); 
     subidx(jj:jj+L-1)               = idx(ii); 
     jj = jj+L; 
@@ -1085,11 +1267,8 @@ gamPeakidx50(nanidx) = [];
 gamRspPACphase_idx50(nanidx) = []; 
 test(nanidx,:) = []; 
 subidx(nanidx) = []; 
-HRV_RMS(nanidx) = []; 
-HRV_SDNN(nanidx)= []; 
-HRV_RSA(nanidx) = []; 
+
 bLen(nanidx)= []; 
-bAmp(nanidx) = []; 
 gamFreq(nanidx) = []; 
 rawGam = allGamEnv(idx);
 rawGam = cat(1, rawGam{:});
@@ -1183,7 +1362,7 @@ ax.YAxis(2).Color = bgCol;
 
 set(gca, 'Layer', 'top');
 
-outFile = fullfile(figSaveDir, 'peakSortedHeatmap_dup1.png');
+outFile = fullfile(figSaveDir, 'peakSortedHeatmap_dup1_olfaction.png');
 
 
 exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
@@ -1207,7 +1386,7 @@ peakVals = arrayfun(@(x,y) median(test(x,y-3:y+3))-...
 mean(peakVals(inPhaseBreaths))
 mean(peakVals(~inPhaseBreaths))
 
-vars = {'HRV_RMS','HRV_RSA','HRV_SDNN', 'peakVals', 'bLen', 'bAmp', 'gamFreq'};
+vars = { 'peakVals', 'bLen',  'gamFreq'};
 subInfo1 = table; 
 for i = 1:numel(vars)
     for s = 1:nSub
@@ -1341,13 +1520,60 @@ lgd = legend(ax, hLine, legTxt, ...
 xline(mu50, '--', 'Color', rspCol, 'LineWidth', 4);
 
 set(gca, 'Layer', 'top');
-outFile = fullfile(figSaveDir, 'ampLinePlotsByEpoch_dup1.png');
+outFile = fullfile(figSaveDir, 'ampLinePlotsByEpoch_dup1_olfaction.png');
 
 
 exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%DO IT AGAIN FOR DUPI 2! 
+% raw breath with ob gamma in raw data
+dup1RawDat = allRawDat(dup2IDX); 
+dup1RawDat = cat(1, dup1RawDat{:}); 
+conRawRsp = allResp(dup2IDX); 
+conRawRsp = cat(1, conRawRsp{:}); 
+dup1RawDat(isnan(dup1RawDat)) = 1; 
+dup1RawDat = highpass(double(dup1RawDat).', 1, 500); 
+dup1RawDat = dup1RawDat .';
+
+
+
+
+
+
+allUse = cellfun(@(x) x.useVec, allBehDat(dup1IDX), 'uniformoutput', false); 
+allUse = cat(1, allUse{:}); 
+
+Ls     = cellfun(@(x) length(x.useVec), allBehDat(dup1IDX)); 
+nSub   = length(Ls); 
+ii     = 1:nSub; 
+subidx = arrayfun(@(x,y) ones(x,1)*y, Ls(:), ii(:), 'uniformoutput', false); 
+subidx = cat(1, subidx{:}); 
+subidx = subidx(allUse); 
+
+cleanRawDat = dup1RawDat(allUse, :); 
+highFrex = linspace(60, 150, 50); 
+[phase, pow] = multiphasevec3(highFrex, dup1RawDat(allUse, :), 500, 6);
+
+powZ = zeros(size(dup1RawDat(allUse,:)) );
+for fi = 1:length(highFrex)
+    fi
+    tmp = arrayfun(@(x) myChanZscore(squeeze(pow(subidx==x, fi, :)).', [500 950],...
+                        1:sum(subidx==x), [0 400000]),...
+                        ii(:), 'uniformoutput', false); 
+    tmp = cat(2, tmp{:}); 
+    tmp = tmp.'; 
+    powZ = powZ + tmp; 
+end
+powZ = powZ ./ 50; 
+
+
+figure; 
+hold on 
+for ii = 1:nSub
+    plot(mean(powZ(subidx==ii, :)))
+end
+
 
 %%%%%%%%%%%%%%%%%%%%% PEAKS IN VERSUS OUT OF PREFERRED PHASE %%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1364,11 +1590,8 @@ test = cat(1, test{:});
 nSub = length(idx); 
 gamRspPACphase_idx50 = nan(size(test,1),1); 
 gamPeakidx50         = nan(size(test,1),1); 
-HRV_RSA              = nan(size(test,1),1); 
-HRV_SDNN             = nan(size(test,1),1); 
-HRV_RMS              = nan(size(test,1),1); 
+
 bLen                 = nan(size(test,1),1); 
-bAmp                 = nan(size(test,1),1); 
 gamFreq              = nan(size(test,1),1); 
 subidx         = nan(size(test,1),1); 
 phiBins = linspace(-pi,pi,51); 
@@ -1385,11 +1608,7 @@ for ii = 1:length(idx)
     binidx2 = mod(binidx+25, 50); 
     gamRspPACphase_idx50(jj:jj+L-1) = binidx2;
     gamPeakidx50(jj:jj+L-1)         = T.gamPeakidx50(Uv); 
-    HRV_RSA(jj:jj+L-1)              = T.HRV_RSAamp(Uv); 
-    HRV_SDNN(jj:jj+L-1)             = T.HRV_SDNN30(Uv); 
-    HRV_RMS(jj:jj+L-1)              = T.HRV_RMSSD30(Uv); 
     bLen(jj:jj+L-1)                 = T.length(Uv); 
-    bAmp(jj:jj+L-1)                 = T.amp(Uv); 
     gamFreq(jj:jj+L-1)                 = T.gamFreq(Uv); 
     subidx(jj:jj+L-1)               = idx(ii); 
     jj = jj+L; 
@@ -1399,11 +1618,7 @@ gamPeakidx50(nanidx) = [];
 gamRspPACphase_idx50(nanidx) = []; 
 test(nanidx,:) = []; 
 subidx(nanidx) = []; 
-HRV_RMS(nanidx) = []; 
-HRV_SDNN(nanidx)= []; 
-HRV_RSA(nanidx) = []; 
 bLen(nanidx)= []; 
-bAmp(nanidx) = []; 
 gamFreq(nanidx) = []; 
 rawGam = allGamEnv(idx);
 rawGam = cat(1, rawGam{:});
@@ -1498,7 +1713,7 @@ ax.YAxis(2).Color = bgCol;
 
 set(gca, 'Layer', 'top');
 
-outFile = fullfile(figSaveDir, 'peakSortedHeatmap_dup2.png');
+outFile = fullfile(figSaveDir, 'peakSortedHeatmap_dup2_olfaction.png');
 
 
 exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
@@ -1522,7 +1737,7 @@ peakVals = arrayfun(@(x,y) median(test(x,y-3:y+3))-...
 mean(peakVals(inPhaseBreaths))
 mean(peakVals(~inPhaseBreaths))
 
-vars = {'HRV_RMS','HRV_RSA','HRV_SDNN', 'peakVals', 'bLen', 'bAmp', 'gamFreq'};
+vars = {'peakVals', 'bLen', 'gamFreq'};
 subInfo2 = table; 
 for i = 1:numel(vars)
     for s = 1:nSub
@@ -1598,7 +1813,7 @@ for ii = 1:length(breakVals)-1
     useIdx = gamPeakidx50 > breakVals(ii) & gamPeakidx50 < breakVals(ii+1);
     tmp = test(useIdx, :);
 
-    if size(tmp,1) > 60
+    if size(tmp,1) > 30
         curMean = mean(tmp, 1, 'omitnan');
         curN    = sum(~isnan(tmp), 1);
         curSEM  = std(tmp, 0, 1, 'omitnan') ./ sqrt(curN);
@@ -1655,7 +1870,7 @@ lgd = legend(ax, hLine, legTxt, ...
 xline(mu50, '--', 'Color', rspCol, 'LineWidth', 4);
 
 set(gca, 'Layer', 'top');
-outFile = fullfile(figSaveDir, 'ampLinePlotsByEpoch_dup2.png');
+outFile = fullfile(figSaveDir, 'ampLinePlotsByEpoch_dup2_olfaction.png');
 
 
 exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
@@ -1673,15 +1888,14 @@ allSubInfo = [allSubInfo subInfo];
 
 
 
-writetable(allSubInfo, 'G:\My Drive\cZelano\FigsStanford\PatDat.csv')
+writetable(allSubInfo, 'G:\My Drive\cZelano\FigsStanford\PatDat_olfaction.csv')
+
 
 
 
 
 %% 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%  END FIGURES USED IN TALK
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 
 
 
@@ -1966,19 +2180,17 @@ plot_group_topos(allitpcBandMax, allSubIDs, eegLocs)
 
 
 plotERP(squeeze(taskERP(1,:,:)),squeeze(taskERP(2,:,:)) , eegLocs, allSubIDs, "OBE", 1, {'audio', 'focus'})
-plotERP(squeeze(taskERP(1,:,:)),squeeze(taskERP(2,:,:)) , eegLocs, allSubIDs, "OBE", 1,8, {'audio', 'focus'})
-plotERP(squeeze(taskERP(1,:,:)),squeeze(taskERP(2,:,:)) , eegLocs, allSubIDs, "OBE", 1,9, {'audio', 'focus'})
 
-plotERP(subERP_PAC_peak,subERP_PAC_noPeak , eegLocs, allSubIDs, "OBE", 1,8, {'PAC_peak', 'PAC_noPeak'})
 plotERP(subERP_PAC_peak,subERP_PAC_noPeak , eegLocs, allSubIDs, "OBE", 1,9, {'PAC_peak', 'PAC_noPeak'})
 
 
+plotERP(subERP_PAC_peak,subERP_noPAC_peak , eegLocs, allSubIDs, "OBE", 1,9, {'PAC_peak', 'Peak_noPAC'})
+
 
 plotERP(subERP_PAC_peak,subERP_noPAC_peak , eegLocs, allSubIDs, "Dupi", 1, {'PAC_peak', 'Peak_noPAC'})
-plotERP(subERP_PAC_peak,subERP_noPAC_peak , eegLocs, allSubIDs, "Dupi", 2, {'PAC_peak', 'Peak_noPAC'})
 
 
-plotERP(subERP_PAC_HRV,subERP_PAC_noHRV , eegLocs, allSubIDs, "OBE", 1, {'HRV', 'no HRV'})
+plotERP(subERP_PAC_HRV,subERP_PAC_noHRV , eegLocs, allSubIDs, "OBE", 1,9, {'HRV', 'no HRV'})
 
 
 

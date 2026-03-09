@@ -133,7 +133,7 @@ end
 
 %% breath phase info per trial: 
 
-if ~isfield(chanDat, 'targaIDX')
+if ~isfield(chanDat, 'targIDX')
    disp('breath time indicies')
     
     [idx50, lm] = breathPiecewiseTemplateIdx(chanDat);         % nBreaths x 50
@@ -149,7 +149,8 @@ if ~isfield(chanDat, 'targaIDX')
    
 end
     rawDat = load([chanFiles(filei).folder '/' chanFiles(filei).name]).chanDat; 
-    [idx50, lm] = breathPiecewiseTemplateIdx(rawDat);         % nBreaths x 50
+   
+    [idx50, lm] = breathPiecewiseTemplateIdx(chanDat);         % nBreaths x 50
     rawDat.targIDX = idx50; 
      try
         rawDat.behDat.length;
@@ -158,7 +159,16 @@ end
         lengthVals = (lm.winEnd - lm.onsetIdx) ./ rawDat.fs; 
         rawDat.behDat.length = lengthVals; 
         disp('length added')
-    end
+     end
+
+     try
+        chanDat.behDat.length;
+        disp('length checked')
+    catch
+        lengthVals = (lm.winEnd - lm.onsetIdx) ./ chanDat.fs; 
+        chanDat.behDat.length = lengthVals; 
+        disp('length added')
+     end
 
     tmp = chanDat; 
     chanDat = rawDat; 
@@ -1937,17 +1947,10 @@ end
 
 
 %% respiration PAC
-if ~isfield(chanDat, 'paca')
+if ~isfield(chanDat, 'pac')
     disp('working on pac')
   rawDat = load([chanFiles(filei).folder '/' chanFiles(filei).name]).chanDat;
-   try
-        rawDat.behDat.length;
-    disp('length checked')
- catch
-        lengthVals = (lm.winEnd - lm.onsetIdx) ./ chanDat.fs; 
-        rawDat.behDat.length = lengthVals; 
-        disp('length added')
-   end
+  
    rawDat.behDat.length;
   keyBreathIDX = chanDat.targIDX; 
     onsets = chanDat.behDat.finalOnset; 
@@ -1973,6 +1976,45 @@ if ~isfield(chanDat, 'paca')
    chanDat.pac_peaks = out; 
 
 end
+
+%% PAC between OB gamma and OB theta 
+if ~isfield(chanDat, 'pacTheta')
+    disp('working on pac between OB gamma and OB theta')
+  rawDat = load([chanFiles(filei).folder '/' chanFiles(filei).name]).chanDat;
+  
+   rawDat.behDat.length;
+  keyBreathIDX = chanDat.targIDX; 
+    onsets = chanDat.behDat.finalOnset; 
+    keyBreathIDX = keyBreathIDX + onsets; 
+    % keyBreathIDX = keyBreathIDX(:,[ 1 25 50]);
+    win = -200:10:200; 
+   keyBreathIDX(:,end+(1:length(win))) = chanDat.pac_peaks.peakIDX_full + win; 
+
+
+
+  gamMed = median(chanDat.fooof.gamma_peaks, 'all', 'omitnan')
+  if isnan(gamMed)
+      gamMed = median(chanDat.fooof.gamma_peak_freq, 'all', 'omitnan')
+  end
+    fs = chanDat.fs;               % Hz
+    
+    halfBW = 5;                    % +/- 5 Hz
+    bpHz   = double([gamMed-halfBW, gamMed+halfBW]);
+    
+    PACfrex = logspace(log10(2), log10(12), 50); 
+   
+    
+  [pacOut, meta] = pac_breathTemplate_timeResolvedPAC(rawDat, rawDat, keyBreathIDX, gamMed, fs, bpHz, PACfrex, ...
+    'targetFs', 50, 'nShuf', 500);
+   meta = pac_addBreathDiagnostics(meta, pacOut, chanDat.behDat);
+   meta.pac = pacOut; 
+   chanDat.pacTheta = meta; 
+ 
+
+end
+
+
+
 
 %%
 % --- after you load chanDat ---

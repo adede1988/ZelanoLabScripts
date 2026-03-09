@@ -43,7 +43,8 @@ chanFiles = chanFiles(test);
 test = cellfun(@(x) length(x)>0, strfind({chanFiles.name}, '_macro'));
 macFiles = chanFiles(test); 
 
-
+test = cellfun(@(x) length(x)>0, strfind({macFiles.name}, 'Emo'));
+macFiles = macFiles(test); 
 
 %% run the pipeline
 

@@ -109,8 +109,11 @@ function [raw, P] = getSessionParams_emotionTask(S)
             P.spikeWin    = 11;
             P.spikeClean  = true;
             P.pd.zthresh  = -2;    % z-score threshold for "low"
-
-
+            P.getBeats    = @(ECGz, beatSep)...
+                 getBeats_250904_OBE_NWU_TI(ECGz, beatSep);
+        
+         
+            
            
 
         case '251009_OBE_NWU_CP_1'
@@ -119,9 +122,11 @@ function [raw, P] = getSessionParams_emotionTask(S)
             P.spikeThresh = 15;
             P.spikeWin    = 7;
             P.macroRemove = [6]; 
-
+            P.getBeats    = @(ECGz, beatSep)...
+                 getBeats_251009_OBE_NWU_CP_1(ECGz, beatSep);
 
         case '250225_OBE_NWU_AS_4'
+            
 
         otherwise
             % keep defaults
@@ -130,4 +135,94 @@ function [raw, P] = getSessionParams_emotionTask(S)
     % sanity: make sure labels exist as cellstr
     if isstring(raw.labels), raw.labels = cellstr(raw.labels); end
 
+end
+
+
+
+
+ % idx = cellfun(@(x) contains(x, 'rsp'), raw.labels);
+ %    rspDat = raw.data(idx,:); 
+ %    figure
+ %    plot(rspDat(1,:))
+ %    hold on 
+ %    plot(rspDat(2,:))
+
+
+%% evaluate macros for spike params: 
+ % idx = cellfun(@(x) contains(x, 'macro'), raw.labels);
+ %    figure
+ %    macroDat = raw.data(idx, :); 
+ %    plot(macroDat(1,:))
+ %    hold on 
+ %    for ii = 2:6
+ %        plot(macroDat(ii,:)+(ii-1)*50)
+ %    end
+ %    legend()
+ % 
+ %    title([raw.sessID ' macros raw'], 'Interpreter','none')
+
+
+
+
+
+%% ECG function construction: 
+% idx = cellfun(@(x) contains(x, 'ECG'), od.labels);
+% ECG = od.data(idx, :); 
+% 
+% d = designfilt('bandpassiir', 'FilterOrder', 4, ...
+% 'HalfPowerFrequency1', 5, 'HalfPowerFrequency2', 40, ...
+% 'SampleRate', od.fs);
+% 
+% ECG = filtfilt(d, ECG')'; 
+% 
+% 
+% 
+% % plot for custom algorithm design: 
+% ECGz = (ECG - mean(ECG, 2)) ./ std(ECG, [], 2); 
+% 
+% ECGz = ECGz(:, 1:4:end);
+% 
+% 
+% beatSep = od.fs / 20; 
+% 
+% 
+% 
+% 
+% 
+% figure
+% plot(ECGz(1,100000:110000), 'color', 'k')
+% hold on 
+% % plot(ECGz(2,100000:110000), 'color', 'red')
+% plot(ECGz(3,100000:110000), 'color', 'green')
+% xlim([0 10000])
+% xticks([0:1000:10000])
+% xticklabels(0:2:20)
+% xlabel('Time (s)')
+% 
+% title(sprintf('ECG beat detection (%s)', ...
+%           od.sessID), ...
+%             'Interpreter','none');
+
+
+
+
+function heartBeats = getBeats_250904_OBE_NWU_TI(ECGz, beatSep)
+    % get within-beat times: TI
+    % (fixed to 2D indexing; original had ECGz(3,3:end, cndi))
+    test = find(arrayfun(@(x,y,z) x < -2 & y > 3 & z < 0, ...
+                         ECGz(1,1:end-2), ...
+                         ECGz(2,2:end-1), ...
+                         ECGz(3,3:end)));
+    test = test(diff(test) > beatSep);
+    heartBeats = test;
+end
+
+
+function heartBeats = getBeats_251009_OBE_NWU_CP_1(ECGz, beatSep)
+    % get within-beat times: CP 1
+    % (fixed to 2D indexing; original had ECGz(2,13:end, cndi))
+    test = find(arrayfun(@(x) x < -3 , ...
+                         ECGz(3,1:end)));
+    test = test(diff(test) > beatSep);
+    heartBeats = test;
 end

@@ -342,13 +342,13 @@ function [raw, P] = getSessionParams_breathingTask(S)
 end
 
 
- % idx = cellfun(@(x) contains(x, 'rsp'), od.labels);
- %    rspDat = od.data(idx,:); 
- %    figure
- %    plot(rspDat(1,:))
- %    hold on 
- %    plot(rspDat(3,:))
- % 
+ idx = cellfun(@(x) contains(x, 'rsp'), od.labels);
+    rspDat = od.data(idx,:); 
+    figure
+    plot(rspDat(1,:))
+    hold on 
+    plot(rspDat(3,:))
+
 
 %% evaluate macros for spike params: 
  % idx = cellfun(@(x) contains(x, 'macro'), od.labels);
