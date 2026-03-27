@@ -61,7 +61,7 @@ for s = 1:nSub
 
     % HRV index
     hrv = 1000*double(T.HRV_RMSSD30(m)) + 100*double(T.HRV_SDNN30(m)) + double(T.HRV_RSAamp(m));
-
+    hrv = T.HRV_RMSSD30(m); 
     % finite joint mask
     mf = (strlength(task) > 0) & isfinite(hrv);
     task = task(mf);

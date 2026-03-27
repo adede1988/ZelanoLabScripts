@@ -29,12 +29,16 @@ function [raw, P] = getSessionParams_breathingTask(S)
               'Expected MAT at %s (containing outDat).', matPath);
     end
     tmp = load(matPath);
-    if ~isfield(tmp, 'outDat')  && ~isfield(tmp, 'out') 
+    if ~isfield(tmp, 'outDat')  && ~isfield(tmp, 'out') && ~isfield(tmp, 'chanDat')
         error('getSessionParams_breathingTask:NoOutDat', ...
               'MAT must contain variable outDat.');
     end
     try
-        od = tmp.outDat;
+        try
+            od = tmp.outDat;
+        catch
+            od = tmp.chanDat; 
+        end
     catch
         od = tmp.out; 
     end
@@ -342,12 +346,12 @@ function [raw, P] = getSessionParams_breathingTask(S)
 end
 
 
- idx = cellfun(@(x) contains(x, 'rsp'), od.labels);
-    rspDat = od.data(idx,:); 
-    figure
-    plot(rspDat(1,:))
-    hold on 
-    plot(rspDat(3,:))
+ % idx = cellfun(@(x) contains(x, 'rsp'), od.labels);
+ %    rspDat = od.data(idx,:); 
+ %    figure
+ %    plot(rspDat(1,:))
+ %    hold on 
+ %    plot(rspDat(3,:))
 
 
 %% evaluate macros for spike params: 

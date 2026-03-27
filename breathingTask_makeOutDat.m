@@ -75,12 +75,12 @@ addpath([codePre 'ZelanoLabScripts'])
 % set(0, 'defaultfigurewindowstyle', 'docked')
 % ft_defaults
 
-for sessi = 1:length(sessionIDs)
+parfor sessi = 1:length(sessionIDs)
 try
 %% custom import for different participants: 
 disp(sessi)
 %check for pre existing processing: 
-if ~exist([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\' ...
+if ~exist([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\' 'REDO'...
                 sessionIDs{sessi} '_breathingPreProc.mat'], 'file')
 
 

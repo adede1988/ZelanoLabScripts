@@ -27,9 +27,8 @@ function outDat = preprocess_eeg(outDat, standardEEGlocs, P)
     outDat.eegLocs.X_flat = standardEEGlocs.X2D_right;
     outDat.eegLocs.Y_flat = standardEEGlocs.Y2D_front; 
     
-    [badTS, badChans, outDat.data(1:32,:)] = ...
-            removeNoiseChansVolt(outDat.data(1:32,:), outDat.fs, [1 32], outDat.eegLocs);
-    title(outDat.sessID, 'interpreter', 'none')
+    [badTS, badChans] = ...
+            removeNoiseChansVolt(outDat.data(1:32,:), outDat.fs);
     EXEMPT = [1 32];
      % only non-exempt get flagged
     badChans = setdiff(unique(badChans(:)), EXEMPT);         

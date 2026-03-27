@@ -155,8 +155,9 @@ function [out, badChan, blinkIndicator] = blinkRemoveWrapper(outDat, ...
     out = ica_blinks(trainDat, 'blinkChan', ...
         blinkChan);
     if ~isempty(out.badICs)
-        ax = plotICATopo(out, out.badICs(1), outDat.eegLocs.theta(chanIDX), ...
-            outDat.eegLocs.phi(chanIDX));
+        ax = figure; 
+        miniTopo(out.A(:,out.badICs(1)), outDat.eegLocs.X_flat(chanIDX), outDat.eegLocs.Y_flat(chanIDX)); 
+      
         saveas(ax,fullfile(outDat.figs, 'removedBlink.jpg'));
     end
     Sclean = out.W * data; 

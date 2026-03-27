@@ -671,6 +671,14 @@ png(fn,         # File name
 print(outPlot)
 dev.off()
 
+
+out$HRVindex = (out$HRV_RMS_inPhase*1000 + out$HRV_RMS_outPhase*1000) / 2 +
+               (out$HRV_RSA_inPhase + out$HRV_RSA_outPhase) / 2+
+               (out$HRV_SDNN_inPhase*100 + out$HRV_SDNN_outPhase*100) / 2
+
+plot_session_dumbbell(out, subList,
+                      "HRVindex", "HRV")
+
 ## compare difference scores: 
 
 
@@ -735,4 +743,71 @@ dev.off()
 # )
 # outPlot + scale_color_manual(values = c("Patient" = "#84E642")) -> outPlot
 
+circ_mean_deg_wt <- function(deg, w) {
+  rad <- deg * pi / 180
+  mu_rad <- atan2(
+    weighted.mean(sin(rad), w, na.rm = TRUE),
+    weighted.mean(cos(rad), w, na.rm = TRUE)
+  )
+  (mu_rad * 180 / pi) %% 360
+}
+
+control_mean_deg_wt <- out %>%
+  filter(TYPE == "OBE") %>%
+  summarise(mu = circ_mean_deg_wt(muDeg, R)) %>%
+  pull(mu)
+
+
+
+theta_ref_deg <- control_mean_deg_wt
+
+circ_dist_deg <- function(a, b) {
+  d <- (a - b + 180) %% 360 - 180
+  abs(d)
+}
+
+signed_circ_diff_deg <- function(a, b) {
+  (a - b + 180) %% 360 - 180
+}
+
+dat2 <- out %>%
+  mutate(
+    theta_rad = muDeg * pi / 180,
+    theta_ref_rad = theta_ref_deg * pi / 180,
+    circ_dist = circ_dist_deg(muDeg, theta_ref_deg),
+    align_cos = cos(theta_rad - theta_ref_rad),
+    aligned_score = R * align_cos,
+    x = R * cos(theta_rad),
+    y = R * sin(theta_rad)
+  )
+
+plot_session_dumbbell(dat2, subList,
+                      "aligned_score", "alignment score")
+
+
+dupi_change <- dat2 %>%
+  filter(TYPE %in% c("Dupi", "DUPI"),
+         SESSNUM %in% c(1, 2)) %>%
+  select(SUBID, SESSNUM, aligned_score, inPhase, R, circ_dist) %>%
+  tidyr::pivot_wider(
+    names_from = SESSNUM,
+    values_from = c(aligned_score, inPhase, R, circ_dist),
+    names_prefix = "sess"
+  ) %>%
+  mutate(
+    d_aligned = aligned_score_sess2 - aligned_score_sess1,
+    d_inPhase = inPhase_sess2 - inPhase_sess1,
+    d_R = R_sess2 - R_sess1,
+    d_dist = circ_dist_sess2 - circ_dist_sess1
+  )
+
+
+plot_session_change_scatter(
+  dat2,
+  subids = subList,
+  varname1 = "combinedScore",
+  varname2 = "aligned_score",
+  customX = "Olfactory capability",
+  customY = "Gamma peak in phase"
+)
 

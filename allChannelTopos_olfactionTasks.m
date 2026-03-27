@@ -250,45 +250,67 @@ conRawDat(isnan(conRawDat)) = 1;
 conRawDat = highpass(double(conRawDat).', 1, 500); 
 conRawDat = conRawDat .';
 
-allUse = cellfun(@(x) x.useVec, allBehDat(conIDX), 'uniformoutput', false); 
-allUse = cat(1, allUse{:}); 
-
-
-Ls     = cellfun(@(x) length(x.useVec), allBehDat(conIDX)); 
-nSub   = length(Ls); 
-ii     = 1:nSub; 
-subidx = arrayfun(@(x,y) ones(x,1)*y, Ls(:), ii(:), 'uniformoutput', false); 
-subidx = cat(1, subidx{:}); 
-subidx = subidx(allUse); 
-
-cleanRawDat = conRawDat(allUse, :); 
-highFrex = linspace(60, 150, 50); 
-[phase, pow] = multiphasevec3(highFrex, conRawDat(allUse, :), 500, 6);
-
-powZ = zeros(size(conRawDat(allUse,:)) );
-for fi = 1:length(highFrex)
-    fi
-    tmp = arrayfun(@(x) myChanZscore(squeeze(pow(subidx==x, fi, :)).', [500 950],...
-                        1:sum(subidx==x), [0 400000]),...
-                        ii(:), 'uniformoutput', false); 
-    tmp = cat(2, tmp{:}); 
-    tmp = tmp.'; 
-    powZ = powZ + tmp; 
-end
-powZ = powZ ./ 50; 
-
-
-figure; 
-hold on 
-for ii = 1:nSub
-    plot(movmean(mean(powZ(subidx==ii, :)), 300), 'linewidth', 2)
-    
-end
-legend(allSubIDs(conIDX,8), 'autoupdate', 'off')
-yyaxis right
-plot(mean(conRawRsp(allUse, :)))
-plot(mean(conRawRsp(allUse, :)), 'linewidth', 4)
-plot(mean(conRawRsp(allUse, :)), 'linewidth', 4, 'color', 'k')
+% % % allUse = cellfun(@(x) x.useVec, allBehDat(conIDX), 'uniformoutput', false); 
+% % % allUse = cat(1, allUse{:}); 
+% % % 
+% % % 
+% % % Ls     = cellfun(@(x) length(x.useVec), allBehDat(conIDX)); 
+% % % nSub   = length(Ls); 
+% % % ii     = 1:nSub; 
+% % % subidx = arrayfun(@(x,y) ones(x,1)*y, Ls(:), ii(:), 'uniformoutput', false); 
+% % % subidx = cat(1, subidx{:}); 
+% % % subidx = subidx(allUse); 
+% % % 
+% % % cleanRawDat = conRawDat(allUse, :); 
+% % % highFrex = linspace(2, 12, 30); 
+% % % [phase, pow] = multiphasevec3(highFrex, conRawDat(allUse, :), 500, 6);
+% % % 
+% % % powZ = zeros([length(highFrex), size(conRawDat(allUse,:))] );
+% % % itpc = zeros([length(highFrex), nSub, size(pow,3)]);
+% % % for fi = 1:length(highFrex)
+% % %     fi
+% % %     tmp = arrayfun(@(x) myChanZscore(squeeze(pow(subidx==x, fi, :)).', [500 950],...
+% % %                         1:sum(subidx==x)),...
+% % %                         ii(:), 'uniformoutput', false); 
+% % % 
+% % % 
+% % %     tmp = cat(2, tmp{:}); 
+% % %     tmp = tmp.'; 
+% % %     powZ(fi,:,:) = tmp; 
+% % % 
+% % %     tmp = arrayfun(@(x) abs(mean(exp(1i*phase(subidx==x, fi, :)), 1)), ...
+% % %                         ii(:), 'uniformoutput', false); 
+% % %     tmp = cat(1, tmp{:}); 
+% % %     tmp = squeeze(tmp); 
+% % %     itpc(fi,:,:) = tmp; 
+% % % 
+% % % 
+% % % end
+% % % powZ = powZ ./ 50; 
+% % % 
+% % % 
+% % % figure
+% % % hold on 
+% % % tmp = find(conIDX); 
+% % % for ii = 1:nSub
+% % %     plot(mean(movmean(test(subidx==ii,:), 250,2),1))
+% % %     % subplot(3,3,ii)
+% % %     % polarhistogram(phase(subidx==ii,1,1100), 18)
+% % %     % title(allSubIDs{tmp(ii), 8})
+% % % end
+% % % 
+% % % 
+% % % figure; 
+% % % hold on 
+% % % for ii = 1:nSub
+% % %     plot(movmean(mean(powZ(subidx==ii, :)), 300), 'linewidth', 2)
+% % % 
+% % % end
+% % % legend(allSubIDs(conIDX,8), 'autoupdate', 'off')
+% % % yyaxis right
+% % % plot(mean(conRawRsp(allUse, :)))
+% % % plot(mean(conRawRsp(allUse, :)), 'linewidth', 4)
+% % % plot(mean(conRawRsp(allUse, :)), 'linewidth', 4, 'color', 'k')
 
 
 % tim    = .002:.002:12;
@@ -478,9 +500,10 @@ conColors = [ ...
     %    % CP
 ];
 
-[hFig, subInfo] = plotPeakFreq_bySubjectBlocks(conIDX, allSubIDs, allFlatSpec, ...
-    bgCol, labCol, conColors)
-
+% [hFig, subInfo] = plotPeakFreq_bySubjectBlocks(conIDX, allSubIDs, allFlatSpec, ...
+%     bgCol, labCol, conColors)
+% [hFig, subInfo] = plotPeakFreqMedian_bySubjectBlocks(conIDX, allSubIDs, allFlatSpec, ...
+%     bgCol, labCol, conColors)
 
 
 [hFig, subInfo]  = plot_gamRspPACphase_circDensity(conIDXall, allSubIDs, allBehDat, ...
@@ -492,7 +515,19 @@ outFile = fullfile(figSaveDir, 'controlPhasePref_olfaction.png');
 
 exportgraphics(hFig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
 
+[hFig, chirpInfo] = plotPeakFreqMedian_bySubjectBlocks(conIDX, allSubIDs, allFlatSpec, ...
+    bgCol, labCol, conColors);
 
+outFile = fullfile(figSaveDir, 'conChirp_olfaction.png');
+
+
+exportgraphics(hFig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
+
+chirpInfo.Properties.VariableNames = matlab.lang.makeUniqueStrings( ...
+    chirpInfo.Properties.VariableNames, ...
+    allSubInfo.Properties.VariableNames);
+
+allSubInfo = [allSubInfo chirpInfo];
 
 %%%%%%%%%%%%%%%%%%%%% PEAKS IN VERSUS OUT OF PREFERRED PHASE %%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1153,6 +1188,11 @@ outFile = fullfile(figSaveDir, 'dup1PowerSpectra_olfaction.jpg');
 
 exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
 
+
+
+
+
+
 [fig, subInfo] = plotFlatSpec_bySubjectBlocks(dup2IDX, allSubIDs, allFlatSpec, ...
     bgCol, labCol); 
 subInfo.SESSNUM = ones(height(subInfo), 1)*2;
@@ -1197,11 +1237,18 @@ cols = [
 [hFig, subInfo]  = plot_gamRspPACphase_circDensity(dup1IDX, allSubIDs, allBehDat, ...
                     cols, labCol, bgCol)
 
-[hFig, subInfo] = plotPeakFreq_bySubjectBlocks(dup1IDX, allSubIDs, allFlatSpec, ...
-    bgCol, labCol, cols)
+
 
 
 outFile = fullfile(figSaveDir, 'dup1PhasePref_olfaction.png');
+
+
+exportgraphics(hFig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
+
+[hFig, chirpInfo] = plotPeakFreqMedian_bySubjectBlocks(dup1IDX, allSubIDs, allFlatSpec, ...
+    bgCol, labCol, cols);
+
+outFile = fullfile(figSaveDir, 'dup1Chirp_olfaction.png');
 
 
 exportgraphics(hFig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
@@ -1218,9 +1265,30 @@ outFile = fullfile(figSaveDir, 'dup2PhasePref_olfaction.png');
 
 exportgraphics(hFig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
 
+
+
+[hFig, chirpInfo2] = plotPeakFreqMedian_bySubjectBlocks(dup2IDX, allSubIDs, allFlatSpec, ...
+    bgCol, labCol, cols)
+
+outFile = fullfile(figSaveDir, 'dup2Chirp_olfaction.png');
+
+
+exportgraphics(hFig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
+
 subInfo = [ subInfo; subInfo2]; 
 
+chirpInfo = [chirpInfo; chirpInfo2]; 
+
+
+
 allSubInfo = [allSubInfo subInfo];
+
+chirpInfo.Properties.VariableNames = matlab.lang.makeUniqueStrings( ...
+    chirpInfo.Properties.VariableNames, ...
+    allSubInfo.Properties.VariableNames);
+
+allSubInfo = [allSubInfo chirpInfo];
+
 
 
 %%%%%%%%%%%%%%%%%%%%% PEAKS IN VERSUS OUT OF PREFERRED PHASE %%%%%%%%%%%%%

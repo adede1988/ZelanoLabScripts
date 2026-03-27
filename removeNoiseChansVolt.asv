@@ -1,4 +1,4 @@
-function [badTS, badChans, newEEG] = removeNoiseChansVolt(EEG, fs, skipChans, chanLocs)
+function [badTS, badChans] = removeNoiseChansVolt(EEG, fs, skipChans, chanLocs)
 
 %input: 
 %       EEG             channels X time matrix of EEG data
@@ -139,10 +139,6 @@ hold on
 for ii = 1:32
 
     plot(EEG(ii,:) + ii*50, 'color', 'red')
-end
-
-for ii = 1:32
-
     plot(newEEG(ii,:) + ii*50, 'color', 'k')
 end
 

@@ -30,7 +30,7 @@ chanFiles = chanFiles(test);
 test = cellfun(@(x) length(x)>0, strfind({chanFiles.name}, '_macro'));
 macFiles = chanFiles(test); 
 
-%cut to breathing task only for now!
+%cut out the breathing task for now! 
 test = ~cellfun(@(x) length(x)>0, strfind({macFiles.name}, 'breathingTask'));
 macFiles = macFiles(test); 
 allSubIDs = cell(length(macFiles),3); 

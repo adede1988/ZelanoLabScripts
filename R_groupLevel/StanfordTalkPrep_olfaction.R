@@ -9,6 +9,7 @@ library(ggrepel)
 # -------------------------------------------------------------------
 beh_dir <- "R:/Neurology/Zelano_Lab/Lab_Common/QuestMirror/CHANDAT_processed/BehFiles"
 
+source('G:/My Drive/GitHub/ZelanoLabScripts/R_groupLevel/stanfordHelpers.R')
 # -------------------------------------------------------------------
 # list files and parse filename metadata
 # expected filename forms:
@@ -74,191 +75,6 @@ selected_files <- file_directory %>%
   slice(1) %>%
   ungroup()
 
-# -------------------------------------------------------------------
-# helper: safe NA tibble constructors
-# -------------------------------------------------------------------
-na_cue <- function() {
-  tibble(
-    cueTask_HR = NA_real_,
-    cueTask_FA = NA_real_,
-    cueTask_d  = NA_real_
-  )
-}
-
-na_o15 <- function() {
-  tibble(
-    O15_score = NA_real_,
-    O15_acc   = NA_real_
-  )
-}
-
-na_thresh <- function() {
-  tibble(
-    thresh_none            = NA_real_,
-    thresh_low             = NA_real_,
-    thresh_high            = NA_real_,
-    thresh_low_calibrated  = NA_real_,
-    thresh_high_calibrated = NA_real_
-  )
-}
-
-# -------------------------------------------------------------------
-# cueTask analysis
-# HIT  = cue==odor & respString=="Yes"
-# MISS = cue==odor & respString=="No"
-# FA   = cue!=odor & respString=="Yes"
-# CR   = cue!=odor & respString=="No"
-#
-# cueTask_HR = hits / (hits + misses)
-# cueTask_FA = false alarms / (false alarms + correct rejections)
-# cueTask_d  = d-prime
-#
-# For d', a standard log-linear correction is used so qnorm never hits Inf
-# -------------------------------------------------------------------
-analyze_cueTask <- function(path) {
-  dat <- tryCatch(
-    read_csv(path, show_col_types = FALSE),
-    error = function(e) NULL
-  )
-  if (is.null(dat)) return(na_cue())
-  
-  needed <- c("cue", "odor", "respString")
-  if (!all(needed %in% names(dat))) return(na_cue())
-  
-  dat <- dat %>%
-    transmute(
-      cue = suppressWarnings(as.numeric(cue)),
-      odor = suppressWarnings(as.numeric(odor)),
-      respString = str_trim(as.character(respString))
-    ) %>%
-    filter(
-      !is.na(cue),
-      !is.na(odor),
-      respString %in% c("Yes", "No")
-    )
-  
-  if (nrow(dat) == 0) return(na_cue())
-  
-  hits   <- sum(dat$cue == dat$odor & dat$respString == "Yes")
-  misses <- sum(dat$cue == dat$odor & dat$respString == "No")
-  fas    <- sum(dat$cue != dat$odor & dat$respString == "Yes")
-  crs    <- sum(dat$cue != dat$odor & dat$respString == "No")
-  
-  sig_n <- hits + misses
-  noi_n <- fas + crs
-  
-  hr <- if (sig_n > 0) hits / sig_n else NA_real_
-  fa <- if (noi_n > 0) fas / noi_n else NA_real_
-  
-  dprime <- if (sig_n > 0 && noi_n > 0) {
-    # log-linear correction for extreme rates
-    hr_adj <- (hits + 0.5) / (sig_n + 1)
-    fa_adj <- (fas  + 0.5) / (noi_n + 1)
-    qnorm(hr_adj) - qnorm(fa_adj)
-  } else {
-    NA_real_
-  }
-  
-  tibble(
-    cueTask_HR = hr,
-    cueTask_FA = fa,
-    cueTask_d  = dprime
-  )
-}
-
-# -------------------------------------------------------------------
-# O15 analysis
-# keep one unique row per n, then:
-# O15_score = sum(expScore)
-# O15_acc   = O15_score / 15
-# -------------------------------------------------------------------
-analyze_O15 <- function(path) {
-  dat <- tryCatch(
-    read_csv(path, show_col_types = FALSE),
-    error = function(e) NULL
-  )
-  if (is.null(dat)) return(na_o15())
-  
-  needed <- c("n", "expScore")
-  if (!all(needed %in% names(dat))) return(na_o15())
-  
-  dat <- dat %>%
-    transmute(
-      n = suppressWarnings(as.numeric(n)),
-      expScore = suppressWarnings(as.numeric(expScore))
-    ) %>%
-    filter(!is.na(n)) %>%
-    distinct(n, .keep_all = TRUE)
-  
-  if (nrow(dat) == 0 || all(is.na(dat$expScore))) return(na_o15())
-  
-  score <- sum(dat$expScore, na.rm = TRUE)
-  
-  tibble(
-    O15_score = score,
-    O15_acc   = score / 15
-  )
-}
-
-# -------------------------------------------------------------------
-# threshTask analysis
-# mean intensity by odor:
-# odor==1 -> thresh_none
-# odor==2 -> thresh_low
-# odor==3 -> thresh_high
-# calibrated = subtract thresh_none
-# -------------------------------------------------------------------
-analyze_threshTask <- function(path) {
-  dat <- tryCatch(
-    read_csv(path, show_col_types = FALSE),
-    error = function(e) NULL
-  )
-  if (is.null(dat)) return(na_thresh())
-  
-  needed <- c("odor", "intensity")
-  if (!all(needed %in% names(dat))) return(na_thresh())
-  
-  dat <- dat %>%
-    transmute(
-      odor = suppressWarnings(as.numeric(odor)),
-      intensity = suppressWarnings(as.numeric(intensity))
-    ) %>%
-    filter(odor %in% c(1, 2, 3))
-  
-  if (nrow(dat) == 0) return(na_thresh())
-  
-  odor_means <- dat %>%
-    group_by(odor) %>%
-    summarise(
-      mean_intensity = if (all(is.na(intensity))) NA_real_ else mean(intensity, na.rm = TRUE),
-      .groups = "drop"
-    )
-  
-  get_mean <- function(odor_val) {
-    x <- odor_means$mean_intensity[odor_means$odor == odor_val]
-    if (length(x) == 0) NA_real_ else x[1]
-  }
-  
-  thresh_none <- get_mean(1)
-  thresh_low  <- get_mean(2)
-  thresh_high <- get_mean(3)
-  
-  thresh_low_calibrated <- if (
-    is.na(thresh_low) || is.na(thresh_none)
-  ) NA_real_ else thresh_low - thresh_none
-  
-  thresh_high_calibrated <- if (
-    is.na(thresh_high) || is.na(thresh_none)
-  ) NA_real_ else thresh_high - thresh_none
-  
-  tibble(
-    thresh_none            = thresh_none,
-    thresh_low             = thresh_low,
-    thresh_high            = thresh_high,
-    thresh_low_calibrated  = thresh_low_calibrated,
-    thresh_high_calibrated = thresh_high_calibrated
-  )
-}
 
 # -------------------------------------------------------------------
 # run task-specific summaries on the one selected file per
@@ -357,75 +173,10 @@ print(results)
 
 
 
-plot_session_dumbbell <- function(results, subids, varname, customY, seed = 123) {
-  source("G:/My Drive/GitHub/MasterStatsUsingR/courseTheme.R")
-  
-  if (!varname %in% names(results)) {
-    stop(sprintf("Variable '%s' not found in results.", varname))
-  }
-  
-  dat <- results %>%
-    filter(SUBID %in% subids, SESSNUM %in% c(1, 2)) %>%
-    mutate(
-      TYPE_clean = case_when(
-        TYPE %in% c("Dupi", "DUPI") ~ "Patient",
-        TYPE == "OBE" ~ "Control",
-        TRUE ~ NA_character_
-      )
-    ) %>%
-    filter(!is.na(.data[[varname]]), !is.na(TYPE_clean))
-  
-  if (nrow(dat) == 0) {
-    stop("No non-missing data available for the requested SUBIDs and variable.")
-  }
-  
-  set.seed(seed)
-  subj_offsets <- tibble(
-    SUBID = unique(dat$SUBID),
-    x_offset = runif(length(unique(dat$SUBID)), -0.08, 0.08)
-  )
-  
-  dat <- dat %>%
-    left_join(subj_offsets, by = "SUBID") %>%
-    mutate(x = SESSNUM + x_offset)
-  
-  label_dat <- dat %>%
-    filter(SESSNUM == 1)
-  
-  outPlot = ggplot(dat, aes(x = x, y = .data[[varname]], group = SUBID)) +
-    geom_line(aes(color = TYPE_clean), linewidth = 2, alpha = 1) +
-    geom_point(aes(color = TYPE_clean, shape = TYPE_clean), size = 13) +
-    geom_text_repel(
-      data = label_dat,
-      aes(label = SUBID, color = TYPE_clean),
-      size = 12,
-      nudge_x = -1.0,
-      show.legend = FALSE,
-      direction = "x",
-      box.padding = 1.5,
-      point.padding = 1.5,
-      segment.color = "grey50",
-      max.overlaps = Inf
-    ) +
-    scale_x_continuous(
-      breaks = c(1, 2),
-      labels = c("Sess 1", "Sess 2"),
-      limits = c(-.2, 2.25)
-    ) +
-    brightCol +
-    scale_shape_manual(values = c("Control" = 16, "Patient" = 17)) +
-    labs(x = NULL, y = customY, color = "Group", shape = "Group") +
-    myTheme
-  return(outPlot)
-}
 
 
 
-
-
-
-
-subList = c("KS", "JH", "GH", "AB", "DB", "AS", 
+subList = c("KS", "JH", "GH", "AB", "DB", "AS",  
             "AZ", "CP", "CS", "FS", "HRM", "RY", "TI")
 
 outPlot = plot_session_dumbbell(results, subList,
@@ -515,36 +266,41 @@ patEphys = patEphys %>% select(-c(sessID, comboID, unusedChan, SessNum2, TYPE, G
 names(conEphys)[1] = 'SUBID'
 names(patEphys)[1] = 'SUBID'
 
+
+conEphys = conEphys %>% group_by(SUBID, SESSNUM, task) %>%
+  mutate(chirp = max(c(med_inhaleRise,
+                       med_inhaleFall)) - min(c(
+                                           med_exhaleFall, 
+                                           med_exhaleRise, 
+                                           med_pause)))
+patEphys = patEphys %>% group_by(SUBID, SESSNUM, task) %>%
+  mutate(chirp = max(c(med_inhaleRise,
+                       med_inhaleFall)) - min(c(
+                                           med_exhaleFall, 
+                                           med_exhaleRise, 
+                                           med_pause)))
+
 patEphys_mean <- patEphys %>%
   group_by(SUBID, SESSNUM) %>%
   summarise(
-    across(-c(task, muDeg), ~ mean(.x, na.rm = TRUE)),
+    across(-c(task, muDeg, chirp), ~ mean(.x, na.rm = TRUE)),
     muDeg = (atan2(mean(sin(muDeg * pi/180), na.rm = TRUE),
                    mean(cos(muDeg * pi/180), na.rm = TRUE)) * 180/pi) %% 360,
+    chirp = median(chirp, na.rm = T), 
     .groups = "drop"
   )
 
 conEphys_mean <- conEphys %>%
   group_by(SUBID, SESSNUM) %>%
   summarise(
-    across(-c(task, muDeg), ~ mean(.x, na.rm = TRUE)),
+    across(-c(task, muDeg, chirp), ~ mean(.x, na.rm = TRUE)),
     muDeg = (atan2(mean(sin(muDeg * pi/180), na.rm = TRUE),
                    mean(cos(muDeg * pi/180), na.rm = TRUE)) * 180/pi) %% 360,
+    chirp = median(chirp, na.rm = T), 
     .groups = "drop"
   )
 
-merge_fill <- function(df1, df2, by) {
-  out <- full_join(df1, df2, by = by, suffix = c(".x", ".y"))
-  
-  overlap <- intersect(setdiff(names(df1), by), setdiff(names(df2), by))
-  
-  for (nm in overlap) {
-    out[[nm]] <- coalesce(out[[paste0(nm, ".x")]], out[[paste0(nm, ".y")]])
-  }
-  
-  out %>%
-    select(-ends_with(".x"), -ends_with(".y"))
-}
+
 
 out <- merge_fill(results, conEphys_mean, by = c('SUBID', 'SESSNUM'))
 
@@ -556,7 +312,7 @@ out <- merge_fill(out, patEphys_mean, by = c('SUBID', 'SESSNUM'))
 outPlot = plot_session_dumbbell(out, subList,
                       "peakProm", "gamPeakProm")
 
-
+print(outPlot)
 fn <- paste( "G:\\My Drive\\cZelano\\FigsStanford\\" ,
              'gamPeakProm_olfaction', '.png', 
              sep = '')
@@ -568,9 +324,16 @@ dev.off()
 
 
 
+outPlot = plot_session_dumbbell(out, subList,
+                      "chirp", "chirp")
 
-
-
+fn <- paste( "G:\\My Drive\\cZelano\\FigsStanford\\" ,
+             'chirp_olfaction', '.png', 
+             sep = '')
+png(fn,         # File name
+    width=600, height=600)
+print(outPlot)
+dev.off()
 
 
 outPlot = plot_session_dumbbell(out, subList,
@@ -587,44 +350,68 @@ dev.off()
 
 
 
-plot_session_dumbbell(out, subList,
-                      "R", "phasePrefStrength")
 
 
-outPlot = plot_session_dumbbell(out, subList,
-                      "muDeg", "phasePrefAngle")
+
+
+control_mean_deg_wt <- out %>%
+  filter(TYPE == "OBE") %>%
+  summarise(mu = circ_mean_deg_wt(muDeg, R)) %>%
+  pull(mu)
+
+
+
+theta_ref_deg <- control_mean_deg_wt
+
+
+dat2 <- out %>%
+  mutate(
+    theta_rad = muDeg * pi / 180,
+    theta_ref_rad = theta_ref_deg * pi / 180,
+    circ_dist = circ_dist_deg(muDeg, theta_ref_deg),
+    align_cos = cos(theta_rad - theta_ref_rad),
+    aligned_score = R * align_cos,
+    x = R * cos(theta_rad),
+    y = R * sin(theta_rad)
+  )
+
+plot_session_dumbbell(dat2, subList,
+                      "aligned_score", "alignment score")
+print(outPlot)
 fn <- paste( "G:\\My Drive\\cZelano\\FigsStanford\\" ,
-             'phasePref_olfaction', '.png', 
+             'AlignmentScore_olfaction', '.png', 
              sep = '')
 png(fn,         # File name
     width=600, height=600)
 print(outPlot)
 dev.off()
 
-out$muDif = ((out$muDeg - 115 + 180) %% 360) - 180
-
-plot_session_dumbbell(out, subList,
-                      "muDif", "phasePrefAngle")
-
-out$bLenDif = out$bLen_inPhase - out$bLen_outPhase
-out$bAmpDif = out$bAmp_inPhase - out$bAmp_outPhase
-plot_session_dumbbell(out, subList,
-                      "bAmpDif", "phasePrefAngle")
-
-
-out$inOutDif = out$peakVals_inPhase - out$peakVals_outPhase 
-plot_session_dumbbell(out, subList,
-                      "inOutDif", "InPhaseProminence")
-
-outPlot = plot_session_dumbbell(out, subList,
-                      "inPhase", "in phase proportion")
+outPlot = plot_session_dumbbell(dat2, subList,
+                      "inPhase", "In Phase Prop")
+print(outPlot)
 fn <- paste( "G:\\My Drive\\cZelano\\FigsStanford\\" ,
-             'inPhaseProp_olfaction', '.png', 
+             'AlignmentScore_olfaction', '.png', 
              sep = '')
 png(fn,         # File name
     width=600, height=600)
 print(outPlot)
 dev.off()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -744,11 +531,11 @@ outPlot = plot_session_change_scatter(
   varname1 = "combinedScore",
   varname2 = "muDif",
   customX = "Olfactory capability",
-  customY = "Gamma peak in phase"
+  customY = "Gamma peak phase Off"
 )
 outPlot + scale_color_manual(values = c("Patient" = "#84E642")) -> outPlot
 fn <- paste( "G:\\My Drive\\cZelano\\FigsStanford\\" ,
-             'phasePref_olfactionImprove', '.png', 
+             'phasePref_olfactionImprove_olfacData', '.png', 
              sep = '')
 png(fn,         # File name
     width=600, height=600)
@@ -786,14 +573,164 @@ png(fn,         # File name
 print(outPlot)
 dev.off()
 
-# outPlot = plot_session_change_scatter(
-#   out,
-#   subids = subList,
-#   varname1 = "combinedScore",
-#   varname2 = "inPhase",
-#   customX = "Olfactory capability",
-#   customY = "Gamma peak in phase"
-# )
-# outPlot + scale_color_manual(values = c("Patient" = "#84E642")) -> outPlot
+muChange = 
+
+outPlot = plot_session_change_scatter(
+  out,
+  subids = subList,
+  varname1 = "combinedScore",
+  varname2 = "muDeg",
+  customX = "Olfactory capability",
+  customY = "Gamma peak in phase"
+)
+outPlot + scale_color_manual(values = c("Patient" = "#84E642")) -> outPlot
 
 
+
+painRatings = read.csv("G:\\My Drive\\cZelano\\FigsStanford\\painRatings.csv")
+
+painLong <- painRatings %>% 
+  pivot_longer(
+    cols = c(placement, arrival_in_lab, end_of_session),
+    names_to = "timeOfRating",
+    values_to = "rating"
+  ) %>% 
+  mutate(
+    timeOfRating = factor(
+      timeOfRating,
+      levels = c("placement", "arrival_in_lab", "end_of_session")
+    )
+  )
+
+outPlot = painLong %>% 
+  ggplot(aes(
+    x = timeOfRating,
+    y = rating,
+    group = participant,
+    color = participant
+  )) +
+  geom_point(size = 3) + 
+  geom_line(linewidth = 2) + 
+  myTheme + 
+  ylab('discomfort rating (0-10)') + 
+  ylim(c(0,10)) +
+  scale_x_discrete(
+    labels = c(
+      placement = "placement",
+      arrival_in_lab = "20 min",
+      end_of_session = "removal"
+    )
+  )+
+  xlab('Time of Rating')
+  
+fn <- paste( "G:\\My Drive\\cZelano\\FigsStanford\\" ,
+             'painRatings', '.png', 
+             sep = '')
+png(fn,         # File name
+    width=600, height=600)
+print(outPlot)
+dev.off()
+
+
+
+
+
+
+
+
+
+
+dupi_change <- dat2 %>%
+  filter(TYPE %in% c("Dupi", "DUPI"),
+         SESSNUM %in% c(1, 2)) %>%
+  select(SUBID, SESSNUM, aligned_score, inPhase, R, circ_dist) %>%
+  tidyr::pivot_wider(
+    names_from = SESSNUM,
+    values_from = c(aligned_score, inPhase, R, circ_dist),
+    names_prefix = "sess"
+  ) %>%
+  mutate(
+    d_aligned = aligned_score_sess2 - aligned_score_sess1,
+    d_inPhase = inPhase_sess2 - inPhase_sess1,
+    d_R = R_sess2 - R_sess1,
+    d_dist = circ_dist_sess2 - circ_dist_sess1
+  )
+
+
+plot_session_change_scatter(
+  dat2,
+  subids = subList,
+  varname1 = "combinedScore",
+  varname2 = "aligned_score",
+  customX = "Olfactory capability",
+  customY = "Gamma peak in phase"
+)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+###########################################################################
+#############################SCRATCH BELOW HERE! 
+
+
+
+
+
+
+
+plot_session_dumbbell(out, subList,
+                      "R", "phasePrefStrength")
+
+
+outPlot = plot_session_dumbbell(out, subList,
+                                "muDeg", "phasePrefAngle")
+fn <- paste( "G:\\My Drive\\cZelano\\FigsStanford\\" ,
+             'phasePref_olfaction', '.png', 
+             sep = '')
+png(fn,         # File name
+    width=600, height=600)
+print(outPlot)
+dev.off()
+
+out$muDif = abs(((out$muDeg - 95 + 180) %% 360) - 180)
+
+plot_session_dumbbell(out, subList,
+                      "muDif", "phasePrefAngle")
+
+out$bLenDif = out$bLen_inPhase - out$bLen_outPhase
+out$bAmpDif = out$bAmp_inPhase - out$bAmp_outPhase
+plot_session_dumbbell(out, subList,
+                      "bAmpDif", "phasePrefAngle")
+
+
+out$inOutDif = out$peakVals_inPhase - out$peakVals_outPhase 
+plot_session_dumbbell(out, subList,
+                      "inOutDif", "InPhaseProminence")
+
+outPlot = plot_session_dumbbell(out, subList,
+                                "inPhase", "in phase proportion")
+fn <- paste( "G:\\My Drive\\cZelano\\FigsStanford\\" ,
+             'inPhaseProp_olfaction', '.png', 
+             sep = '')
+png(fn,         # File name
+    width=600, height=600)
+print(outPlot)
+dev.off()

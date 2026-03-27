@@ -401,7 +401,8 @@ outFile = fullfile(figSaveDir, 'controlPowerSpectra.jpg');
 
 exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
 
-
+[hFig, chirpInfo] = plotPeakFreqMedian_bySubjectBlocks(conIDXall, allSubIDs, allFlatSpec, ...
+    bgCol, labCol, conColors);
 
 
 %%%%%%%%%%%%%%%%%%%%% CONSISTENT PREFERRED PHASE OF GAMMA OSCILLATION%%%%%
@@ -418,6 +419,14 @@ conColors = [255 190 120;
 allSubInfo = [allSubInfo subInfo];
 
 outFile = fullfile(figSaveDir, 'controlPhasePref.png');
+
+
+exportgraphics(hFig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
+
+
+[hFig, chirpInfo] = plotPeakFreqMedian_bySubjectBlocks(conIDXall, allSubIDs, allFlatSpec, ...
+    bgCol, labCol, conColors)
+outFile = fullfile(figSaveDir, 'conChirp.png');
 
 
 exportgraphics(hFig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
@@ -761,7 +770,7 @@ allSubIDs{104,4} = 'Fz'; %hard code hack to get JH and KS in session 1
 dup1IDX = cellfun(@(chan,type,sess,subID) strcmp('Fz', chan) & ...
                        strcmpi('dupi', type) & ...
                        sess==1 & ...
-                       ismember(subID, [2,3,5,10,12,17]),...
+                       ismember(subID, [2,5,10,12,17]),...
                        allSubIDs(:,4), allSubIDs(:,6), ...
                        allSubIDs(:,5), allSubIDs(:,7));
 
@@ -773,7 +782,7 @@ allSubIDs(161:192, 5) = {2};
 dup2IDX = cellfun(@(chan,type,sess,subID) strcmp('P3', chan) & ...
                        strcmpi('dupi', type) & ...
                        sess==2 & ...
-                       ismember(subID, [1,4,7,11,13,18]),...
+                       ismember(subID, [1,7,11,13,18]),...
                        allSubIDs(:,4), allSubIDs(:,6), ...
                        allSubIDs(:,5), allSubIDs(:,7));
 
@@ -806,20 +815,20 @@ dup1RawDat = dup1RawDat .';
 % plot(tim, dup1RawDat(139,:))
 % 
 % 
-% for ii = 1:1000
-%     if max(dup1RawDat(ii,:))<50 && min(dup1RawDat(ii,:))>-50
-%         figure; 
-%         plot(tim, dup1RawDat(ii,:))
-%         yyaxis right
-%         plot(tim, conRawRsp(ii,:))
-%         title(ii)
-%     end
-% end
+for ii = 1:887
+    if max(dup1RawDat(ii,:))<50 && min(dup1RawDat(ii,:))>-50
+        figure; 
+        plot(tim, dup1RawDat(ii,:))
+        yyaxis right
+        plot(tim, conRawRsp(ii,:))
+        title(ii)
+    end
+end
 
 
 
 
-ploti = 813; 
+ploti = 676; %815
 
 % --- colors ---
 bgCol   = [26 24 56]/255;      % #1A1838
@@ -999,7 +1008,7 @@ exportgraphics(fig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
 
 cols = [
     0.86 0.74 0.58   % sand
-    0.49 0.73 0.78   % seafoam
+    % 0.49 0.73 0.78   % seafoam
     0.85 0.45 0.38   % sunset red
     0.78 0.62 0.24   % yellow ocher
     0.72 0.67 0.84   % muted lavender
@@ -1014,6 +1023,13 @@ cols = [
 
 
 outFile = fullfile(figSaveDir, 'dup1PhasePref.png');
+
+
+exportgraphics(hFig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
+
+[hFig, chirpInfo] = plotPeakFreqMedian_bySubjectBlocks(dup1IDX, allSubIDs, allFlatSpec, ...
+    bgCol, labCol, cols)
+outFile = fullfile(figSaveDir, 'dup1Chirp.png');
 
 
 exportgraphics(hFig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
@@ -1033,6 +1049,15 @@ exportgraphics(hFig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
 subInfo = [ subInfo; subInfo2]; 
 
 allSubInfo = [allSubInfo subInfo];
+
+
+
+[hFig, chirpInfo] = plotPeakFreqMedian_bySubjectBlocks(dup2IDX, allSubIDs, allFlatSpec, ...
+    bgCol, labCol, cols)
+outFile = fullfile(figSaveDir, 'dup2Chirp.png');
+
+
+exportgraphics(hFig, outFile,'BackgroundColor', bgCol, 'Resolution', 300);
 
 
 %%%%%%%%%%%%%%%%%%%%% PEAKS IN VERSUS OUT OF PREFERRED PHASE %%%%%%%%%%%%%
@@ -1533,7 +1558,7 @@ for i = 1:numel(vars)
         tmpPhase = inPhaseBreaths(subidx==subKeys(s)); 
         g1 = x(tmpPhase);
         g0 = x(~tmpPhase);
-    
+        
         m1 = mean(g1, 'omitnan');
         m0 = mean(g0, 'omitnan');
         s1 = std(g1); 
@@ -1797,14 +1822,24 @@ hFig = topo_fromBehVarStem(allSubIDs, allBehDat, dup1IDX, 'thetaPow_1_')
 % clim([-2 2])
 colorbar
 
-% % % power spectra raw
-% % frex = logspace(log10(.1),log10(200),300);
-% % dup1Spec = allNormalSpec(dup1IDX); 
-% % dup1Spec = cat(1, dup1Spec{:}); 
-% % dup1Spec = squeeze(mean(dup1Spec, 2));
-% % dup1Spec(isnan(dup1Spec(:,3)), :) = []; 
-% % figure; 
-% % plot(frex, log(dup1Spec)')
+% power spectra raw
+frex = logspace(log10(.1),log10(200),300);
+dup1Spec = allNormalSpec(conIDX); 
+dup1Spec = cat(1, dup1Spec{:}); 
+dup1Spec = squeeze(mean(dup1Spec, 2));
+dup1Spec(isnan(dup1Spec(:,3)), :) = []; 
+figure
+plot(frex, log(dup1Spec)')
+
+
+
+frex = logspace(log10(.1),log10(200),300);
+dup1Spec = allNormalSpec(dup1IDX); 
+dup1Spec = cat(1, dup1Spec{:}); 
+dup1Spec = squeeze(mean(dup1Spec, 2));
+dup1Spec(isnan(dup1Spec(:,3)), :) = []; 
+figure; 
+plot(frex, log(dup1Spec)')
 % % 
 % % 
 % % % power spectra flattened as heatmap

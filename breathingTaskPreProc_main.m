@@ -52,10 +52,10 @@ addpath(genpath('C:\Users\dtf8829\Documents\eeglab2025.0.0'))
 targTraceDir = 'G:\My Drive\cZelano\breathingDataFiles'; 
 figPath = 'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\';
 
-EEGLOC = readtable(fullfile(codePre, 'ZelanoLabScripts','myEEGcoords_thetaPhi.csv'));
+EEGLOC = readtable(fullfile(codePre, 'ZelanoLabScripts','eegLocs_standard_coords.csv'));
 set(0, 'defaultfigurewindowstyle', 'normal')
 success = ones(length(sessionIDs),1); 
-for s = 26:numel(sessionIDs)
+for s = 1:numel(sessionIDs)
     try
     disp(['working on ', sessionIDs{s}])
     % --- Session descriptor (adjust to your system) ---
@@ -68,7 +68,11 @@ for s = 26:numel(sessionIDs)
     preDir = fullfile(S.root, S.id, 'preProc');
 
     outDat = load(fullfile(preDir, [S.id '_breathingPreproc.mat']));
-    outDat = outDat.out; 
+    try
+        outDat = outDat.out; 
+    catch
+        outDat = outDat.chanDat; 
+    end
     if isfield(outDat, 'baseEmotion')
         disp(['Done with ' S.id ' ; ' num2str(s)])
         continue
