@@ -1,4 +1,4 @@
-function [badTS, badChans, newEEG] = removeNoiseChansVolt(EEG, fs, skipChans, chanLocs)
+function [badTS, badChans, newEEG, interpChan] = removeNoiseChansVolt(EEG, fs, skipChans, chanLocs)
 
 %input: 
 %       EEG             channels X time matrix of EEG data
@@ -114,7 +114,8 @@ for block = 1:size(maxDeflection,2)-blockSize
     badChans(curNoiseChans,block:block+blockSize) = 1; 
     badChans(curNoiseChans2,block:block+blockSize) = 1; 
 end
-
+outBad = find(sum(badChans,2) > size(tmpEEG,3)*.5);
+interpCount = zeros(size(tmpEEG, 3),1); 
 for tt = 1:size(tmpEEG,3)
     if(sum(badChans(:,tt)) > 0)
         if sum(badChans(:,tt)) < (nChan/2)
@@ -123,6 +124,8 @@ for tt = 1:size(tmpEEG,3)
                                                  chanLocs.Y, ...
                                                  chanLocs.Z, ...
                                                  find(badChans(:,tt)==1));
+        interpCount(tt) = sum(badChans(:,tt));
+            
         else
             badRecord(:,badChans(:,tt)==1) = 1; 
         end
@@ -130,15 +133,20 @@ for tt = 1:size(tmpEEG,3)
 end
 
 newEEG = zeros(size(EEG)); 
+interpChan = zeros(size(newEEG,2),1);
 for tt = 1:size(tmpEEG,3)
+    try
     newEEG(:, starts(tt):min(L,starts(tt)+snipL-1) ) = tmpEEG(:,:,tt); 
+    interpChan(starts(tt):min(L,starts(tt)+snipL-1)) = interpCount(tt); 
+    catch
+    end
 end
 
 figure; 
 hold on 
 for ii = 1:32
 
-    plot(EEG(ii,:) + ii*50, 'color', 'red')
+    plot(EEG(ii,:) + ii*50, 'color', 'green')
 end
 
 for ii = 1:32
@@ -211,7 +219,10 @@ maxDeflection = reshape(maxDeflection, nChan, nTrial);
 %remove channels where over 50% of trials involve a max deflection of
 %greater than 100 microvolts
 noiseChans = find(sum(maxDeflection>100,2) ./ size(maxDeflection,2)>.50);
-
+idx = ismember(noiseChans, skipChans);
+    if ~isempty(idx)
+        noiseChans(idx) = []; 
+    end
 
 if length(noiseChans) > size(tmpEEG,1)/4 %if over a quarter of channels are about to be removed, then try doing rough trial removal first
     %remove trials where over 75% of channels have 100 microvolt
@@ -256,7 +267,7 @@ else
   
 end
 
-badChans = find(sum(badRecord,2)==length(starts));
+badChans = find(sum(badRecord,2)>=length(starts)*.6);
 badTrials = sum(badRecord,1)==c;
 badTrials(end) = false; 
 badTS = zeros(L,1); 
@@ -266,7 +277,9 @@ for ii = 1:length(starts)
     end
 end
 
-
+badChans = badChans(:); 
+outBad = outBad(:); 
+badChans = [badChans; outBad];
 
 
 

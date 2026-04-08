@@ -25,9 +25,26 @@ function [outDat, targTraces] = alignTargetBreathingTrace(outDat, targTraceDir)
     targTraces = zeros(nCond, nSamples);
 
     dataDir = fullfile(targTraceDir);
+    if ismember('cndName', outDat.behDat.Properties.VariableNames)
+        orderIdx = arrayfun(@(x) find(outDat.behDat.order == x, 1),...
+                                unique(outDat.behDat.order));
+        OrderCndNames = outDat.behDat.cndName(orderIdx);
+        searchOn = true; 
+        startFrom = 1; 
+        while searchOn
+            if strcmp(OrderCndNames{startFrom}, 'pre') || ...
+               strcmp(OrderCndNames{startFrom}, 'audio')
+                startFrom = startFrom + 1; 
+            else
+                searchOn = false; 
+            end
+        end
+    else
+        startFrom = 3; 
+    end
 
     % Get the target files for the shadow conditions:
-    for cndi = 3:nCond
+    for cndi = startFrom:nCond
         idx = find(tmpBehDat.order == cndi, 1);
 
         if isempty(idx)
@@ -42,10 +59,18 @@ function [outDat, targTraces] = alignTargetBreathingTrace(outDat, targTraceDir)
         end
 
         % Build full CSV path
-        csvName = sprintf('%s_%s_recording.csv', sessionID, sfName);
-        csvPath = fullfile(dataDir, csvName);
+        try
+            csvName = sprintf('%s_%s_recording.csv', sessionID, sfName);
+            csvPath = fullfile(dataDir, csvName);
+    
+            targTbl = readtable(csvPath);
+        catch
+            csvName = sprintf('%s%s_recording.csv', sessionID, sfName);
+            csvPath = fullfile(dataDir, csvName);
+    
+            targTbl = readtable(csvPath);
 
-        targTbl = readtable(csvPath);
+        end
 
         % Remove any zero-voltage rows
         targTbl(targTbl.voltage == 0, :) = [];

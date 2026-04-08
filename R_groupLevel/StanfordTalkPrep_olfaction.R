@@ -364,7 +364,7 @@ control_mean_deg_wt <- out %>%
 theta_ref_deg <- control_mean_deg_wt
 
 
-dat2 <- out %>%
+out <- out %>%
   mutate(
     theta_rad = muDeg * pi / 180,
     theta_ref_rad = theta_ref_deg * pi / 180,
@@ -375,7 +375,7 @@ dat2 <- out %>%
     y = R * sin(theta_rad)
   )
 
-plot_session_dumbbell(dat2, subList,
+plot_session_dumbbell(out, subList,
                       "aligned_score", "alignment score")
 print(outPlot)
 fn <- paste( "G:\\My Drive\\cZelano\\FigsStanford\\" ,
@@ -386,7 +386,7 @@ png(fn,         # File name
 print(outPlot)
 dev.off()
 
-outPlot = plot_session_dumbbell(dat2, subList,
+outPlot = plot_session_dumbbell(out, subList,
                       "inPhase", "In Phase Prop")
 print(outPlot)
 fn <- paste( "G:\\My Drive\\cZelano\\FigsStanford\\" ,
@@ -399,7 +399,22 @@ dev.off()
 
 
 
-
+outPlot = plot_session_change_scatter(
+  out,
+  subids = subList,
+  varname1 = "combinedScore",
+  varname2 = "chirp",
+  customX = "Olfactory capability",
+  customY = "Gamma peak phase Off"
+)
+outPlot + scale_color_manual(values = c("Patient" = "#84E642")) -> outPlot
+fn <- paste( "G:\\My Drive\\cZelano\\FigsStanford\\" ,
+             'phasePref_olfactionImprove_olfacData', '.png', 
+             sep = '')
+png(fn,         # File name
+    width=600, height=600)
+print(outPlot)
+dev.off()
 
 
 
@@ -418,71 +433,7 @@ dev.off()
 plot_session_dumbbell(out, subList,
                       "gamFreq_inPhase", "gam Freq")
 
-plot_session_change_scatter <- function(results, subids, varname1, varname2,
-                                        customX, customY) {
-  source("G:/My Drive/GitHub/MasterStatsUsingR/courseTheme.R")
-  
-  if (!varname1 %in% names(results)) {
-    stop(sprintf("Variable '%s' not found in results.", varname1))
-  }
-  if (!varname2 %in% names(results)) {
-    stop(sprintf("Variable '%s' not found in results.", varname2))
-  }
-  
-  dat <- results %>%
-    filter(SUBID %in% subids, SESSNUM %in% c(1, 2)) %>%
-    mutate(
-      TYPE_clean = case_when(
-        TYPE %in% c("Dupi", "DUPI") ~ "Patient",
-        TYPE == "OBE" ~ "Control",
-        TRUE ~ NA_character_
-      )
-    ) %>%
-    filter(!is.na(TYPE_clean)) %>%
-    select(SUBID, SESSNUM, TYPE_clean, all_of(varname1), all_of(varname2))
-  
-  diff_dat <- dat %>%
-    tidyr::pivot_wider(
-      id_cols = c(SUBID, TYPE_clean),
-      names_from = SESSNUM,
-      values_from = c(all_of(varname1), all_of(varname2)),
-      names_sep = "_"
-    ) %>%
-    mutate(
-      diff1 = .data[[paste0(varname1, "_2")]] - .data[[paste0(varname1, "_1")]],
-      diff2 = .data[[paste0(varname2, "_2")]] - .data[[paste0(varname2, "_1")]]
-    ) %>%
-    filter(!is.na(diff1), !is.na(diff2))
-  
-  if (nrow(diff_dat) == 0) {
-    stop("No subjects have complete session 1 and session 2 data for both variables.")
-  }
-  
-  outPlot <- ggplot(diff_dat, aes(x = diff1, y = diff2)) +
-    geom_hline(yintercept = 0, linewidth = 1, color = "grey70") +
-    geom_vline(xintercept = 0, linewidth = 1, color = "grey70") +
-    geom_point(aes(color = TYPE_clean, shape = TYPE_clean), size = 13) +
-    geom_text_repel(
-      aes(label = SUBID, color = TYPE_clean),
-      size = 12,
-      show.legend = FALSE,
-      box.padding = 1.0,
-      point.padding = 1.0,
-      segment.color = "grey50",
-      max.overlaps = Inf
-    ) +
-    brightCol +
-    scale_shape_manual(values = c("Control" = 16, "Patient" = 17)) +
-    labs(
-      x = paste0("\u0394 ", customX),
-      y = paste0("\u0394 ", customY),
-      color = "Group",
-      shape = "Group"
-    ) +
-    myTheme
-  
-  return(outPlot)
-}
+
 ############################################################################
 #save out plots: 
 
@@ -621,7 +572,10 @@ outPlot = painLong %>%
       end_of_session = "removal"
     )
   )+
-  xlab('Time of Rating')
+  xlab('Time of Rating')+
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)
+  )
   
 fn <- paste( "G:\\My Drive\\cZelano\\FigsStanford\\" ,
              'painRatings', '.png', 

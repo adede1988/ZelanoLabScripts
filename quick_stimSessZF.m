@@ -74,7 +74,7 @@ ylabel('voltage (\muV)', ...
     'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Dotum', 'Color', labCol);
 
 ylim([-350 400])
-xlim([90 135])
+% xlim([20 40])
 
 % relabel left-axis ticks to undo the /10-style display scaling convention
 yyaxis left

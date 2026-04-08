@@ -52,12 +52,14 @@ function [raw, P] = getSessionParams_breathingTask(S)
     raw.labels = od.labels;
     raw.beh    = od.behDat;
 
-    % create TTLs hard coded based on assumption of 5 min windows: 
-    TTL = [0:600000:size(od.data,2)]; 
-    TTL(1) = 1; 
-    TTL(end) = []; 
-    od.TTL = TTL; 
-
+    if ~isfield(od, 'TTL')
+        % create TTLs hard coded based on assumption of 5 min windows: 
+        TTL = [0:600000:size(od.data,2)]; 
+        TTL(1) = 1; 
+        TTL(end) = []; 
+        od.TTL = TTL; 
+    end
+    raw.TTL = round(od.TTL./4); 
     raw.paths  = struct('root', S.root);
 
     sessID = char(S.id);
@@ -337,6 +339,110 @@ function [raw, P] = getSessionParams_breathingTask(S)
             P.spikeClean  = true;
             P.getBeats    = @(ECGz, beatSep)...
                  getBeats_251027_Dupi_NMH_DL_1(ECGz, beatSep);
+        case '251003_EEG_NWU_TI'
+            P.rspIDX      = 1;
+            P.rspFlip     =  1;
+            P.hasEEG      = true;
+            P.hasMacros   = false;
+            % P.spikeClean  = false;
+            P.getBeats    = @(ECGz, beatSep)...
+                 getBeats_251003_EEG_NWU_TI(ECGz, beatSep);
+        case '251008_EEG_NWU_JC'
+            P.rspIDX      = 1;
+            P.rspFlip     =  1;
+            P.hasEEG      = true;
+            P.hasMacros   = false;
+            % P.spikeClean  = false;
+            P.getBeats    = @(ECGz, beatSep)...
+                 getBeats_251008_EEG_NWU_JC(ECGz, beatSep);
+         case '251008_EEG_NWU_GM'
+            P.rspIDX      = 1;
+            P.rspFlip     =  1;
+            P.hasEEG      = true;
+            P.hasMacros   = false;
+            % P.spikeClean  = false;
+            P.getBeats    = @(ECGz, beatSep)...
+                 getBeats_251008_EEG_NWU_GM(ECGz, beatSep);
+         case '251009_EEG_NWU_JM'
+            P.rspIDX      = 1;
+            P.rspFlip     =  1;
+            P.hasEEG      = true;
+            P.hasMacros   = false;
+            % P.spikeClean  = false;
+            P.getBeats    = @(ECGz, beatSep)...
+                 getBeats_251009_EEG_NWU_JM(ECGz, beatSep);
+         case '251009_EEG_NWU_SM'
+            P.rspIDX      = 1;
+            P.rspFlip     =  -1;
+            P.hasEEG      = true;
+            P.hasMacros   = false;
+            % P.spikeClean  = false;
+            P.getBeats    = @(ECGz, beatSep)...
+                 getBeats_251009_EEG_NWU_SM(ECGz, beatSep);
+         case '251027_EEG_NWU_AS'
+            P.rspIDX      = 1;
+            P.rspFlip     =  1;
+            P.hasEEG      = true;
+            P.hasMacros   = false;
+            % P.spikeClean  = false;
+            P.getBeats    = @(ECGz, beatSep)...
+                 getBeats_251009_EEG_NWU_SM(ECGz, beatSep);
+         case '251105_EEG_NWU_GL'
+            P.rspIDX      = 1;
+            P.rspFlip     =  -1;
+            P.hasEEG      = true;
+            P.hasMacros   = false;
+            % P.spikeClean  = false;
+            P.getBeats    = @(ECGz, beatSep)...
+                 getBeats_251009_EEG_NWU_SM(ECGz, beatSep);
+         case '251110_EEG_NWU_GA'
+            P.rspIDX      = 1;
+            P.rspFlip     =  -1;
+            P.hasEEG      = true;
+            P.hasMacros   = false;
+            % P.spikeClean  = false;
+            P.getBeats    = @(ECGz, beatSep)...
+                 getBeats_251009_EEG_NWU_SM(ECGz, beatSep);
+         case '251111_EEG_NWU_VW'
+            P.rspIDX      = 1;
+            P.rspFlip     =  -1;
+            P.hasEEG      = true;
+            P.hasMacros   = false;
+            % P.spikeClean  = false;
+            P.getBeats    = @(ECGz, beatSep)...
+                 getBeats_251009_EEG_NWU_SM(ECGz, beatSep);
+         case '251113_EEG_NWU_GH'
+            P.rspIDX      = 1;
+            P.rspFlip     =  -1;
+            P.hasEEG      = true;
+            P.hasMacros   = false;
+            % P.spikeClean  = false;
+            P.getBeats    = @(ECGz, beatSep)...
+                 getBeats_251113_EEG_NWU_GH(ECGz, beatSep);
+         case '251118_EEG_NWU_ADtest'
+            P.rspIDX      = 1;
+            P.rspFlip     =  -1;
+            P.hasEEG      = true;
+            P.hasMacros   = false;
+            % P.spikeClean  = false;
+            P.getBeats    = @(ECGz, beatSep)...
+                  getBeats_251009_EEG_NWU_SM(ECGz, beatSep);
+         case '251202_EEG_NWU_GJ'
+            P.rspIDX      = 1;
+            P.rspFlip     =  -1;
+            P.hasEEG      = true;
+            P.hasMacros   = false;
+            % P.spikeClean  = false;
+            P.getBeats    = @(ECGz, beatSep)...
+                  getBeats_251009_EEG_NWU_SM(ECGz, beatSep);
+         case '260109_EEG_NWU_AA'
+            P.rspIDX      = 1;
+            P.rspFlip     =  -1;
+            P.hasEEG      = true;
+            P.hasMacros   = false;
+            % P.spikeClean  = false;
+            P.getBeats    = @(ECGz, beatSep)...
+                  getBeats_251113_EEG_NWU_GH(ECGz, beatSep);
         otherwise
             % Defaults if you hit an unexpected session:
             error('participant needs parameter specification')
@@ -345,11 +451,11 @@ function [raw, P] = getSessionParams_breathingTask(S)
 
 end
 
-
+ % 
  % idx = cellfun(@(x) contains(x, 'rsp'), od.labels);
  %    rspDat = od.data(idx,:); 
  %    figure
- %    plot(rspDat(1,:))
+ %    plot(-rspDat(1,:))
  %    hold on 
  %    plot(rspDat(3,:))
 
@@ -398,7 +504,7 @@ end
 % figure
 % plot(ECGz(1,100000:110000), 'color', 'k')
 % hold on 
-% % plot(ECGz(2,100000:110000), 'color', 'red')
+% plot(ECGz(2,100000:110000), 'color', 'red')
 % plot(ECGz(3,100000:110000), 'color', 'green')
 % xlim([0 10000])
 % xticks([0:1000:10000])
@@ -409,7 +515,55 @@ end
 %           od.sessID), ...
 %             'Interpreter','none');
 
+function heartBeats = getBeats_251113_EEG_NWU_GH(ECGz, beatSep)
+    % get within-beat times: SM EEG data
+    test = find(arrayfun(@(x, y) x > 2.5 & y>1, ...
+                         ECGz(1,1:end-10),ECGz(3,11:end)));
+    test = test(diff(test) > beatSep);
+    heartBeats = test;
+end
 
+function heartBeats = getBeats_251009_EEG_NWU_SM(ECGz, beatSep)
+    % get within-beat times: SM EEG data
+    test = find(arrayfun(@(x) x > 3.5, ...
+                         ECGz(1,1:end)));
+    test = test(diff(test) > beatSep);
+    heartBeats = test;
+end
+
+function heartBeats = getBeats_251009_EEG_NWU_JM(ECGz, beatSep)
+    % get within-beat times: JM EEG data
+    test = find(arrayfun(@(x, y, z) x < 0 & y>3 & z>.5, ...
+                         ECGz(3,1:end-17), ECGz(2,3:end-15), ...
+                         ECGz(1,18:end)));
+    test = test(diff(test) > beatSep);
+    heartBeats = test;
+end
+
+function heartBeats = getBeats_251008_EEG_NWU_GM(ECGz, beatSep)
+    % get within-beat times: GM EEG data
+    test = find(arrayfun(@(x, y, z) x > 2 & y>3 & z>1, ...
+                         ECGz(2,1:end-11), ECGz(1,4:end-8), ...
+                         ECGz(3,12:end)));
+    test = test(diff(test) > beatSep);
+    heartBeats = test;
+end
+
+function heartBeats = getBeats_251008_EEG_NWU_JC(ECGz, beatSep)
+    % get within-beat times: TI EEG data
+    test = find(arrayfun(@(x, y) x < 0 & y>2, ...
+                         ECGz(3,1:end), ECGz(2,1:end)));
+    test = test(diff(test) > beatSep);
+    heartBeats = test;
+end
+
+function heartBeats = getBeats_251003_EEG_NWU_TI(ECGz, beatSep)
+    % get within-beat times: TI EEG data
+    test = find(arrayfun(@(x, y) x < -1 & y>4, ...
+                         ECGz(1,1:end), ECGz(2,1:end)));
+    test = test(diff(test) > beatSep);
+    heartBeats = test;
+end
 
 function heartBeats = getBeats_251027_Dupi_NMH_DL_1(ECGz, beatSep)
     % get within-beat times: JH_1

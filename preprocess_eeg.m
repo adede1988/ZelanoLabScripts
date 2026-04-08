@@ -27,7 +27,7 @@ function outDat = preprocess_eeg(outDat, standardEEGlocs, P)
     outDat.eegLocs.X_flat = standardEEGlocs.X2D_right;
     outDat.eegLocs.Y_flat = standardEEGlocs.Y2D_front; 
     
-    [badTS, badChans, outDat.data(1:32,:)] = ...
+    [badTS, badChans, outDat.data(1:32,:), interpChan] = ...
             removeNoiseChansVolt(outDat.data(1:32,:), outDat.fs, [1 32], outDat.eegLocs);
     title(outDat.sessID, 'interpreter', 'none')
     EXEMPT = [1 32];
@@ -38,10 +38,10 @@ function outDat = preprocess_eeg(outDat, standardEEGlocs, P)
     chanIDX = setdiff(1:32, badChans);% includes 1 & 32 even if detected bad
 
     % 4) Blink removal on good channels 
-    
+   
     [out, badChan2, blinkIndicator] = blinkRemoveWrapper(outDat,...
                                                 chanIDX,...
-                                                outDat.fs);
+                                                outDat.fs, interpChan);
 
     tmp = chanIDX(badChan2); 
     badChans = [badChans(:); tmp(:)]; 
@@ -64,6 +64,8 @@ function outDat = preprocess_eeg(outDat, standardEEGlocs, P)
     outDat.labels{end+1} = "blinkIndicator";
     outDat.data(end+1, :,:) = badTS; 
     outDat.labels{end+1} = "badTS";
+    outDat.data(end+1, :,:) = interpChan; 
+    outDat.labels{end+1} = "interpChan";
     outDat.EEGInterpolation = 1;
     outDat.EEGCleaning = 1;
     outDat.blinkRemoval = 1; 

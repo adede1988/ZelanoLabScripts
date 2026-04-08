@@ -133,7 +133,7 @@ if ~exist([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\' 'REDO'...
         dat2 = load([datPre{datPrei(sessi)} sessionIDs{sessi} ...
                    '\raw\raw_breathingTasks2/raw_breathingTasks2.mat']);
         dat2 = dat2.curDat; 
-        % set(0, 'defaultfigurewindowstyle', 'docked')
+        set(0, 'defaultfigurewindowstyle', 'docked')
         
         
         behDat = ['closed-loop-respiration\processedBehavior\' ...
@@ -220,7 +220,7 @@ if ~exist([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\' 'REDO'...
         dat2 = load([datPre{datPrei(sessi)} sessionIDs{sessi} ...
                    '\raw\raw_breathingTasks/raw_breathingTasks.mat']);
         dat2 = dat2.curDat; 
-        % set(0, 'defaultfigurewindowstyle', 'docked')
+        set(0, 'defaultfigurewindowstyle', 'docked')
         
         
         behDat = ['closed-loop-respiration\processedBehavior\' ...
@@ -516,11 +516,11 @@ if ~exist([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\' 'REDO'...
         endTTLs = endTTLs(blockLens>180 & blockLens<400); 
         endTTLs = sort(endTTLs); 
 
-        % figure
-        % plot(photoDiode)
-        % xline(TTLs)
-        % title(sessi)
-        % xline(endTTLs, 'color', 'red')
+        figure
+        plot(photoDiode)
+        xline(TTLs)
+        title(sessi)
+        xline(endTTLs, 'color', 'red')
        % block lengths from true start/end indices
         blockLens = endTTLs - TTLs + 1;
         
@@ -635,7 +635,7 @@ if ~exist([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\' 'REDO'...
 end
 
 
-catch ME
-    disp(['fail for ', num2str(sessi), ': ', ME.message])
+catch 
+    disp(['fail for ', num2str(sessi)])
 end
 end

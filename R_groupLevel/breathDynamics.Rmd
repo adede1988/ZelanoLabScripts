@@ -1,0 +1,2884 @@
+---
+title: "Modeling HRV as a function of OB gamma parameters"
+author: "Adam Dede"
+date: "2026-02-18"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+## Load packages and set up environment
+
+```{r message = FALSE, warning = FALSE}
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+
+
+library(tidyverse)
+library(scales)
+in_dir  <- "G:\\My Drive\\GitHub\\closed-loop-respiration\\processedBehavior"
+out_dir <- file.path("R:\\Neurology\\Zelano_Lab\\Lab_Common\\Adam\\Dupi_processing\\breathingDynamics")
+
+
+resFiles = list.files(in_dir)
+resFiles = resFiles[grepl('processedBreathing', resFiles)]
+
+```
+
+## load all data
+
+```{r load}
+
+cond_cols <- c(
+  audio             = "#1b9e77",
+  slowResp          = "#d95f02",
+  fastFocus         = "#7570b3",
+  cyclicSigh        = "#e7298a",
+  slowFocus         = "#66a61e",
+  slowPlayback      = "#e6ab02",
+  naturalFocus      = "#a6761d",
+  slowShadow        = "#a42185",
+  audioShadow       = "#0000d5",
+  fastShadow        = "#d10000",
+  natFocShadow      = "#d1d090",
+  natFocShadowMouth = "#792312",
+  audioShadowMouth  = "#400055"
+)
+
+summary_task_cols <- names(cond_cols)
+subjBreathSummary_list <- list()
+for(ii in 1:length(resFiles)){
+  
+  tmp = read.csv(file.path(in_dir, resFiles[ii]))
+  unique(tmp$task)
+  unique(tmp$shadowFile)
+  table(tmp$task, tmp$shadowFile, tmp$noseMouth)
+  resFiles[ii]
+  
+  if (length(unique(tmp$shadowFile) == 1) == 1){
+    tmp$task[tmp$task == 'focus'] = 'naturalFocus'
+    tmp$task[tmp$task == 'shadow' & tmp$warp < 1] = 'slowShadow'
+    tmp$task[tmp$task == 'shadow' & tmp$warp == 1] = 'audioShadow'
+    tmp$task[tmp$task == 'shadow' & tmp$warp > 1] = 'fastShadow'
+  } else {
+    if (length(unique(tmp$noseMouth) == 1) == 1) { 
+      tmp$task[tmp$task == 'focus'] = 'naturalFocus'
+      tmp$task[tmp$task == 'shadow' & tmp$warp < 1 & tmp$shadowFile == 'audioResp'] = 'slowShadow'
+      tmp$task[tmp$task == 'shadow' & tmp$warp == 1 & tmp$shadowFile == 'audioResp'] = 'audioShadow'
+      tmp$task[tmp$task == 'shadow' & tmp$warp > 1 & tmp$shadowFile == 'audioResp'] = 'fastShadow'
+      tmp$task[tmp$task == 'shadow' & tmp$warp == 1 & tmp$shadowFile == 'focusedResp'] = 'natFocShadow'
+    } else {
+      tmp$task[tmp$task == 'focus'] = 'naturalFocus'
+      tmp$task[tmp$task == 'shadow' & tmp$warp < 1 & tmp$shadowFile == 'audioResp' & tmp$noseMouth == 'nose'] = 'slowShadow'
+      tmp$task[tmp$task == 'shadow' & tmp$warp == 1 & tmp$shadowFile == 'audioResp' & tmp$noseMouth == 'nose'] = 'audioShadow'
+      tmp$task[tmp$task == 'shadow' & tmp$warp > 1 & tmp$shadowFile == 'audioResp' & tmp$noseMouth == 'nose'] = 'fastShadow'
+      tmp$task[tmp$task == 'shadow' & tmp$warp == 1 & tmp$shadowFile == 'focusedResp' & tmp$noseMouth == 'nose'] = 'natFocShadow'
+      
+      tmp$task[tmp$task == 'shadow' & tmp$warp == 1 & tmp$shadowFile == 'focusedResp' & tmp$noseMouth == 'mouth'] = 'natFocShadowMouth'
+      tmp$task[tmp$task == 'shadow' & tmp$warp == 1 & tmp$shadowFile == 'audioResp' & tmp$noseMouth == 'mouth'] = 'audioShadowMouth'
+    }
+  }
+  
+  unique(tmp$task)
+  
+  ## ---------------- summary block for cross-subject plotting ----------------
+  curFile <- basename(resFiles[ii])
+  fileStub <- sub("_(procssedBreathing|processedBreathing)\\.csv$", "", curFile)
+  fileParts <- strsplit(fileStub, "_")[[1]]
+  
+  if(length(fileParts) == 5){
+    dateVal <- fileParts[1]
+    typeVal <- fileParts[2]
+    locationVal <- fileParts[3]
+    subIDVal <- fileParts[4]
+    sessionVal <- fileParts[5]
+  } else if(length(fileParts) == 4){
+    dateVal <- fileParts[1]
+    typeVal <- fileParts[2]
+    locationVal <- fileParts[3]
+    subIDVal <- fileParts[4]
+    sessionVal <- 1
+  } else {
+    warning(paste("Unexpected file name format:", curFile))
+    dateVal <- NA
+    typeVal <- NA
+    locationVal <- NA
+    subIDVal <- NA
+    sessionVal <- NA
+  }
+  
+  taskMeans <- tmp %>%
+    group_by(task) %>%
+    summarize(meanBreathLength = mean(length, na.rm = TRUE), .groups = "drop")
+  
+  meanVec <- setNames(rep(NA_real_, length(summary_task_cols)), summary_task_cols)
+  overlapTasks <- intersect(taskMeans$task, summary_task_cols)
+  meanVec[overlapTasks] <- taskMeans$meanBreathLength[match(overlapTasks, taskMeans$task)]
+  
+  subjBreathSummary_list[[ii]] <- tibble(
+    subjectID = fileStub,
+    date = dateVal,
+    type = typeVal,
+    location = locationVal,
+    subID = subIDVal,
+    session = as.numeric(sessionVal)
+  ) %>%
+    bind_cols(as_tibble(as.list(meanVec)))
+  ## -------------------------------------------------------------------------
+  
+  # fig = tmp %>%
+  #   ggplot(aes(
+  #     x = length,
+  #     y = after_stat(count / sum(count)),
+  #     color = task
+  #   )) +
+  #   geom_freqpoly(linewidth = 3, binwidth = 0.75) +
+  #   scale_color_manual(values = cond_cols) +
+  #   scale_y_continuous(labels = percent_format()) +
+  #   labs(
+  #     x = "Breath length",
+  #     y = "Proportion",
+  #     color = "Task"
+  #   ) +
+  #   theme_classic() + 
+  #   ggtitle(resFiles[ii]) + 
+  #   xlim(c(0, 12))
+  # 
+  # print(fig)
+  # 
+  # audio_base <- tmp %>%
+  #   filter(task == "audio") %>%
+  #   summarize(audioLength = mean(length, na.rm = TRUE)) %>%
+  #   pull(audioLength)
+  # 
+  # fig2 <- tmp %>%
+  #   mutate(lengthDevFromAudio = length - audio_base) %>%
+  #   filter(task != "audio") %>%
+  #   ggplot(aes(x = task, y = lengthDevFromAudio, fill = task)) +
+  #   geom_hline(yintercept = 0, linetype = "dashed", linewidth = 1) +
+  #   geom_boxplot(outlier.alpha = 0.25, linewidth = 1.2) +
+  #   scale_fill_manual(values = cond_cols) +
+  #   labs(
+  #     x = "Task",
+  #     y = "Breath length deviation from audio baseline",
+  #     fill = "Task"
+  #   ) +
+  #   theme_classic() +
+  #   ggtitle(resFiles[ii]) +
+  #   theme(
+  #     axis.text.x = element_text(angle = 45, hjust = 1)
+  #   ) + 
+  #   ylim(c(-4, 4))
+  # 
+  # print(fig2)
+}
+
+subjBreathSummary <- bind_rows(subjBreathSummary_list)
+
+longForm = subjBreathSummary %>% pivot_longer(cols = -c('subjectID', 'date', 'type', 'location', 'subID', 'session'), 
+                                   names_to = 'task', 
+                                   values_to = 'breathLen')
+
+test = longForm %>% filter(type == 'EEG', task %in% c('audio', 'fastFocus', 'naturalFocus', 'slowFocus'))
+
+test %>%
+  filter(!is.na(task)) %>%
+  group_by(task) %>%
+  filter(!all(is.na(breathLen))) %>%
+  ungroup() %>%
+  ggplot(aes(y = breathLen, x = task, color = task)) + 
+  geom_boxplot(linewidth = 1.5) +
+  theme_classic() +
+  theme(
+    axis.line = element_line(linewidth = 1.5),
+    axis.ticks = element_line(linewidth = 1.5),
+    axis.text = element_text(size = 16, face = "bold"),
+    axis.title = element_text(size = 20, face = "bold")
+  ) + 
+  geom_line(aes(group = subID))
+
+# + 
+  # geom_line(aes(x = task, group = subID, color = subID), linewidth = 3)
+
+```
+## read in data
+
+```{r readin}
+# ============================================================
+# Run
+# ============================================================
+dat_all <- load_all_beh(in_dir)
+
+# For each stem (session), generate a PDF comparing channels
+stems <- levels(dat_all$stem)
+
+results <- map(stems, \(st) {
+  dat_stem <- dat_all %>% filter(stem == st)
+  make_plots_for_stem(dat_stem, out_dir, stem_name = as.character(st))
+})
+
+# Optional: inspect “best channel” per stem using the composite score
+best_by_stem <- dat_all %>%
+  filter(use == 1) %>%
+  to_long_epoch_metrics() %>%
+  { score_channels(dat_all %>% filter(use==1), .) } %>%
+  group_by(stem) %>%
+  slice_max(order_by = score, n = 1, with_ties = FALSE) %>%
+  ungroup()
+
+print(best_by_stem %>% select(stem, channel, score, prop_good_fit, med_fit, med_prom_local, med_prom_burst_t))
+
+
+# Keep only rows from dat_all that match the (stem, channel) pairs in best_by_stem
+dat_win <- dat_all %>%
+  semi_join(
+    best_by_stem %>% select(stem, channel),
+    by = c("stem", "channel")
+  )
+
+# (Optional) sanity check: should now be exactly one channel per stem
+dat_win %>%
+  count(stem, channel) %>%
+  arrange(stem)
+
+
+dat_win$task[is.na(dat_win$task)] = dat_win$sessType[is.na(dat_win$task)]
+
+allDat = dat_win
+
+
+```
+
+
+## Gamma Frequency across participants
+
+```{r gamma freq}
+
+
+# ---- choose the 5 epoch-specific *Freq columns (edit if your names differ) ----
+freq_cols <- c("inRiseFreq","inFallFreq","exRiseFreq","exFallFreq","pauseFreq")
+prom_cols <- c("inRisePromWide", "inFallPromWide", "exRisePromWide", "exFallPromWide", "pausePromWide")
+# ---- participant ID column: use subID if present, otherwise fall back to stem ----
+id_col <- 'stem'
+
+
+
+
+# ---- compute per-participant median frequency per epoch using QC breaths ----
+dat_freq_med <- dat_win %>%
+  filter(use == 1) %>%
+  select(all_of(id_col), all_of(freq_cols), task) %>%
+  pivot_longer(all_of(freq_cols), names_to = "epoch", values_to = "freq_hz") 
+
+dat_prom_med <- dat_win %>%
+  filter(use == 1) %>%
+  select(all_of(id_col), all_of(prom_cols), task) %>%
+  pivot_longer(all_of(prom_cols), names_to = "epoch", values_to = "prom") 
+
+dat_prom_med %>% ggplot(aes(x = prom, color = stem)) + 
+  geom_freqpoly(aes(y = ..density..), linewidth = 2) + 
+  theme(legend.position = 'none')
+
+dat_prom_med %>% group_by(stem) %>% summarize(medVal = median(prom, na.rm=T)) -> promVals
+
+#remove where prominence is low! 
+# dat_win = dat_win %>% filter(stem %in% promVals$stem[promVals$medVal>.6])
+
+# dat_freq_med <- dat_win %>%
+#   filter(use == 1) %>%
+#   select(all_of(id_col), all_of(freq_cols)) %>%
+#   pivot_longer(all_of(freq_cols), names_to = "epoch", values_to = "freq_hz") 
+# 
+# dat_prom_med <- dat_win %>%
+#   filter(use == 1) %>%
+#   select(all_of(id_col), all_of(prom_cols)) %>%
+#   pivot_longer(all_of(prom_cols), names_to = "epoch", values_to = "prom") 
+
+
+dat_freq_med <- dat_freq_med %>%
+  group_by(stem, epoch) %>%
+  summarise(freq_med = median(freq_hz, na.rm = TRUE),
+            task = task[1], .groups = "drop") %>%
+  mutate(
+    epoch = factor(
+      epoch,
+      levels = freq_cols,
+      labels = c("inhale rise","inhale fall","exhale rise","exhale fall","pause")
+    )
+  )
+
+
+dat_prom_med <- dat_prom_med %>%
+  group_by(stem, epoch) %>%
+  summarise(prom_med = median(prom, na.rm = TRUE),
+            task = task[1], 
+            .groups = "drop") %>%
+  mutate(
+    epoch = factor(
+      epoch,
+      levels = prom_cols,
+      labels = c("inhale rise","inhale fall","exhale rise","exhale fall","pause")
+    )
+  )
+
+
+# ---- plot: one line per participant ----
+ggplot(dat_freq_med, aes(x = epoch, y = freq_med, group = stem, color = task)) +
+  geom_line(alpha = 0.6) +
+  geom_point(size = 1.6, alpha = 0.8) +
+  labs(
+    x = "Breath epoch",
+    y = "Median gamma peak frequency (Hz) (QC breaths)",
+    title = "Participant-specific median gamma frequency by respiratory epoch"
+  ) +
+  theme_classic(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 25, hjust = 1),
+    legend.position = "none"
+  )
+
+
+ggplot(dat_prom_med, aes(x = epoch, y = prom_med, group = stem, color = task)) +
+  geom_line(alpha = 0.6) +
+  geom_point(size = 1.6, alpha = 0.8) +
+  labs(
+    x = "Breath epoch",
+    y = "Median gamma prom (QC breaths)",
+    title = "Participant gamma prominence by respiratory epoch"
+  ) +
+  theme_classic(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 25, hjust = 1),
+    legend.position = "none"
+  )
+
+
+
+dat_freq_med_centered <- dat_freq_med %>% group_by(stem) %>%
+  mutate(freq_med = freq_med - median(freq_med)) %>% ungroup()
+
+
+
+ggplot(dat_freq_med_centered, aes(x = epoch, y = freq_med, fill = task)) +
+  geom_boxplot(position = position_dodge2(width = 0.8, preserve = "single")) +
+  labs(
+    x = "Breath epoch",
+    y = "Median gamma peak frequency (Hz) (QC breaths)",
+    title = "Participant-specific median gamma frequency by respiratory epoch"
+  ) +
+  theme_classic(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 25, hjust = 1)
+  )
+
+
+
+
+
+
+```
+
+## when are gamma peaks? 
+
+```{r gamma peaks}
+
+
+dat_win <- dat_win %>%
+  filter(use == 1) %>%
+  group_by(stem, task) %>%
+  mutate(
+    lenBin = ntile(length, 3),
+    RRBin  = ntile(RR_max_min, 3),
+    lenBin = factor(lenBin, levels = 1:3,
+                    labels = c("1_short", "2_mid", "3_long")),
+    RRBin  = factor(RRBin,  levels = 1:3,
+                    labels = c("1_low", "2_mid", "3_high"))
+  ) %>%
+  ungroup()
+
+
+
+library(grid)   # for unit()
+
+# --- If phi_burst might be in degrees, auto-convert to radians ---
+phi_max <- max(abs(dat_win$phi_burst), na.rm = TRUE)
+datp <- dat_win %>%
+  mutate(phi_burst_rad = if (phi_max > (2*pi + 0.25)) phi_burst * pi/180 else phi_burst) %>%
+  filter(use == 1, is.finite(phi_burst_rad), !is.na(lenBin), !is.na(task))
+
+# --- circular mean vector per lenBin x task ---
+summ <- datp %>% filter(allFooof==1) %>% 
+  group_by(lenBin, task, stem) %>%
+  summarise(
+    n = sum(is.finite(phi_burst_rad)),
+    mcos = mean(cos(phi_burst_rad), na.rm = TRUE),
+    msin = mean(sin(phi_burst_rad), na.rm = TRUE),
+    mu   = atan2(msin, mcos),                      # mean direction
+    r    = sqrt(mcos^2 + msin^2),                  # resultant length (0..1)
+    .groups = "drop"
+  ) %>%
+  mutate(
+    xend = r * cos(mu),
+    yend = r * sin(mu),
+    lab  = sprintf("n=%d\nr=%.2f", n, r)
+  )
+
+# --- unit circle for each panel ---
+circle <- tibble(theta = seq(0, 2*pi, length.out = 361),
+                 x = cos(theta), y = sin(theta))
+
+# labels positioned/rotated along the radial rays
+r_lab <- 0.60  # place labels just beyond the 0.5 guide, inside your 0.65 limits
+
+angle_labs <- tibble::tibble(
+  theta = c(-pi, -0.6*pi, -0.2*pi, 0.2*pi, 0.6*pi),
+  lab   = c("onset", "peak", "ex onset", "trough", "pause")
+) %>%
+  dplyr::mutate(
+    x = r_lab * cos(theta),
+    y = r_lab * sin(theta),
+
+    # rotate text to align with the ray; flip 180° when it would be upside down
+    angle = theta * 180 / pi,
+    angle = dplyr::if_else(angle < -90 | angle > 90, angle + 180, angle),
+
+    # anchor so text extends outward from the ray end
+    hjust = dplyr::if_else(cos(theta) >= 0, 0, 1),
+    vjust = 0.5
+  )
+
+# use same theta for guides
+rad_guides <- angle_labs %>%
+  dplyr::mutate(
+    x0 = 0, y0 = 0,
+    x1 = 0.5 * cos(theta),
+    y1 = 0.5 * sin(theta)
+  )
+
+
+
+
+# --- 3x3 grid of polar (circular) mean-vector plots ---
+ggplot() +
+  # geom_path(data = circle, aes(x = x, y = y), linewidth = 0.6) +
+  # remove crosshairs; add radial guides instead
+  geom_segment(
+    data = rad_guides,
+    aes(x = x0, y = y0, xend = x1, yend = y1),
+    inherit.aes = FALSE,
+    linewidth = 0.35,
+    alpha = 0.6
+  ) +
+  geom_segment(
+    data = summ,
+    aes(x = 0, y = 0, xend = xend, yend = yend, color = stem),
+    linewidth = 1.1,
+    arrow = arrow(length = unit(0.16, "inches"))
+  ) +
+  geom_point(data = summ, aes(x = xend, y = yend, color = stem), size = 2.2) +
+  facet_grid(lenBin ~ task) +
+  # show only to radius 0.5; arrows can extend beyond (no clipping)
+  coord_fixed(xlim = c(-0.65, 0.65), ylim = c(-0.65, 0.65), clip = "off") +
+  theme_void() +
+  theme(
+    strip.text = element_text(size = 11),
+    plot.title = element_text(hjust = 0.5),
+    plot.margin = margin(10, 25, 10, 25),
+    legend.position = 'none' # extra room for labels outside panels
+  ) +
+  ggtitle("Mean vector direction of phi_burst by lenBin × task") + 
+  geom_text(
+    data = angle_labs,
+    aes(x = x, y = y, label = lab, angle = angle, hjust = hjust, vjust = vjust),
+    inherit.aes = FALSE,
+    size = 3.5
+  )
+
+
+
+
+############################ --- without splitting by breath length ####################
+phi_max <- max(abs(dat_win$phi_burst), na.rm = TRUE)
+
+datp <- dat_win %>%
+  mutate(phi_burst_rad = if (phi_max > (2*pi + 0.25)) phi_burst * pi/180 else phi_burst) %>%
+  filter(use == 1, is.finite(phi_burst_rad), !is.na(task))
+
+# --- mean vector per task x stem (ONE arrow per stem; no len bins) ---
+summ <- datp %>%
+  filter(allFooof == 1) %>%
+  group_by(task, stem) %>%
+  summarise(
+    n = sum(is.finite(phi_burst_rad)),
+    mcos = mean(cos(phi_burst_rad), na.rm = TRUE),
+    msin = mean(sin(phi_burst_rad), na.rm = TRUE),
+    mu   = atan2(msin, mcos),
+    r    = sqrt(mcos^2 + msin^2),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    xend = r * cos(mu),
+    yend = r * sin(mu),
+    lab  = sprintf("n=%d\nr=%.2f", n, r)
+  )
+
+# --- plot: facet by task, lines/points colored by stem ---
+ggplot() +
+  geom_segment(
+    data = rad_guides,
+    aes(x = x0, y = y0, xend = x1, yend = y1),
+    inherit.aes = FALSE,
+    linewidth = 0.35,
+    alpha = 0.6
+  ) +
+  geom_segment(
+    data = summ,
+    aes(x = 0, y = 0, xend = xend, yend = yend, color = stem),
+    linewidth = 1.1,
+    arrow = arrow(length = unit(0.16, "inches"))
+  ) +
+  geom_point(data = summ, aes(x = xend, y = yend, color = stem), size = 2.2) +
+  facet_wrap(~ task) +
+  coord_fixed(xlim = c(-0.65, 0.65), ylim = c(-0.65, 0.65), clip = "off") +
+  theme_void() +
+  theme(
+    strip.text = element_text(size = 11),
+    plot.title = element_text(hjust = 0.5),
+    plot.margin = margin(10, 25, 10, 25),
+    legend.position = "none"
+  ) +
+  ggtitle("Mean vector direction of phi_burst by task (one vector per stem)") +
+  geom_text(
+    data = angle_labs,
+    aes(x = x, y = y, label = lab, angle = angle, hjust = hjust, vjust = vjust),
+    inherit.aes = FALSE,
+    size = 3.5
+  )
+
+
+
+
+
+
+
+
+############################################################################
+############################################################################
+
+
+datp %>% filter(allFooof==1) %>% ggplot(aes(x = phi_burst_idx, color = stem)) +
+  geom_freqpoly(aes(y=..density..), breaks = seq(0.5, 50.5, by = 5), boundary = 0.5, closed = "left") +
+  geom_vline(xintercept = c(10.5, 20.5, 30.5, 40.5), linetype = "dashed", linewidth = 0.5) +
+  facet_grid(lenBin ~ task) +
+  scale_x_continuous(breaks = seq(0, 51, by = 5), limits = c(0, 51)) +
+  theme_classic() +
+  labs(
+    title = "Histogram of phi_burst_idx by task × length bin",
+    x = "phi_burst_idx (1–50 template index)",
+    y = "Count"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 0),
+    legend.position = "none"
+  )
+
+
+datp %>% filter(prom_burst_t<300) %>% ggplot(aes(x = phi_burst_idx, y = prom_burst_t)) +
+  stat_summary_bin(
+    fun = mean,
+    binwidth = 2.5,
+    boundary = 0.5,
+    closed = "left",
+    geom = "col"
+  ) +
+  geom_vline(
+    xintercept = c(10.5, 20.5, 30.5, 40.5),
+    linetype = "dashed",
+    linewidth = 0.5
+  ) +
+  facet_grid(lenBin ~ task) +
+  scale_x_continuous(breaks = seq(1, 50, by = 5), limits = c(1, 50)) +
+  theme_classic() +
+  labs(
+    title = "Mean prom_burst_t within phi_burst_idx bins (by task × length bin)",
+    x = "phi_burst_idx (1–50 template index)",
+    y = "Mean prom_burst_t"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 0),
+    legend.position = "none"
+  )
+
+
+
+
+
+```
+
+## variability in HRV across participants and conditions
+
+```{r HRV}
+
+#CONVERT ALL FREQUENCIES TO RESIDUALS
+# freqVars = c(names(dat_win)[grepl('Freq', names(dat_win))], 'phi_burst_freq')
+# dat_win[freqVars] = dat_win[freqVars] - dat_win$gamma_centerHz
+
+dat_win <- dat_win %>%
+  group_by(stem, task) %>%
+  group_modify(~{
+    d <- .x
+
+    d_fit <- d %>%
+      filter(use == 1, is.finite(RR_max_min), is.finite(length))
+
+    # minimal guard so you don't crash on tiny sessions
+    if (nrow(d_fit) < 3) {
+      d$RR_slope <- NA_real_
+      d$RR_intercept <- NA_real_
+      d$RR_resid <- NA_real_
+      return(d)
+    }
+
+    fit <- lm(RR_max_min ~ length, data = d_fit)
+    co <- coef(fit)
+
+    b0 <- unname(co[1])  # intercept (offset)
+    b1 <- unname(co[2])  # slope
+
+    d$RR_intercept <- b0
+    d$RR_slope <- b1
+    d$RR_resid <- d$RR_max_min - (b0 + b1 * d$length)
+
+    d
+  }) %>%
+  ungroup()
+
+tmp = dat_win %>% filter(!is.na(RR_resid))
+
+tmp %>% filter(RR_slope>-.05) %>% 
+  group_by(task, stem) %>% 
+  summarize(RR_slope = RR_slope[1]) %>% 
+  ggplot(aes(x = task, y = RR_slope, color = stem)) + 
+  geom_point() + 
+  geom_line(aes(group = stem))
+  
+
+
+
+
+
+
+dat_win <- dat_win %>%
+  group_by(stem) %>%
+  group_modify(~{
+    d <- .x
+
+    d_fit <- d %>%
+      filter(use == 1, is.finite(RR_max_min), is.finite(length))
+
+    # minimal guard so you don't crash on tiny sessions
+    if (nrow(d_fit) < 3) {
+      d$RR_slope <- NA_real_
+      d$RR_intercept <- NA_real_
+      d$RR_resid <- NA_real_
+      return(d)
+    }
+
+    fit <- lm(RR_max_min ~ length, data = d_fit)
+    co <- coef(fit)
+
+    b0 <- unname(co[1])  # intercept (offset)
+    b1 <- unname(co[2])  # slope
+
+    
+    d$RR_residTOT <- d$RR_max_min - (b0 + b1 * d$length)
+
+    d
+  }) %>%
+  ungroup()
+
+
+tmp = dat_win %>% filter(!is.na(RR_resid))
+uniList = unique(tmp$stem)
+for(sub in uniList){
+  
+  curSub = tmp %>% filter(sub == stem)
+  out = curSub %>% ggplot(aes(x = 1:nrow(curSub), 
+                        y = RR_residTOT, color = task)) + 
+    geom_point()
+  
+  print(out)
+  
+}
+
+
+
+# optional: one-row-per-session summary of the fitted line
+rr_line_by_stem <- dat_win %>%
+  distinct(stem, RR_intercept, RR_slope, task)
+
+dat_win$freqShift = dat_win$inFallFreq - dat_win$inRiseFreq
+
+dat_win %>% filter(use ==1) %>% group_by(stem, task) %>%
+  summarize(inhale = sum(phi_burst_idx>0 & phi_burst_idx<25),
+            exhale = sum(phi_burst_idx>25 & phi_burst_idx<=50),
+            ratio = inhale/exhale, 
+            freqShift = median(freqShift), 
+            gamma_centerHz = median(exRiseFreq), 
+            RR_resid = mean(RR_residTOT)) -> peakTimingInOut
+
+
+rr_summary = merge(rr_line_by_stem, peakTimingInOut)
+
+rr_summary %>% filter(RR_slope>-.01) %>% ggplot(aes(x = gamma_centerHz, y = RR_slope, color = task)) + 
+  geom_point(size = 5) + 
+  geom_line(aes(group = stem), color = 'black') + 
+  ggtitle('Individual gamma frequency does not predict HRV reactivity')
+
+rr_summary %>% filter(RR_slope>-.01) %>% ggplot(aes(x = gamma_centerHz, y = RR_intercept, color = task)) + 
+  geom_point(size = 5) + 
+  geom_line(aes(group = stem), color = 'black') + 
+  ggtitle('Individual gamma frequency may predict individual HRV baseline')
+
+rr_summary %>% filter(RR_slope>-.01) %>% ggplot(aes(x = gamma_centerHz, y = RR_resid, color = task)) + 
+  geom_point(size = 5) + 
+  geom_line(aes(group = stem), color = 'black') + 
+  ggtitle('Individual gamma frequency does not predict HRV residuals')
+
+
+rr_summary %>% filter(RR_slope>-.01) %>% ggplot(aes(x = freqShift, y = RR_slope, color = task)) + 
+  geom_point(size = 5) + 
+  geom_line(aes(group = stem), color = 'black') + 
+  ggtitle('Inhale fall frequency shift does not predict HRV reactivity')
+
+
+rr_summary %>% filter(RR_slope>-.01) %>% ggplot(aes(x = freqShift, y = RR_intercept, color = task)) + 
+  geom_point(size = 5) + 
+  geom_line(aes(group = stem), color = 'black') + 
+  ggtitle('Inhale fall frequency shift does not predict individual HRV baseline')
+
+rr_summary %>% filter(RR_slope>-.01) %>% ggplot(aes(x = freqShift, y = RR_resid, color = task)) + 
+  geom_point(size = 5) + 
+  geom_line(aes(group = stem), color = 'black') + 
+  ggtitle('Inhale fall frequency shift HRV residuals')
+
+
+rr_summary %>%
+  filter(RR_slope > -0.01) %>%
+  ggplot(aes(x = ratio, y = RR_intercept, color = task)) +
+  geom_point(size = 5) +
+  geom_line(aes(group = stem), color = "black") +
+  scale_x_log10() +
+  xlab('Ratio of gamma peak during inhale v. exhale') + 
+  ggtitle("timing of gamma peak doesn't affect individual HRV baseline")
+
+rr_summary %>%
+  filter(RR_slope > -0.01) %>%
+  ggplot(aes(x = ratio, y = RR_slope, color = task)) +
+  geom_point(size = 5) +
+  geom_line(aes(group = stem), color = "black") +
+  scale_x_log10() +
+  xlab('Ratio of gamma peak during inhale v. exhale') + 
+  ggtitle("timing of gamma peak doesn't affect individual HRV reactivity")
+
+rr_summary %>%
+  filter(RR_slope > -0.01) %>%
+  ggplot(aes(x = ratio, y = RR_resid, color = task)) +
+  geom_point(size = 5) +
+  geom_line(aes(group = stem), color = "black") +
+  scale_x_log10() +
+  xlab('Ratio of gamma peak during inhale v. exhale') + 
+  ggtitle("timing of gamma peak doesn't affect HRV residuals")
+
+
+
+
+dat_win %>% filter(use==1) %>% ggplot(aes(x = length, y = RR_max_min)) + 
+  geom_point()
+
+
+
+dat_win <- dat_win %>% filter(use==1) %>%
+  group_by(stem) %>%
+  mutate(
+    lenBin = ntile(length, 5),
+    RRBin  = ntile(RR_max_min, 5),
+    lenBin = factor(lenBin, levels = 1:5,
+                    labels = c("1_shortest","2_short","3_mid", "4_long", '5_longest')),
+    RRBin  = factor(RRBin,  levels = 1:5,
+                    labels = c("1_lowest","2_low","3_mid", '4_high', '5_highest'))
+  ) %>%
+  ungroup()
+
+
+dat_win %>% ggplot(aes(x = lenBin, y = RRBin, color = task)) + geom_jitter(size = 10, alpha = .25)
+
+
+
+
+dat_win %>% filter(burst_alpha_f_prom<200)%>% ggplot(aes(x = RRBin, y = freqRange, color = lenBin)) + 
+  geom_boxplot()
+
+dat_win %>% filter(burst_alpha_f_prom<200)%>% ggplot(aes(x = RRBin, y = pauseFreq, color = lenBin)) + 
+  geom_boxplot()
+
+
+table(dat_win$RRBin, dat_win$lenBin, dat_win$phi_burst_idx<25)
+
+dat_win %>% filter(burst_alpha_f_prom<200)%>% ggplot(aes(x = RRBin, y = freqShift, color = lenBin)) + 
+  geom_boxplot()
+
+
+dat_win$earlyGamma =  dat_win$phi_burst_idx<25; 
+
+## what about if we refit on the breaths with early v. late peaks? 
+dat_win <- dat_win %>%
+  group_by(stem, task,  earlyGamma) %>%
+  group_modify(~{
+    d <- .x
+
+    d_fit <- d %>%
+      filter(use == 1, is.finite(RR_max_min), is.finite(length))
+
+    # minimal guard so you don't crash on tiny sessions
+    if (nrow(d_fit) < 3) {
+      d$RR_slope <- NA_real_
+      d$RR_intercept <- NA_real_
+      d$RR_resid <- NA_real_
+      return(d)
+    }
+
+    fit <- lm(RR_max_min ~ length, data = d_fit)
+    co <- coef(fit)
+
+    b0 <- unname(co[1])  # intercept (offset)
+    b1 <- unname(co[2])  # slope
+
+    
+    d$RR_intercept <- b0
+    d$RR_slope <- b1
+    d$RR_resid <- d$RR_max_min - (b0 + b1 * d$length)
+
+    d
+  }) %>%
+  ungroup()
+
+
+# optional: one-row-per-session summary of the fitted line
+rr_line_by_stem <- dat_win %>%
+  distinct(stem, RR_intercept, RR_slope, earlyGamma)
+
+dat_win$freqShift = dat_win$inFallFreq - dat_win$inRiseFreq
+
+dat_win %>% filter(use ==1) %>% group_by(stem, earlyGamma) %>%
+  summarize(inhale = sum(phi_burst_idx>0 & phi_burst_idx<25),
+            exhale = sum(phi_burst_idx>25 & phi_burst_idx<=50),
+            ratio = inhale/exhale, 
+            freqShift = median(freqShift), 
+            gamma_centerHz = median(exRiseFreq), 
+            RR_resid = mean(RR_residTOT)) -> peakTimingInOut
+
+
+rr_summary = merge(rr_line_by_stem, peakTimingInOut)
+
+
+rr_summary %>% filter(RR_slope>-.01) %>% ggplot(aes(x = earlyGamma, y = RR_slope, color = earlyGamma)) + 
+  geom_boxplot() + 
+  ggtitle('Individual gamma frequency does not predict HRV reactivity')
+
+rr_summary %>% filter(RR_slope>-.01) %>% ggplot(aes(x = earlyGamma, y = RR_intercept, color = earlyGamma)) + 
+  geom_boxplot() + 
+  ggtitle('Individual gamma frequency does not predict HRV reactivity')
+
+rr_summary %>% filter(RR_slope>-.01) %>% ggplot(aes(x = earlyGamma, y = RR_resid, color = earlyGamma)) + 
+  geom_boxplot() + 
+  ggtitle('Individual gamma frequency does not predict HRV reactivity')
+
+rr_summary %>% filter(RR_slope>-.01) %>% ggplot(aes(x = freqShift, y = RR_slope, color = task)) + 
+  geom_point(size = 5) + 
+  geom_line(aes(group = stem), color = 'black') + 
+  ggtitle('Inhale fall frequency shift does not predict HRV reactivity')
+
+
+rr_summary %>% filter(RR_slope>-.01) %>% ggplot(aes(x = freqShift, y = RR_intercept, color = task)) + 
+  geom_point(size = 5) + 
+  geom_line(aes(group = stem), color = 'black') + 
+  ggtitle('Inhale fall frequency shift does not predict individual HRV baseline')
+
+rr_summary %>% filter(RR_slope>-.01) %>% ggplot(aes(x = freqShift, y = RR_resid, color = task)) + 
+  geom_point(size = 5) + 
+  geom_line(aes(group = stem), color = 'black') + 
+  ggtitle('Inhale fall frequency shift HRV residuals')
+
+
+rr_summary %>%
+  filter(RR_slope > -0.01) %>%
+  ggplot(aes(x = ratio, y = RR_intercept, color = task)) +
+  geom_point(size = 5) +
+  geom_line(aes(group = stem), color = "black") +
+  scale_x_log10() +
+  xlab('Ratio of gamma peak during inhale v. exhale') + 
+  ggtitle("timing of gamma peak doesn't affect individual HRV baseline")
+
+rr_summary %>%
+  filter(RR_slope > -0.01) %>%
+  ggplot(aes(x = ratio, y = RR_slope, color = task)) +
+  geom_point(size = 5) +
+  geom_line(aes(group = stem), color = "black") +
+  scale_x_log10() +
+  xlab('Ratio of gamma peak during inhale v. exhale') + 
+  ggtitle("timing of gamma peak doesn't affect individual HRV reactivity")
+
+rr_summary %>%
+  filter(RR_slope > -0.01) %>%
+  ggplot(aes(x = ratio, y = RR_resid, color = task)) +
+  geom_point(size = 5) +
+  geom_line(aes(group = stem), color = "black") +
+  scale_x_log10() +
+  xlab('Ratio of gamma peak during inhale v. exhale') + 
+  ggtitle("timing of gamma peak doesn't affect HRV residuals")
+
+
+
+```
+
+## Gamma peak event timing
+
+```{r gamma peaks}
+
+
+
+dat_win %>%
+  filter(use == 1) %>%
+  group_by(stem) %>%
+  mutate(w = 1 / n()) %>%   # each observation contributes 1/n within stem
+  ungroup() %>%
+  ggplot(aes(x = phi_burst_idx, group = stem, color = stem, weight = w)) +
+  geom_freqpoly(bins = 10) +
+  labs(y = "Proportion")
+
+dat_win %>% filter(use ==1) %>%
+  ggplot(aes(x = phi_burst_idx)) + 
+  geom_histogram()
+
+#add variables capable of capturing the two peaked nature: 
+dat_win <- dat_win %>%
+  mutate(
+    sin1 = sin(phi_burst),
+    cos1 = cos(phi_burst),
+    sin2 = sin(2*phi_burst),
+    cos2 = cos(2*phi_burst)
+  )
+
+
+
+
+# 
+# dat_win %>% filter(use ==1) %>%
+#   ggplot(aes(x = phi_burst)) + 
+#   geom_histogram()
+
+
+
+
+bin_w <- 4  # bin width in phi_burst_idx units (try 1, 2, or 3)
+
+sumdat <- dat_win %>%
+  filter(use == 1, prom_burst_t < 300, is.finite(phi_burst_idx), is.finite(prom_burst_t)) %>%
+  mutate(phi_bin = floor((phi_burst_idx - 1) / bin_w) * bin_w + 1,
+         phi_center = phi_bin + (bin_w - 1)/2) %>%
+  group_by(phi_bin, phi_center) %>%
+  summarise(
+    n = n(),
+    mean_prom = mean(prom_burst_t, na.rm = TRUE),
+    se_prom   = sd(prom_burst_t, na.rm = TRUE) / sqrt(n),
+    .groups = "drop"
+  )
+
+ggplot(sumdat, aes(x = phi_center, y = mean_prom)) +
+  geom_line(linewidth = 1) +
+  geom_errorbar(aes(ymin = mean_prom - se_prom, ymax = mean_prom + se_prom),
+                width = 0.2, alpha = 0.8) +
+  geom_point(size = 2) +
+  scale_x_continuous(breaks = seq(1, 50, by = 5), limits = c(1, 50)) +
+  labs(x = "phi_burst_idx (1–50)", y = "prom_burst_t", title = "Binned mean prom_burst_t ± SE") +
+  theme_classic()
+
+
+
+dat_win %>% filter(prom_burst_t<300) %>% ggplot(aes(x = phi_burst_idx, y = prom_burst_t)) + geom_jitter(size = 5, alpha = .15)
+
+
+```
+
+## Session wise 
+
+```{r whole session}
+
+library(dplyr)
+
+# ---------- circular helpers ----------
+circ_mean <- function(theta) {
+  theta <- theta[is.finite(theta)]
+  if (length(theta) == 0) return(NA_real_)
+  atan2(mean(sin(theta)), mean(cos(theta)))
+}
+
+circ_R <- function(theta) {
+  theta <- theta[is.finite(theta)]
+  if (length(theta) == 0) return(NA_real_)
+  sqrt(mean(cos(theta))^2 + mean(sin(theta))^2)
+}
+
+# optional: circular SD (in radians)
+circ_sd <- function(theta) {
+  R <- circ_R(theta)
+  if (!is.finite(R) || R <= 0) return(NA_real_)
+  sqrt(-2 * log(R))
+}
+
+# map 1:K index onto [0, 2pi), do circular stats, map back to 1:K
+idx_to_theta <- function(idx, K = 50) {
+  idx <- idx[is.finite(idx)]
+  if (length(idx) == 0) return(numeric(0))
+  ((idx - 1) %% K) / K * 2*pi
+}
+theta_to_idx <- function(theta, K = 50) {
+  if (!is.finite(theta)) return(NA_real_)
+  1 + ((theta %% (2*pi)) / (2*pi)) * K
+}
+
+mad_na <- function(x) {
+  x <- x[is.finite(x)]
+  if (length(x) < 2) return(NA_real_)
+  mad(x, constant = 1, na.rm = TRUE)
+}
+
+# ---------- columns to treat as circular ----------
+phase_cols <- intersect(
+  names(dat_win),
+  c("phi_burst", "phi_mean", "phi_err", "burst_theta_phase", "burst_alpha_phase")
+)
+
+# (optional) also treat *any* column ending in "_phase" as circular
+phase_cols <- union(phase_cols, grep("_phase$", names(dat_win), value = TRUE))
+
+# ---------- summary ----------
+dat_summ <- dat_win %>%
+  filter(use == 1) %>%
+  group_by(stem, condition) %>%
+  summarize(
+    n_use = n(),
+
+    # carry ID-ish fields
+    channel   = first(channel),
+    task      = first(task),
+    noseMouth = first(noseMouth),
+    warp      = first(warp),
+    shadowFile= first(shadowFile),
+
+    # --- circular summaries (radians) ---
+    across(
+      all_of(phase_cols),
+      list(cmean = ~circ_mean(.x),
+           R     = ~circ_R(.x),
+           csd   = ~circ_sd(.x)),
+      .names = "{.col}_{.fn}"
+    ),
+
+    # --- circular summaries for 1:50 index ---
+    phi_burst_idx_cmean = {
+      th <- idx_to_theta(phi_burst_idx, K = 50)
+      theta_to_idx(circ_mean(th), K = 50)
+    },
+    phi_burst_idx_R = {
+      th <- idx_to_theta(phi_burst_idx, K = 50)
+      circ_R(th)
+    },
+    phi_burst_idx_csd = {
+      th <- idx_to_theta(phi_burst_idx, K = 50)
+      circ_sd(th)
+    },
+
+    # --- regular numeric summaries for everything else numeric ---
+    across(
+      where(is.numeric) &
+        !any_of(c("condition","use","phi_burst_idx")) &
+        !any_of(phase_cols),
+      list(
+        med  = ~median(.x, na.rm = TRUE),
+        mad  = ~mad_na(.x),
+        mean = ~mean(.x, na.rm = TRUE),
+        sd   = ~sd(.x, na.rm = TRUE)
+      ),
+      .names = "{.col}_{.fn}"
+    ),
+    .groups = "drop"
+  )
+
+dat_summ
+
+
+dat_summ %>% ggplot(aes(x = length_med, y = RR_max_min_med, color = task)) + geom_point(size = 8) 
+dat_summ %>% ggplot(aes(x = inFallFreq_med, y = RR_resid_mean)) + geom_point(size = 8) 
+
+dat_summ %>% ggplot(aes(x = RR_resid_mean)) + geom_histogram()
+
+
+
+
+```
+
+## create rolling means
+
+```{r rolling}
+library(dplyr)
+
+# ---------- circular helpers ----------
+circ_mean <- function(theta) {
+  theta <- theta[is.finite(theta)]
+  if (length(theta) == 0) return(NA_real_)
+  atan2(mean(sin(theta)), mean(cos(theta)))
+}
+circ_R <- function(theta) {
+  theta <- theta[is.finite(theta)]
+  if (length(theta) == 0) return(NA_real_)
+  sqrt(mean(cos(theta))^2 + mean(sin(theta))^2)
+}
+circ_sd <- function(theta) {
+  R <- circ_R(theta)
+  if (!is.finite(R) || R <= 0) return(NA_real_)
+  sqrt(-2 * log(R))
+}
+idx_to_theta <- function(idx, K = 50) {
+  idx <- idx[is.finite(idx)]
+  if (length(idx) == 0) return(numeric(0))
+  ((idx - 1) %% K) / K * 2*pi
+}
+theta_to_idx <- function(theta, K = 50) {
+  if (!is.finite(theta)) return(NA_real_)
+  1 + ((theta %% (2*pi)) / (2*pi)) * K
+}
+
+# ---------- NA-robust stats ----------
+sd_na <- function(x) {
+  x <- x[is.finite(x)]
+  if (length(x) < 2) return(NA_real_)
+  sd(x)
+}
+mad_na <- function(x) {
+  x <- x[is.finite(x)]
+  if (length(x) < 2) return(NA_real_)
+  mad(x, constant = 1, na.rm = TRUE)
+}
+
+# ---------- rolling (backward-looking) helpers ----------
+roll_apply_prevK <- function(x, k = 10, fun) {
+  n <- length(x)
+  out <- rep(NA_real_, n)
+  for (i in seq_len(n)) {
+    w <- x[max(1, i - k + 1):i]
+    out[i] <- fun(w)
+  }
+  out
+}
+roll_mean <- function(x, k = 10) roll_apply_prevK(x, k, function(v) mean(v, na.rm = TRUE))
+roll_med  <- function(x, k = 10) roll_apply_prevK(x, k, function(v) median(v, na.rm = TRUE))
+roll_sd   <- function(x, k = 10) roll_apply_prevK(x, k, sd_na)
+
+roll_cmean <- function(theta, k = 10) roll_apply_prevK(theta, k, circ_mean)
+roll_cR    <- function(theta, k = 10) roll_apply_prevK(theta, k, circ_R)
+roll_csd   <- function(theta, k = 10) roll_apply_prevK(theta, k, circ_sd)
+
+roll_idx_cmean <- function(idx, k = 10, K = 50) {
+  n <- length(idx); out <- rep(NA_real_, n)
+  for (i in seq_len(n)) {
+    w <- idx[max(1, i - k + 1):i]
+    th <- idx_to_theta(w, K = K)
+    out[i] <- theta_to_idx(circ_mean(th), K = K)
+  }
+  out
+}
+roll_idx_R <- function(idx, k = 10, K = 50) {
+  n <- length(idx); out <- rep(NA_real_, n)
+  for (i in seq_len(n)) {
+    w <- idx[max(1, i - k + 1):i]
+    th <- idx_to_theta(w, K = K)
+    out[i] <- circ_R(th)
+  }
+  out
+}
+roll_idx_csd <- function(idx, k = 10, K = 50) {
+  n <- length(idx); out <- rep(NA_real_, n)
+  for (i in seq_len(n)) {
+    w <- idx[max(1, i - k + 1):i]
+    th <- idx_to_theta(w, K = K)
+    out[i] <- circ_sd(th)
+  }
+  out
+}
+
+# ---------- columns to treat as circular ----------
+phase_cols <- intersect(
+  names(dat_win),
+  c("phi_burst", "phi_mean", "phi_err", "burst_theta_phase", "burst_alpha_phase")
+)
+phase_cols <- union(phase_cols, grep("_phase$", names(dat_win), value = TRUE))
+
+# ---------- numeric columns to roll (exclude IDs + circular + phi_burst_idx + use/condition) ----------
+id_cols <- intersect(
+  names(dat_win),
+  c("stem","file","file_name","base","channel","task","noseMouth","shadowFile","warp")
+)
+
+num_cols <- names(dat_win)[sapply(dat_win, is.numeric)]
+num_cols <- setdiff(num_cols, c("use","condition","phi_burst_idx", phase_cols))
+# keep RR_max_min raw as-is, but we still *compute* roll stats from QC-only values
+# (if you don't want rolling stats for RR_max_min, remove it here)
+# num_cols <- setdiff(num_cols, "RR_max_min")
+
+k <- 10
+
+dat_roll <- dat_win %>%
+  arrange(stem, condition, index) %>%   # swap `index` if you have a better within-condition order variable
+  group_by(stem, condition) %>%
+  mutate(
+    # keep raw per-breath values you explicitly wanted
+    RR_max_min_raw = RR_max_min,
+
+    # ---- rolling for *all numeric* variables (QC-only windows) ----
+    across(
+      all_of(num_cols),
+      ~{
+        v <- ifelse(use == 1, .x, NA_real_)
+        roll_mean(v, k = k)
+      },
+      .names = "{.col}_roll10_mean"
+    ),
+    across(
+      all_of(num_cols),
+      ~{
+        v <- ifelse(use == 1, .x, NA_real_)
+        roll_med(v, k = k)
+      },
+      .names = "{.col}_roll10_med"
+    ),
+    across(
+      all_of(num_cols),
+      ~{
+        v <- ifelse(use == 1, .x, NA_real_)
+        roll_sd(v, k = k)
+      },
+      .names = "{.col}_roll10_sd"
+    ),
+
+    # ---- circular rolling summaries (QC-only) for angle columns ----
+    across(
+      all_of(phase_cols),
+      ~{
+        v <- ifelse(use == 1, .x, NA_real_)
+        roll_cmean(v, k = k)
+      },
+      .names = "{.col}_roll10_cmean"
+    ),
+    across(
+      all_of(phase_cols),
+      ~{
+        v <- ifelse(use == 1, .x, NA_real_)
+        roll_cR(v, k = k)
+      },
+      .names = "{.col}_roll10_R"
+    ),
+    across(
+      all_of(phase_cols),
+      ~{
+        v <- ifelse(use == 1, .x, NA_real_)
+        roll_csd(v, k = k)
+      },
+      .names = "{.col}_roll10_csd"
+    ),
+
+    # ---- circular rolling summaries (QC-only) for 1:50 index ----
+    phi_burst_idx_qc = if_else(use == 1, phi_burst_idx, NA_real_),
+    phi_burst_idx_roll10_cmean = roll_idx_cmean(phi_burst_idx_qc, k = k, K = 50),
+    phi_burst_idx_roll10_R     = roll_idx_R(phi_burst_idx_qc, k = k, K = 50),
+    phi_burst_idx_roll10_csd   = roll_idx_csd(phi_burst_idx_qc, k = k, K = 50)
+  ) %>%
+  ungroup() %>%
+  select(-phi_burst_idx_qc)
+
+dat_roll
+
+
+```
+
+## playing around with the rolling data
+
+```{r explore plots}
+
+library(dplyr)
+library(ggplot2)
+library(purrr)
+
+# y-variable (fixed)
+y_var <- "RR_resid"
+
+# x-variables you want to screen (all the *_roll10_mean + RR_max_min_raw if you want)
+x_vars <- c(
+  
+  "inhaleMax_roll10_mean",
+ "length_roll10_mean","amp_roll10_mean","exhaleMin_roll10_mean",
+ "calm_affective_roll10_mean","content_affective_roll10_mean",
+  "emoAware_mindfulness_roll10_mean","emo_come_go_mindfulness_roll10_mean","pl_up_emo_mindfulness_roll10_mean",
+  "pl_up_thoughts_mindfulness_roll10_mean","relaxed_affective_roll10_mean","tense_affective_roll10_mean",
+  "thtPat_mindfulness_roll10_mean","tht_come_go_mindfulness_roll10_mean","upset_affective_roll10_mean","worried_affective_roll10_mean",
+  
+  "inRiseFreq_roll10_mean","inRiseFitR2_roll10_mean","inRiseProm_roll10_mean","inRisePromWide_roll10_mean",
+  "inFallFreq_roll10_mean","inFallFitR2_roll10_mean","inFallProm_roll10_mean","inFallPromWide_roll10_mean",
+  "exRiseFreq_roll10_mean","exRiseFitR2_roll10_mean","exRiseProm_roll10_mean","exRisePromWide_roll10_mean",
+  "exFallFreq_roll10_mean","exFallFitR2_roll10_mean","exFallProm_roll10_mean","exFallPromWide_roll10_mean",
+  "pauseFreq_roll10_mean","pauseFitR2_roll10_mean","pauseProm_roll10_mean","pausePromWide_roll10_mean",
+  "freqRange_roll10_mean","promModIndex_roll10_mean",
+  "gamma_centerHz_roll10_mean",
+  "phi_burst_freq_roll10_mean","cos_phi_burst_roll10_mean","sin_phi_burst_roll10_mean",
+  "prom_burst_f_roll10_mean","prom_burst_t_roll10_mean","burstPeakWidthBins_roll10_mean",
+  "R_window_roll10_mean",
+  "burst_theta_f_roll10_mean","burst_theta_f_prom_roll10_mean","burst_theta_t_prom_roll10_mean",
+  "burst_alpha_f_roll10_mean","burst_alpha_f_prom_roll10_mean","burst_alpha_t_prom_roll10_mean",
+  "RR_resid_roll10_mean",
+  "sin2_roll10_mean","cos2_roll10_mean","sin1_roll10_mean","cos1_roll10_mean",
+  "phi_burst_idx_roll10_R"  # include this too if you want it in the batch
+)
+
+# keep only columns that actually exist
+x_vars <- intersect(x_vars, names(dat_roll))
+
+# ---- one-liner plot factory ----
+plot_one <- function(x) {
+  dat_roll %>%
+    filter(use == 1) %>%
+    ggplot(aes(x = .data[[x]], y = .data[[y_var]], color = task)) +
+    geom_point(alpha = 0.35, size = 1.2) +
+    geom_smooth(se = TRUE, method = "loess", formula = y ~ x) +
+    labs(
+      title = paste0(y_var, " vs ", x),
+      x = x,
+      y = y_var
+    ) +
+    theme_classic()
+}
+
+# ---- generate the plots (prints each to the plot pane) ----
+walk(x_vars, ~print(plot_one(.x)))
+
+# (optional) to save them:
+# dir.create("roll10_screen_plots", showWarnings = FALSE)
+# walk(x_vars, ~ggsave(file.path("roll10_screen_plots", paste0(.x, ".png")),
+#                      plot = plot_one(.x), width = 6, height = 4, dpi = 200))
+
+
+
+
+```
+
+## 0 split the RR residual variable and see if breaths differ using rolling data
+
+```{r resid split}
+library(dplyr)
+library(ggplot2)
+library(purrr)
+
+y_var <- "RR_resid"
+
+x_vars <- c(
+  "inhaleMax_roll10_mean",
+  "length_roll10_mean","amp_roll10_mean","exhaleMin_roll10_mean",
+  "calm_affective_roll10_mean","content_affective_roll10_mean",
+  "emoAware_mindfulness_roll10_mean","emo_come_go_mindfulness_roll10_mean","pl_up_emo_mindfulness_roll10_mean",
+  "pl_up_thoughts_mindfulness_roll10_mean","relaxed_affective_roll10_mean","tense_affective_roll10_mean",
+  "thtPat_mindfulness_roll10_mean","tht_come_go_mindfulness_roll10_mean","upset_affective_roll10_mean","worried_affective_roll10_mean",
+  "inRiseFreq_roll10_mean","inRiseFitR2_roll10_mean","inRiseProm_roll10_mean","inRisePromWide_roll10_mean",
+  "inFallFreq_roll10_mean","inFallFitR2_roll10_mean","inFallProm_roll10_mean","inFallPromWide_roll10_mean",
+  "exRiseFreq_roll10_mean","exRiseFitR2_roll10_mean","exRiseProm_roll10_mean","exRisePromWide_roll10_mean",
+  "exFallFreq_roll10_mean","exFallFitR2_roll10_mean","exFallProm_roll10_mean","exFallPromWide_roll10_mean",
+  "pauseFreq_roll10_mean","pauseFitR2_roll10_mean","pauseProm_roll10_mean","pausePromWide_roll10_mean",
+  "freqRange_roll10_mean","promModIndex_roll10_mean",
+  "gamma_centerHz_roll10_mean",
+  "phi_burst_freq_roll10_mean","cos_phi_burst_roll10_mean","sin_phi_burst_roll10_mean",
+  "prom_burst_f_roll10_mean","prom_burst_t_roll10_mean","burstPeakWidthBins_roll10_mean",
+  "R_window_roll10_mean",
+  "burst_theta_f_roll10_mean","burst_theta_f_prom_roll10_mean","burst_theta_t_prom_roll10_mean",
+  "burst_alpha_f_roll10_mean","burst_alpha_f_prom_roll10_mean","burst_alpha_t_prom_roll10_mean",
+  "RR_resid_roll10_mean",
+  "sin2_roll10_mean","cos2_roll10_mean","sin1_roll10_mean","cos1_roll10_mean",
+  "phi_burst_idx_roll10_R", 'phi_burst_idx_roll10_cmean'
+)
+
+x_vars <- intersect(x_vars, names(dat_roll))
+
+plot_one_box <- function(x) {
+  d <- dat_roll %>%
+    filter(use == 1) %>%
+    mutate(
+      RR_group = case_when(
+        is.na(.data[[y_var]]) ~ NA_character_,
+        .data[[y_var]] >= 0   ~ "RR_resid >= 0",
+        TRUE                  ~ "RR_resid < 0"
+      ),
+      RR_group = factor(RR_group, levels = c("RR_resid < 0", "RR_resid >= 0"))
+    ) %>%
+    filter(!is.na(RR_group)) %>%
+    filter(is.finite(.data[[x]]))
+
+  ggplot(d, aes(x = RR_group, y = .data[[x]], fill = task)) +
+    geom_boxplot(
+      position = position_dodge(width = 0.8),
+      width = 0.7,
+      outlier.alpha = 0.25
+    ) +
+    labs(
+      title = paste0(x, " by RR_resid sign (split by task)"),
+      x = "RR_resid group",
+      y = x,
+      fill = "task"
+    ) +
+    theme_classic() +
+    theme(
+      axis.text.x = element_text(angle = 25, hjust = 1),
+      legend.position = "bottom"
+    )
+}
+
+# prints one plot per variable
+walk(x_vars, ~print(plot_one_box(.x)))
+
+
+
+
+
+```
+
+
+
+
+## 0 split the RR residual variable and see if breaths differ using raw data
+
+```{r resid split raw}
+library(dplyr)
+library(ggplot2)
+library(purrr)
+
+y_var <- "RR_resid"
+
+x_vars <- c(
+  "inRiseFreq", "inRiseFitR2", "inRiseProm", "inRisePromWide", "inRisePromLocal",
+  "inFallFreq", "inFallFitR2", "inFallProm", "inFallPromWide", "inFallPromLocal",
+  "exRiseFreq", "exRiseFitR2", "exRiseProm", "exRisePromWide", "exRisePromLocal",
+  "exFallFreq", "exFallFitR2", "exFallProm", "exFallPromWide", "exFallPromLocal",
+  "pauseFreq", "pauseFitR2", "pauseProm", "pausePromWide", "pausePromLocal",
+  "minFreq", "maxFreq", "freqRange", "promModIndex",
+  "gamma_centerHz", "gamma_bandLoHz", "gamma_bandHiHz",
+  "phi_burst_idx", "phi_burst_freq", "phi_burst", "cos_phi_burst", "sin_phi_burst",
+  "prom_burst_f", "prom_burst_t", "burstPeakWidthBins",
+  "phi_mean", "phi_err", "R_window",
+  "mean_prom_burst_f", "mean_prom_burst_t",
+  "burst_theta_f", "burst_theta_f_prom", "burst_theta_t_prom", "burst_theta_phase",
+  "burst_alpha_f", "burst_alpha_f_prom", "burst_alpha_t_prom", "burst_alpha_phase",
+  "RR_intercept", "RR_slope", "RR_resid",
+  "inExPeak", "sin2", "cos2", "sin1", "cos1"
+)
+
+
+x_vars <- intersect(x_vars, names(dat_win))
+
+plot_one_box <- function(x, y_var = "RR_resid", lo_q = 0.25, hi_q = 0.75) {
+
+  # start from usable rows and finite x/y
+  d0 <- dat_win %>%
+    filter(use == 1) %>%
+    filter(is.finite(.data[[x]]), is.finite(.data[[y_var]]))
+
+  # compute cutpoints once
+  qs <- quantile(d0[[y_var]], probs = c(lo_q, hi_q), na.rm = TRUE, names = FALSE)
+  lo_cut <- qs[1]
+  hi_cut <- qs[2]
+
+  lo_lab <- sprintf("Low RR_resid (≤ %.3g)", lo_cut)
+  hi_lab <- sprintf("High RR_resid (≥ %.3g)", hi_cut)
+
+  d <- d0 %>%
+    mutate(
+      RR_group = case_when(
+        .data[[y_var]] <= lo_cut ~ lo_lab,
+        .data[[y_var]] >= hi_cut ~ hi_lab,
+        TRUE ~ NA_character_      # <- deliberately drop the middle
+      ),
+      RR_group = factor(RR_group, levels = c(lo_lab, hi_lab))
+    ) %>%
+    filter(!is.na(RR_group))
+
+  ggplot(d, aes(x = RR_group, y = .data[[x]], fill = task)) +
+    geom_boxplot(
+      position = position_dodge(width = 0.8),
+      width = 0.7,
+      outlier.alpha = 0.25
+    ) +
+    labs(
+      title = paste0(x, " by RR_resid extremes (", lo_q, "–", hi_q, " quantile cut; split by task)"),
+      x = "RR_resid group (middle excluded)",
+      y = x,
+      fill = "task"
+    ) +
+    theme_classic() +
+    theme(
+      axis.text.x = element_text(angle = 25, hjust = 1),
+      legend.position = "bottom"
+    )
+}
+
+
+# prints one plot per variable
+walk(x_vars, ~print(plot_one_box(.x)))
+
+
+
+
+
+```
+
+
+
+## Getting into modeling experiments: 
+
+```{r mixed model}
+
+# Systematic screening of predictors for RR_resid
+# Assumes you have a dataframe dat_win with columns:
+#   RR_resid, length, use, stem (session/participant-session id), and the predictors listed below.
+
+library(dplyr)
+library(purrr)
+library(broom)
+library(tidyr)
+library(ggplot2)
+
+preds <- c(
+  "inRiseFreq","inRiseFitR2","inRiseProm","inRisePromWide","inRisePromLocal",
+  "inFallFreq","inFallFitR2","inFallProm","inFallPromWide","inFallPromLocal",
+  "exRiseFreq","exRiseFitR2","exRiseProm","exRisePromWide","exRisePromLocal",
+  "exFallFreq","exFallFitR2","exFallProm","exFallPromWide","exFallPromLocal",
+  "pauseFreq","pauseFitR2","pauseProm","pausePromWide","pausePromLocal",
+  "minFreq","maxFreq","freqRange","promModIndex",
+  "gamma_centerHz","gamma_bandLoHz","gamma_bandHiHz",
+  "phi_burst_idx","phi_burst_freq","phi_burst",
+  "cos_phi_burst","sin_phi_burst",
+  "prom_burst_f","prom_burst_t","burstPeakWidthBins",
+  "phi_mean","phi_err","R_window","mean_prom_burst_f","mean_prom_burst_t",
+  "burst_theta_f","burst_theta_f_prom","burst_theta_t_prom","burst_theta_phase",
+  "burst_alpha_f","burst_alpha_f_prom","burst_alpha_t_prom","burst_alpha_phase",
+  "inExPeak","sin2","cos2","sin1","cos1"
+)
+
+# ------------------------------------------------------------
+# 1) One-predictor screening, controlling for length
+#   RR_resid ~ length + predictor
+#   (If RR_resid is already length-residualized, including length is optional,
+#    but keeping it makes the screening robust to how RR_resid was computed.)
+# ------------------------------------------------------------
+
+screen_tbl <- map_dfr(preds, function(p) {
+
+  d <- dat_win %>%
+    filter(use == 1) %>%
+    select(RR_resid, length, stem, all_of(p)) %>%
+    filter(is.finite(RR_resid), is.finite(length), is.finite(.data[[p]]))
+
+  # skip predictors with too few rows or no variance
+  if (nrow(d) < 50) {
+    return(tibble(predictor = p, n = nrow(d), term = p,
+                  estimate = NA_real_, std.error = NA_real_,
+                  statistic = NA_real_, p.value = NA_real_,
+                  r2 = NA_real_, adj.r2 = NA_real_))
+  }
+  if (sd(d[[p]], na.rm = TRUE) == 0) {
+    return(tibble(predictor = p, n = nrow(d), term = p,
+                  estimate = NA_real_, std.error = NA_real_,
+                  statistic = NA_real_, p.value = NA_real_,
+                  r2 = NA_real_, adj.r2 = NA_real_))
+  }
+
+  fit <- lm(reformulate(c("length", p), response = "RR_resid"), data = d)
+
+  tt <- tidy(fit) %>% filter(term == p)
+  gl <- glance(fit)
+
+  tibble(
+    predictor = p,
+    n = nrow(d),
+    term = p,
+    estimate = tt$estimate,
+    std.error = tt$std.error,
+    statistic = tt$statistic,
+    p.value = tt$p.value,
+    r2 = gl$r.squared,
+    adj.r2 = gl$adj.r.squared
+  )
+})
+
+# Multiple-testing correction (FDR)
+screen_tbl <- screen_tbl %>%
+  mutate(p.adj = p.adjust(p.value, method = "fdr")) %>%
+  arrange(p.adj, p.value)
+
+screen_tbl
+
+# ------------------------------------------------------------
+# 2) Quick plots: effect sizes + significance
+# ------------------------------------------------------------
+
+# Volcano-style: effect vs -log10(p)
+ggplot(screen_tbl %>% filter(is.finite(estimate), is.finite(p.value)),
+       aes(x = estimate, y = -log10(p.value), label = predictor)) +
+  geom_point(alpha = 0.7) +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+  theme_classic() +
+  labs(x = "Slope for predictor (controlling for length)",
+       y = "-log10(p-value)",
+       title = "Screening predictors of RR_resid (one at a time)")
+
+# Top hits table (by FDR)
+top_hits <- screen_tbl %>%
+  filter(is.finite(p.adj)) %>%
+  slice_min(p.adj, n = 15)
+
+top_hits
+
+# ------------------------------------------------------------
+# 3) (Optional but recommended) within-stem robustness check
+#    Center RR_resid and predictors within stem, then re-run:
+#    RR_resid_centered ~ predictor_centered (+ length_centered)
+#    This helps ensure you're not just picking up between-session differences.
+# ------------------------------------------------------------
+
+screen_within_tbl <- map_dfr(preds, function(p) {
+
+  d <- dat_win %>%
+    filter(use == 1) %>%
+    select(RR_resid, length, stem, all_of(p)) %>%
+    filter(is.finite(RR_resid), is.finite(length), is.finite(.data[[p]])) %>%
+    group_by(stem) %>%
+    mutate(
+      RR_c = RR_resid - mean(RR_resid, na.rm = TRUE),
+      len_c = length - mean(length, na.rm = TRUE),
+      pred_c = .data[[p]] - mean(.data[[p]], na.rm = TRUE)
+    ) %>%
+    ungroup()
+
+  if (nrow(d) < 50 || sd(d$pred_c, na.rm = TRUE) == 0) {
+    return(tibble(predictor = p, n = nrow(d), estimate = NA_real_, p.value = NA_real_,
+                  r2 = NA_real_, adj.r2 = NA_real_))
+  }
+
+  fit <- lm(RR_c ~ len_c + pred_c, data = d)
+  tt <- tidy(fit) %>% filter(term == "pred_c")
+  gl <- glance(fit)
+
+  tibble(
+    predictor = p,
+    n = nrow(d),
+    estimate = tt$estimate,
+    p.value = tt$p.value,
+    r2 = gl$r.squared,
+    adj.r2 = gl$adj.r.squared
+  )
+}) %>%
+  mutate(p.adj = p.adjust(p.value, method = "fdr")) %>%
+  arrange(p.adj, p.value)
+
+screen_within_tbl
+
+# Compare global vs within-stem hits:
+left_join(
+  screen_tbl %>% select(predictor, estimate_global = estimate, p_global = p.value, fdr_global = p.adj),
+  screen_within_tbl %>% select(predictor, estimate_within = estimate, p_within = p.value, fdr_within = p.adj),
+  by = "predictor"
+) %>%
+  arrange(fdr_within, fdr_global) %>%
+  head(20)
+
+# ------------------------------------------------------------
+# 4) Fit a small multivariable model from top hits (guarded)
+#    Use this AFTER the screening to avoid drowning in combinations.
+# ------------------------------------------------------------
+
+topP <- screen_within_tbl %>%
+  filter(is.finite(fdr_within = p.adj)) %>%
+  slice_min(fdr_within, n = 8) %>%
+  pull(predictor)
+
+topP
+
+# Build a multivariable model with length + top predictors
+if (length(topP) > 0) {
+  d_mv <- dat_win %>%
+    filter(use == 1) %>%
+    select(RR_resid, length, stem, all_of(topP)) %>%
+    filter(if_all(c(RR_resid, length, all_of(topP)), ~is.finite(.x)))
+
+  mv_fit <- lm(reformulate(c("length", topP), response = "RR_resid"), data = d_mv)
+  summary(mv_fit)
+}
+
+
+      
+      
+```
+
+## Run generalised linear mixed-effects regression with RT matched subsample on adjusted time
+
+```{r mixed model}
+
+m1 <- lm(RR_m ~ length + sin1 + cos1, data = dat_win, subset = use==1)
+m2 <- lm(RR_max_min ~ length + sin1 + cos1 + sin2 + cos2, data = dat_win, subset = use==1)
+
+anova(m1, m2)  # does adding 2nd harmonic help?
+summary(m2)
+
+
+# run generalized mixed-effects model
+glm_test_sub_adj <- glmer(adjTime ~ hitMiss * encRet * reg + (1|realID), 
+                  data = testSet, family = binomial, 
+                  control = glmerControl(optimizer="bobyqa", calc.derivs = TRUE))
+
+# get stats
+summary(glm_test_sub_adj)
+
+
+
+# use emmeans contrast for post-hoc testing
+em_dat_sub_adj <- emmeans(glm_test_sub_adj, pairwise ~ hitMiss * encRet | hitMiss * reg | 
+                    encRet * reg, type="response", adjust = "holm")
+em_dat_sub_adj
+plot(em_dat_sub_adj)
+em_dat_sub_adj = as.data.frame(em_dat_sub_adj)
+
+```
+## Run generalised linear mixed-effects regression with RT matched subsample on original time
+
+```{r mixed model}
+
+
+
+# run generalized mixed-effects model
+
+glm_test_sub_og <- lmer(peakLatHFB ~ hitMiss * encRet * reg +  (1|realID), 
+                  data = testSet)
+# get stats
+summary(glm_test_sub_og)
+
+# use emmeans contrast for post-hoc testing
+em_dat_sub_adj <- emmeans(glm_test_sub_og, pairwise ~ hitMiss * encRet | hitMiss * reg | 
+                    encRet * reg, type="response", adjust = "holm")
+em_dat_sub_adj
+plot(em_dat_sub_adj)
+em_dat_sub_adj = as.data.frame(em_dat_sub_adj)
+
+```
+## Generate plot to show both the predicted and raw effects with adjTime in the full dataset! 
+
+```{r plot glmer}
+
+#THIS IS PANEL D in Figure 1
+
+# Color data frame in R
+regColors <- data.frame(
+  parahip = rgb(214, 77, 97, maxColorValue = 255),       # dark pink
+  dlPFC = rgb(145, 162, 80, maxColorValue = 255),        # light forest green
+  iTemp = rgb(145, 162, 80, maxColorValue = 255),        # light forest green
+  lTemp = rgb(145, 162, 80, maxColorValue = 255),        # light forest green
+  polarPFC = rgb(51, 102, 153, maxColorValue = 255),     # lilac
+  visual = rgb(132, 125, 212, maxColorValue = 255),      # lilac
+  ACC = rgb(204, 153, 204, maxColorValue = 255),         # dark red
+  PCC = rgb(184, 78, 83, maxColorValue = 255),          # dark red
+  Hip = rgb(61, 187, 218, maxColorValue = 255)           # dusky blue
+)
+
+
+
+# function for calculating standard error values  
+my_fun <- function(x, num_var){
+  num_var <- enquo(num_var)
+  
+  x %>%
+    summarise(avg = mean(!!num_var), n = n(),
+              sd = sd(!!num_var), se = sd/sqrt(n))
+}
+
+# apply function to data frame to get averages
+glmer_summary <- all_data %>%
+  select(subID, chi, realID, encRet, hitMiss, reg, adjTime) %>%
+  group_by(subID, chi, realID, encRet, hitMiss, reg) %>%
+  my_fun(adjTime) %>%
+  mutate(lower = avg - se) %>%
+  mutate(upper = avg + se)
+
+# set the parameters for the jitter in the plot below
+pd <- position_dodge(width = .25)
+pd_2 <- position_dodge(width = .75)
+jitter <- position_jitter(width = 0.1, height = 0.1)
+
+# extract predicted model estimates
+m1..eff <- Effect(c("encRet","hitMiss","reg"),glm_test_all_adj, confidence.level=.83)
+m1..eff.df <- as.data.frame(m1..eff)
+
+# re-order regions
+reg_order <- c("hip", "mtl", "acc", "dlPFC", "pPFC")
+
+# New facet label names for encoding/retrieval variable
+mem.labs <- c("Encoding", "Retrieval")
+names(mem.labs) <- c("Enc", "Ret")
+
+hmVals = c("Hit", "Miss")
+erVals = c("Enc", "Ret")
+for(hm in 1:2){
+  for(er in 1:2){
+    tmpMod = filter(m1..eff.df, encRet == erVals[er], hitMiss == hmVals[hm])
+    tmpPnts = filter(glmer_summary, encRet == erVals[er], hitMiss == hmVals[hm])
+    
+  outPlot <- ggplot(tmpMod, aes(x=hitMiss,y=fit,ymin=lower,ymax=upper)) + 
+                  geom_point(aes(colour = factor(reg, level = reg_order)), 
+                             position = pd_2) + 
+                  geom_errorbar(aes(colour = factor(reg, level = reg_order), 
+                                    ymin = lower, ymax = upper), 
+                                    width = 0.6, alpha = 1, linewidth = 3, 
+                                    position = pd_2) + 
+                  labs(colour = "Region") +
+                  scale_x_discrete(expand = c(0, 0)) +
+                  scale_color_manual(values=c( regColors$Hip,
+                                               regColors$parahip,
+                                     regColors$ACC, 
+                                     regColors$dlPFC,
+                                     regColors$polarPFC),
+                                     labels=reg_order) +
+                  #scale_color_manual(values=c("turquoise4", "black")) +
+                  ylab("Peak Latency [proportion]") +
+                  ylim(c(.25, .75)) +
+                  geom_hline(yintercept = c(.5), linewidth = 2, linetype = 'dashed')+
+                  geom_hline(yintercept = seq(.3,.7, .05), linewidth = .75, linetype = 'dotted')+
+                  geom_point(aes(hitMiss, avg, colour = factor(reg, level = reg_order)), 
+                            alpha = 0.3, size = 8, data = tmpPnts, 
+                            position = position_jitterdodge()) +
+                  xlab("") +
+                  theme_classic() +
+                  theme(legend.position="none",
+                        panel.border = element_blank(),
+                        panel.grid.major = element_blank(),
+                        panel.grid.minor = element_blank(),
+                        axis.line = element_blank(),
+                        axis.ticks.length = unit(-0.4, "cm"),
+                        axis.ticks.x = element_blank(),
+                        axis.text.x = element_blank(),
+                        axis.line.x = element_line(size = 2),  
+                        axis.line.y = element_line(size = 2),
+                        axis.ticks = element_line(size = 2),
+                        axis.text.y = element_text(size = 12, face = "bold", 
+                                               margin = margin(r = 10)),
+                        plot.margin = margin(l = 30)  
+                  
+                  )
+    
+  png(paste( "R:\\MSS\\Johnson_Lab\\dtf8829\\publicationFigureData\\pubFigs\\" ,
+                'latencyBox','_',hmVals[hm],'_', erVals[er], '.png', 
+                sep = ''),         # File name
+      width=600, height=600)
+  print(outPlot)
+  dev.off()
+  
+  }
+  
+}
+
+# estMeans <- as.data.frame(emmeans(glm_test, pairwise ~ hitMiss * encRet | hitMiss * reg | 
+#                     encRet * reg, transform="response")) 
+
+## Generate plot to show both the predicted and raw effects with adjTime! 
+
+```
+
+## Generate plot to show both the predicted and raw effects with adjTime in the subset dataset! 
+
+```{r plot glmer}
+
+#Figure S1, panel 1D
+
+# Color data frame in R
+regColors <- data.frame(
+  parahip = rgb(214, 77, 97, maxColorValue = 255),       # dark pink
+  dlPFC = rgb(145, 162, 80, maxColorValue = 255),        # light forest green
+  iTemp = rgb(145, 162, 80, maxColorValue = 255),        # light forest green
+  lTemp = rgb(145, 162, 80, maxColorValue = 255),        # light forest green
+  polarPFC = rgb(51, 102, 153, maxColorValue = 255),     # lilac
+  visual = rgb(132, 125, 212, maxColorValue = 255),      # lilac
+  ACC = rgb(204, 153, 204, maxColorValue = 255),         # dark red
+  PCC = rgb(184, 78, 83, maxColorValue = 255),          # dark red
+  Hip = rgb(61, 187, 218, maxColorValue = 255)           # dusky blue
+)
+
+
+
+# function for calculating standard error values  
+my_fun <- function(x, num_var){
+  num_var <- enquo(num_var)
+  
+  x %>%
+    summarise(avg = mean(!!num_var), n = n(),
+              sd = sd(!!num_var), se = sd/sqrt(n))
+}
+
+# apply function to data frame to get averages
+glmer_summary <- testSet %>%
+  select(subID, chi, realID, encRet, hitMiss, reg, adjTime) %>%
+  group_by(subID, chi, realID, encRet, hitMiss, reg) %>%
+  my_fun(adjTime) %>%
+  mutate(lower = avg - se) %>%
+  mutate(upper = avg + se)
+
+# set the parameters for the jitter in the plot below
+pd <- position_dodge(width = .25)
+pd_2 <- position_dodge(width = .75)
+jitter <- position_jitter(width = 0.1, height = 0.1)
+
+# extract predicted model estimates
+m1..eff <- Effect(c("encRet","hitMiss","reg"),glm_test_sub_adj, confidence.level=.83)
+m1..eff.df <- as.data.frame(m1..eff)
+
+# re-order regions
+reg_order <- c("hip", "mtl", "acc", "dlPFC", "pPFC")
+
+# New facet label names for encoding/retrieval variable
+mem.labs <- c("Encoding", "Retrieval")
+names(mem.labs) <- c("Enc", "Ret")
+
+hmVals = c("Hit", "Miss")
+erVals = c("Enc", "Ret")
+for(hm in 1:2){
+  for(er in 1:2){
+    tmpMod = filter(m1..eff.df, encRet == erVals[er], hitMiss == hmVals[hm])
+    tmpPnts = filter(glmer_summary, encRet == erVals[er], hitMiss == hmVals[hm])
+    
+  outPlot <- ggplot(tmpMod, aes(x=hitMiss,y=fit,ymin=lower,ymax=upper)) + 
+                  geom_point(aes(colour = factor(reg, level = reg_order)), 
+                             position = pd_2) + 
+                  geom_errorbar(aes(colour = factor(reg, level = reg_order), 
+                                    ymin = lower, ymax = upper), 
+                                    width = 0.6, alpha = 1, linewidth = 3, 
+                                    position = pd_2) + 
+                  labs(colour = "Region") +
+                  scale_x_discrete(expand = c(0, 0)) +
+                  scale_color_manual(values=c( regColors$Hip,
+                                               regColors$parahip,
+                                     regColors$ACC, 
+                                     regColors$dlPFC,
+                                     regColors$polarPFC),
+                                     labels=reg_order) +
+                  #scale_color_manual(values=c("turquoise4", "black")) +
+                  ylab("Peak Latency [proportion]") +
+                  ylim(c(.20, .75)) +
+                  geom_hline(yintercept = c(.5), linewidth = 2, linetype = 'dashed')+
+                  geom_hline(yintercept = seq(.3,.7, .05), linewidth = .75, linetype = 'dotted')+
+                  geom_point(aes(hitMiss, avg, colour = factor(reg, level = reg_order)), 
+                            alpha = 0.3, size = 8, data = tmpPnts, 
+                            position = position_jitterdodge()) +
+                  xlab("") +
+                  theme_classic() +
+                  theme(legend.position="none",
+                        panel.border = element_blank(),
+                        panel.grid.major = element_blank(),
+                        panel.grid.minor = element_blank(),
+                        axis.line = element_blank(),
+                        axis.ticks.length = unit(-0.4, "cm"),
+                        axis.ticks.x = element_blank(),
+                        axis.text.x = element_blank(),
+                        axis.line.x = element_line(size = 2),  
+                        axis.line.y = element_line(size = 2),
+                        axis.ticks = element_line(size = 2),
+                        axis.text.y = element_text(size = 12, face = "bold", 
+                                               margin = margin(r = 10)),
+                        plot.margin = margin(l = 30)  
+                  
+                  )
+    
+  png(paste( "R:\\MSS\\Johnson_Lab\\dtf8829\\publicationFigureData\\pubFigs\\" ,
+                'latencyBox_sub_adj_','_',hmVals[hm],'_', erVals[er], '.png', 
+                sep = ''),         # File name
+      width=600, height=600)
+  print(outPlot)
+  dev.off()
+  
+  }
+  
+}
+
+# estMeans <- as.data.frame(emmeans(glm_test, pairwise ~ hitMiss * encRet | hitMiss * reg | 
+#                     encRet * reg, transform="response")) 
+
+## Generate plot to show both the predicted and raw effects with adjTime! 
+
+```
+
+## Generate plot to show both the predicted and raw effects with ORIGINAL time in the full dataset! 
+
+```{r plot glmer}
+
+#supplemental figure 1 panel B
+
+# apply function to data frame to get averages
+glmer_summary <- all_data %>%
+  select(subID, chi, realID, encRet, hitMiss, reg, peakLatHFB) %>%
+  group_by(subID, chi, realID, encRet, hitMiss, reg) %>%
+  my_fun(peakLatHFB) %>%
+  mutate(lower = avg - se) %>%
+  mutate(upper = avg + se)
+
+# set the parameters for the jitter in the plot below
+pd <- position_dodge(width = .25)
+pd_2 <- position_dodge(width = .75)
+jitter <- position_jitter(width = 0.1, height = 0.1)
+
+# extract predicted model estimates
+m1..eff <- Effect(c("encRet","hitMiss","reg"),glm_test_all_og, confidence.level=.83)
+m1..eff.df <- as.data.frame(m1..eff)
+
+# re-order regions
+reg_order <- c("hip", "mtl", "acc", "dlPFC", "pPFC")
+
+# New facet label names for encoding/retrieval variable
+mem.labs <- c("Encoding", "Retrieval")
+names(mem.labs) <- c("Enc", "Ret")
+
+hmVals = c("Hit", "Miss")
+erVals = c("Enc", "Ret")
+for(hm in 1:2){
+  for(er in 1:2){
+    tmpMod = filter(m1..eff.df, encRet == erVals[er], hitMiss == hmVals[hm])
+    tmpPnts = filter(glmer_summary, encRet == erVals[er], hitMiss == hmVals[hm])
+    
+  outPlot <- ggplot(tmpMod, aes(x=hitMiss,y=fit,ymin=lower,ymax=upper)) + 
+                  geom_point(aes(colour = factor(reg, level = reg_order)), 
+                             position = pd_2) + 
+                  geom_errorbar(aes(colour = factor(reg, level = reg_order), 
+                                    ymin = lower, ymax = upper), 
+                                    width = 0.6, alpha = 1, linewidth = 3, 
+                                    position = pd_2) + 
+                  labs(colour = "Region") +
+                  scale_x_discrete(expand = c(0, 0)) +
+                  scale_color_manual(values=c( regColors$Hip,
+                                               regColors$parahip,
+                                     regColors$ACC, 
+                                     regColors$dlPFC,
+                                     regColors$polarPFC),
+                                     labels=reg_order) +
+                  #scale_color_manual(values=c("turquoise4", "black")) +
+                  ylab("Peak Latency [proportion]") +
+                  ylim(c(250, 1250)) +
+                  geom_hline(yintercept = c(1000), linewidth = 2, linetype = 'dashed')+
+                  geom_hline(yintercept = seq(500,1500, 250), linewidth = .75, linetype = 'dotted')+
+                  geom_point(aes(hitMiss, avg, colour = factor(reg, level = reg_order)), 
+                            alpha = 0.3, size = 8, data = tmpPnts, 
+                            position = position_jitterdodge()) +
+                  xlab("") +
+                  theme_classic() +
+                  theme(legend.position="none",
+                        panel.border = element_blank(),
+                        panel.grid.major = element_blank(),
+                        panel.grid.minor = element_blank(),
+                        axis.line = element_blank(),
+                        axis.ticks.length = unit(-0.4, "cm"),
+                        axis.ticks.x = element_blank(),
+                        axis.text.x = element_blank(),
+                        axis.line.x = element_line(size = 2),  
+                        axis.line.y = element_line(size = 2),
+                        axis.ticks = element_line(size = 2),
+                        axis.text.y = element_text(size = 12, face = "bold", 
+                                               margin = margin(r = 10)),
+                        plot.margin = margin(l = 30)  
+                  
+                  )
+    
+  png(paste( "R:\\MSS\\Johnson_Lab\\dtf8829\\publicationFigureData\\pubFigs\\" ,
+                'latencyBox_ogTim_','_',hmVals[hm],'_', erVals[er], '.png', 
+                sep = ''),         # File name
+      width=600, height=600)
+  print(outPlot)
+  dev.off()
+  
+  }
+  
+}
+
+# estMeans <- as.data.frame(emmeans(glm_test, pairwise ~ hitMiss * encRet | hitMiss * reg | 
+#                     encRet * reg, transform="response")) 
+
+## Generate plot to show both the predicted and raw effects with adjTime! 
+
+```
+
+## Generate plot to show both the predicted and raw effects with ORIGINAL time in the sub sample dataset! 
+
+```{r plot glmer}
+
+#supplemental Figure 1, panel C
+
+# apply function to data frame to get averages
+glmer_summary <- testSet %>%
+  select(subID, chi, realID, encRet, hitMiss, reg, peakLatHFB) %>%
+  group_by(subID, chi, realID, encRet, hitMiss, reg) %>%
+  my_fun(peakLatHFB) %>%
+  mutate(lower = avg - se) %>%
+  mutate(upper = avg + se)
+
+# set the parameters for the jitter in the plot below
+pd <- position_dodge(width = .25)
+pd_2 <- position_dodge(width = .75)
+jitter <- position_jitter(width = 0.1, height = 0.1)
+
+# extract predicted model estimates
+m1..eff <- Effect(c("encRet","hitMiss","reg"),glm_test_sub_og, confidence.level=.83)
+m1..eff.df <- as.data.frame(m1..eff)
+
+# re-order regions
+reg_order <- c("hip", "mtl", "acc", "dlPFC", "pPFC")
+
+# New facet label names for encoding/retrieval variable
+mem.labs <- c("Encoding", "Retrieval")
+names(mem.labs) <- c("Enc", "Ret")
+
+hmVals = c("Hit", "Miss")
+erVals = c("Enc", "Ret")
+for(hm in 1:2){
+  for(er in 1:2){
+    tmpMod = filter(m1..eff.df, encRet == erVals[er], hitMiss == hmVals[hm])
+    tmpPnts = filter(glmer_summary, encRet == erVals[er], hitMiss == hmVals[hm])
+    
+  outPlot <- ggplot(tmpMod, aes(x=hitMiss,y=fit,ymin=lower,ymax=upper)) + 
+                  geom_point(aes(colour = factor(reg, level = reg_order)), 
+                             position = pd_2) + 
+                  geom_errorbar(aes(colour = factor(reg, level = reg_order), 
+                                    ymin = lower, ymax = upper), 
+                                    width = 0.6, alpha = 1, linewidth = 3, 
+                                    position = pd_2) + 
+                  labs(colour = "Region") +
+                  scale_x_discrete(expand = c(0, 0)) +
+                  scale_color_manual(values=c( regColors$Hip,
+                                               regColors$parahip,
+                                     regColors$ACC, 
+                                     regColors$dlPFC,
+                                     regColors$polarPFC),
+                                     labels=reg_order) +
+                  #scale_color_manual(values=c("turquoise4", "black")) +
+                  ylab("Peak Latency [proportion]") +
+                  ylim(c(250, 1250)) +
+                  geom_hline(yintercept = c(1000), linewidth = 2, linetype = 'dashed')+
+                  geom_hline(yintercept = seq(500,1500, 250), linewidth = .75, linetype = 'dotted')+
+                  geom_point(aes(hitMiss, avg, colour = factor(reg, level = reg_order)), 
+                            alpha = 0.3, size = 8, data = tmpPnts, 
+                            position = position_jitterdodge()) +
+                  xlab("") +
+                  theme_classic() +
+                  theme(legend.position="none",
+                        panel.border = element_blank(),
+                        panel.grid.major = element_blank(),
+                        panel.grid.minor = element_blank(),
+                        axis.line = element_blank(),
+                        axis.ticks.length = unit(-0.4, "cm"),
+                        axis.ticks.x = element_blank(),
+                        axis.text.x = element_blank(),
+                        axis.line.x = element_line(size = 2),  
+                        axis.line.y = element_line(size = 2),
+                        axis.ticks = element_line(size = 2),
+                        axis.text.y = element_text(size = 12, face = "bold", 
+                                               margin = margin(r = 10)),
+                        plot.margin = margin(l = 30)  
+                  
+                  )
+    
+  png(paste( "R:\\MSS\\Johnson_Lab\\dtf8829\\publicationFigureData\\pubFigs\\" ,
+                'latencyBox_ogTim_sub_','_',hmVals[hm],'_', erVals[er], '.png', 
+                sep = ''),         # File name
+      width=600, height=600)
+  print(outPlot)
+  dev.off()
+  
+  }
+  
+}
+
+# estMeans <- as.data.frame(emmeans(glm_test, pairwise ~ hitMiss * encRet | hitMiss * reg | 
+#                     encRet * reg, transform="response")) 
+
+## Generate plot to show both the predicted and raw effects with adjTime! 
+
+```
+
+## Run generalised linear mixed-effects regression on full data set with peakHFB as the dependent variable
+
+```{r mixed model}
+
+# run generalized mixed-effects model
+glm_peak <- lmer(peakHFB ~ hitMiss * encRet * reg +(1|realID), 
+                  data = all_data) 
+
+# get stats
+Anova(glm_peak)
+
+
+emm <- emmeans(glm_peak, ~ encRet * hitMiss * reg)
+comp <- pairs(emm, by = c("encRet", "hitMiss"), adjust = "holm")
+
+emm <- emmeans(glm_peak, ~ encRet * hitMiss * reg)
+comp <- pairs(emm, by = c("reg"), adjust = "holm")
+
+
+# use emmeans contrast for post-hoc testing
+em_dat_all_adj <- emmeans(glm_peak, pairwise ~ hitMiss * encRet | hitMiss * reg | 
+                    encRet * reg, type="response", adjust = "holm")
+em_dat_all_adj
+plot(em_dat_all_adj)
+em_dat_all_adj = as.data.frame(em_dat_all_adj)
+
+```
+## Generate plot to show both the predicted and raw effects with peakHFB 
+
+```{r plot glmer}
+
+#Figure 2 panel A 
+
+# Color data frame in R
+regColors <- data.frame(
+  parahip = rgb(214, 77, 97, maxColorValue = 255),       # dark pink
+  dlPFC = rgb(145, 162, 80, maxColorValue = 255),        # light forest green
+  iTemp = rgb(145, 162, 80, maxColorValue = 255),        # light forest green
+  lTemp = rgb(145, 162, 80, maxColorValue = 255),        # light forest green
+  polarPFC = rgb(51, 102, 153, maxColorValue = 255),     # lilac
+  visual = rgb(132, 125, 212, maxColorValue = 255),      # lilac
+  ACC = rgb(204, 153, 204, maxColorValue = 255),         # dark red
+  PCC = rgb(184, 78, 83, maxColorValue = 255),          # dark red
+  Hip = rgb(61, 187, 218, maxColorValue = 255)           # dusky blue
+)
+
+
+
+# function for calculating standard error values  
+my_fun <- function(x, num_var){
+  num_var <- enquo(num_var)
+  
+  x %>%
+    summarise(avg = mean(!!num_var), n = n(),
+              sd = sd(!!num_var), se = sd/sqrt(n))
+}
+
+# apply function to data frame to get averages
+glmer_summary <- all_data %>%
+  select(subID, chi, realID, encRet, hitMiss, reg, peakHFB) %>%
+  group_by(subID, chi, realID, encRet, hitMiss, reg) %>%
+  my_fun(peakHFB) %>%
+  mutate(lower = avg - se) %>%
+  mutate(upper = avg + se)
+
+# set the parameters for the jitter in the plot below
+pd <- position_dodge(width = .25)
+pd_2 <- position_dodge(width = .75)
+jitter <- position_jitter(width = 0.1, height = 0.1)
+
+# extract predicted model estimates
+m1..eff <- Effect(c("encRet","hitMiss","reg"),glm_peak, confidence.level=.83)
+m1..eff.df <- as.data.frame(m1..eff)
+
+# re-order regions
+reg_order <- c("hip", "mtl", "acc", "dlPFC", "pPFC")
+
+# New facet label names for encoding/retrieval variable
+mem.labs <- c("Encoding", "Retrieval")
+names(mem.labs) <- c("Enc", "Ret")
+
+hmVals = c("Hit", "Miss")
+erVals = c("Enc", "Ret")
+for(hm in 1:2){
+  for(er in 1:2){
+    tmpMod = filter(m1..eff.df, encRet == erVals[er], hitMiss == hmVals[hm])
+    tmpPnts = filter(glmer_summary, encRet == erVals[er], hitMiss == hmVals[hm])
+    
+  outPlot <- ggplot(tmpMod, aes(x=hitMiss,y=fit,ymin=lower,ymax=upper)) + 
+                  geom_point(aes(colour = factor(reg, level = reg_order)), 
+                             position = pd_2) + 
+                  geom_errorbar(aes(colour = factor(reg, level = reg_order), 
+                                    ymin = lower, ymax = upper), 
+                                    width = 0.6, alpha = 1, linewidth = 3, 
+                                    position = pd_2) + 
+                  labs(colour = "Region") +
+                  scale_x_discrete(expand = c(0, 0)) +
+                  scale_color_manual(values=c( regColors$Hip,
+                                               regColors$parahip,
+                                     regColors$ACC, 
+                                     regColors$dlPFC,
+                                     regColors$polarPFC),
+                                     labels=reg_order) +
+                  #scale_color_manual(values=c("turquoise4", "black")) +
+                  ylab("Peak HFB [z-score]") +
+                  ylim(c(0, 70)) +
+                  # geom_hline(yintercept = c(15), linewidth = 2, linetype = 'dashed')+
+                  geom_hline(yintercept = seq(10,60, 10), linewidth = .75, linetype = 'dotted')+
+                  geom_point(aes(hitMiss, avg, colour = factor(reg, level = reg_order)), 
+                            alpha = 0.3, size = 8, data = tmpPnts, 
+                            position = position_jitterdodge()) +
+                  xlab("") +
+                  theme_classic() +
+                  theme(legend.position="none",
+                        panel.border = element_blank(),
+                        panel.grid.major = element_blank(),
+                        panel.grid.minor = element_blank(),
+                        axis.line = element_blank(),
+                        axis.ticks.length = unit(-0.4, "cm"),
+                        axis.ticks.x = element_blank(),
+                        axis.text.x = element_blank(),
+                        axis.line.x = element_line(size = 2),  
+                        axis.line.y = element_line(size = 2),
+                        axis.ticks = element_line(size = 2),
+                        axis.text.y = element_text(size = 12, face = "bold", 
+                                               margin = margin(r = 10)),
+                        plot.margin = margin(l = 30)  
+                  
+                  )
+    
+  png(paste( "R:\\MSS\\Johnson_Lab\\dtf8829\\publicationFigureData\\pubFigs\\" ,
+                'Fig2_HFBpeak','_',hmVals[hm],'_', erVals[er], '.png', 
+                sep = ''),         # File name
+      width=600, height=600)
+  print(outPlot)
+  dev.off()
+  
+  }
+  
+}
+
+# estMeans <- as.data.frame(emmeans(glm_test, pairwise ~ hitMiss * encRet | hitMiss * reg | 
+#                     encRet * reg, transform="response")) 
+
+## Generate plot to show both the predicted and raw effects with adjTime! 
+
+```
+
+## scratch plot stuff
+
+```{r plot glmer}
+
+
+#I'm going to make difference plots for hit - miss difference within each phase
+hmVals = c("Hit", "Miss")
+erVals = c("Enc", "Ret")
+  for(er in 1:2){
+    targContrast = paste("Hit ", erVals[er], ' - ', "Miss ", erVals[er], 
+                         sep = '')
+    tmpMod = filter(em_dat, contrast == targContrast)
+    tmpPnts = filter(glmer_summary, encRet == erVals[er])
+    
+    # negative values mean that hit is before miss
+    diff_df <- aggregate(avg ~ realID, tmpPnts, function(x) -diff(x)[1])
+    metaDat = tmpPnts %>% filter(hitMiss == "Hit")
+    tmpPnts = merge(metaDat, diff_df, by = "realID", all.x = FALSE)
+    
+    tmpMod <- aggregate(avg.y ~ reg, tmpPnts, function(x) mean(x))
+    tmpModSE <- aggregate(avg.y ~ reg, tmpPnts, 
+                          function(x) sd(x) / sqrt(length(x)))
+    tmpMod = merge(tmpMod, tmpModSE, by = "reg")
+    tmpMod$emmean = tmpMod$avg.y.x
+    tmpMod$SE = tmpMod$avg.y.y
+    
+    
+    tmpMod$lower = tmpMod$emmean - tmpMod$SE
+    tmpMod$upper = tmpMod$emmean + tmpMod$SE
+    tmpMod$hitMiss = "Hit"
+    
+    
+  outPlot <- ggplot(tmpMod, aes(x=hitMiss,y=emmean,ymin=lower,ymax=upper)) + 
+                  geom_point(aes(colour = factor(reg, level = reg_order)), 
+                             position = pd_2) + 
+                  geom_errorbar(aes(colour = factor(reg, level = reg_order), 
+                                    ymin = lower, ymax = upper), 
+                                    width = 0.6, alpha = 1, linewidth = 3, 
+                                    position = pd_2) + 
+                  labs(colour = "Region") +
+                  scale_x_discrete(expand = c(0, 0)) +
+                  scale_color_manual(values=c( regColors$Hip,
+                                               regColors$parahip,
+                                     regColors$ACC, 
+                                     regColors$dlPFC,
+                                     regColors$polarPFC),
+                                     labels=reg_order) +
+                  geom_hline(yintercept = 0, linetype = "dashed", 
+                             color = "black", size = 2) +
+                  #scale_color_manual(values=c("turquoise4", "black")) +
+                  ylab("Peak Latency [proportion]") +
+                  ylim(c(-500, 500)) +
+                  geom_point(aes(hitMiss, avg.y, colour = factor(reg, level = reg_order)), 
+                            alpha = 0.3, size = 5, data = tmpPnts, 
+                            position = position_jitterdodge()) +
+                  xlab("") +
+                  theme_classic() +
+                  theme(legend.position="none",
+                        panel.border = element_blank(),
+                        panel.grid.major = element_blank(),
+                        panel.grid.minor = element_blank(),
+                        axis.line = element_blank(),
+                        axis.ticks.length = unit(-0.4, "cm"),
+                        axis.ticks.x = element_blank(),
+                        axis.text.x = element_blank(),
+                        axis.line.x = element_line(size = 2),  
+                        axis.line.y = element_line(size = 2),
+                        axis.ticks = element_line(size = 2),
+                        axis.text.y = element_text(size = 12, face = "bold", 
+                                               margin = margin(r = 10)),
+                        plot.margin = margin(l = 30)  
+                  
+                  )
+    
+  png(paste( "R:\\MSS\\Johnson_Lab\\dtf8829\\publicationFigureData\\pubFigs\\" ,
+                'latencyBox','_','hmDif','_', erVals[er], '.png', 
+                sep = ''),         # File name
+      width=600, height=600)
+  print(outPlot)
+  dev.off()
+  
+  }
+
+#plots for the enc - ret difference wtihin hits and within misses
+hmVals = c("Hit", "Miss")
+erVals = c("Enc", "Ret")
+  for(hm in 1:2){
+        targContrast = paste(hmVals[hm],  ' Enc', ' - ', hmVals[hm], ' Ret', 
+                         sep = '')
+    tmpMod = filter(em_dat, contrast == targContrast)
+    tmpPnts = filter(glmer_summary, hitMiss == hmVals[hm])
+    
+    # negative values mean that hit is before miss
+    diff_df <- aggregate(avg ~ realID, tmpPnts, function(x) -diff(x)[1])
+    metaDat = tmpPnts %>% filter(hitMiss == hmVals[hm])
+    tmpPnts = merge(metaDat, diff_df, by = "realID", all.x = FALSE)
+    
+    tmpMod <- aggregate(avg.y ~ reg, tmpPnts, function(x) mean(x))
+    tmpModSE <- aggregate(avg.y ~ reg, tmpPnts, 
+                          function(x) sd(x) / sqrt(length(x)))
+    tmpMod = merge(tmpMod, tmpModSE, by = "reg")
+    tmpMod$emmean = tmpMod$avg.y.x
+    tmpMod$SE = tmpMod$avg.y.y
+    
+    
+    tmpMod$lower = tmpMod$emmean - tmpMod$SE
+    tmpMod$upper = tmpMod$emmean + tmpMod$SE
+    tmpMod$hitMiss =  hmVals[hm]
+    
+    
+  outPlot <- ggplot(tmpMod, aes(x=hitMiss,y=emmean,ymin=lower,ymax=upper)) + 
+                  geom_point(aes(colour = factor(reg, level = reg_order)), 
+                             position = pd_2) + 
+                  geom_errorbar(aes(colour = factor(reg, level = reg_order), 
+                                    ymin = lower, ymax = upper), 
+                                    width = 0.6, alpha = 1, linewidth = 3, 
+                                    position = pd_2) + 
+                  labs(colour = "Region") +
+                  scale_x_discrete(expand = c(0, 0)) +
+                  scale_color_manual(values=c( regColors$Hip,
+                                               regColors$parahip,
+                                     regColors$ACC, 
+                                     regColors$dlPFC,
+                                     regColors$polarPFC),
+                                     labels=reg_order) +
+                  geom_hline(yintercept = 0, linetype = "dashed", 
+                             color = "black", size = 2) +
+                  #scale_color_manual(values=c("turquoise4", "black")) +
+                  ylab("Peak Latency [proportion]") +
+                  ylim(c(-500, 500)) +
+                  geom_point(aes(hitMiss, avg.y, colour = factor(reg, level = reg_order)), 
+                            alpha = 0.3, size = 5, data = tmpPnts, 
+                            position = position_jitterdodge()) +
+                  xlab("") +
+                  theme_classic() +
+                  theme(legend.position="none",
+                        panel.border = element_blank(),
+                        panel.grid.major = element_blank(),
+                        panel.grid.minor = element_blank(),
+                        axis.line = element_blank(),
+                        axis.ticks.length = unit(-0.4, "cm"),
+                        axis.ticks.x = element_blank(),
+                        axis.text.x = element_blank(),
+                        axis.line.x = element_line(size = 2),  
+                        axis.line.y = element_line(size = 2),
+                        axis.ticks = element_line(size = 2),
+                        axis.text.y = element_text(size = 12, face = "bold", 
+                                               margin = margin(r = 10)),
+                        plot.margin = margin(l = 30)  
+                  
+                  )
+    
+  png(paste( "R:\\MSS\\Johnson_Lab\\dtf8829\\publicationFigureData\\pubFigs\\" ,
+                'latencyBox','_','erDif','_', hmVals[hm], '.png', 
+                sep = ''),         # File name
+      width=600, height=600)
+  print(outPlot)
+  dev.off()
+  
+  }
+
+
+
+
+# plot the modeled effects with raw data
+ggplot(m1..eff.df, aes(x=hitMiss,y=fit,ymin=lower,ymax=upper)) + 
+  geom_point(aes(colour = factor(reg, level = reg_order)), position = pd_2) + 
+  geom_errorbar(aes(colour = factor(reg, level = reg_order), ymin = lower, 
+                    ymax = upper), width = 0.6, alpha = 1, linewidth = 3, 
+                position = pd_2) + 
+  labs(colour = "Region") +
+  scale_color_manual(values=c( regColors$parahip, 
+                               regColors$Hip,
+                               regColors$dlPFC,
+                               regColors$ACC,
+                               regColors$polarPFC),
+                         labels=reg_order) +
+  #scale_color_manual(values=c("turquoise4", "black")) +
+  ylab("Peak Latency [proportion]") +
+  ylim(c(0.25, 0.75)) +
+  geom_point(aes(hitMiss, avg, colour = factor(reg, level = reg_order)), 
+             alpha = 0.3, size = 2, data = glmer_summary, position = position_jitterdodge()) +
+  xlab("") +
+  theme_light() +
+  theme(legend.position="right",
+        legend.text = element_text(size = 10, colour = "black"),
+        legend.title = element_text(size = 12, colour = "black"),
+        panel.border = element_rect(color="black", fill=NA, size = 1), 
+        strip.background = element_rect(fill="gray", color="black"), 
+        strip.text.x = element_text(size = 12, colour = "black"),
+        strip.text.y = element_text(size = 12, colour = "black"),
+        axis.text = element_text(size = 12),
+        plot.title = element_text(size = 16, face = "bold"),
+        axis.title = element_text(size = 16)) +
+  facet_grid(~encRet, labeller = labeller(encRet = mem.labs))
+
+```
+
+
+
+## Generate plot to show both the predicted and raw effects
+
+```{r plot glmer}
+
+
+# Color data frame in R
+regColors <- data.frame(
+  parahip = rgb(214, 77, 97, maxColorValue = 255),       # dark pink
+  dlPFC = rgb(145, 162, 80, maxColorValue = 255),        # light forest green
+  iTemp = rgb(145, 162, 80, maxColorValue = 255),        # light forest green
+  lTemp = rgb(145, 162, 80, maxColorValue = 255),        # light forest green
+  polarPFC = rgb(51, 102, 153, maxColorValue = 255),     # lilac
+  visual = rgb(132, 125, 212, maxColorValue = 255),      # lilac
+  ACC = rgb(204, 153, 204, maxColorValue = 255),         # dark red
+  PCC = rgb(184, 78, 83, maxColorValue = 255),          # dark red
+  Hip = rgb(61, 187, 218, maxColorValue = 255)           # dusky blue
+)
+
+
+
+# function for calculating standard error values  
+my_fun <- function(x, num_var){
+  num_var <- enquo(num_var)
+  
+  x %>%
+    summarise(avg = mean(!!num_var), n = n(),
+              sd = sd(!!num_var), se = sd/sqrt(n))
+}
+
+# apply function to data frame to get averages
+glmer_summary <- all_data %>%
+  select(subID, chi, realID, encRet, hitMiss, reg, adjTime) %>%
+  group_by(subID, chi, realID, encRet, hitMiss, reg) %>%
+  my_fun(adjTime) %>%
+  mutate(lower = avg - se) %>%
+  mutate(upper = avg + se)
+
+# set the parameters for the jitter in the plot below
+pd <- position_dodge(width = .25)
+pd_2 <- position_dodge(width = .75)
+jitter <- position_jitter(width = 0.1, height = 0.1)
+
+# extract predicted model estimates
+m1..eff <- Effect(c("encRet","hitMiss","reg"),glm_test, confidence.level=.83)
+m1..eff.df <- as.data.frame(m1..eff)
+
+# re-order regions
+reg_order <- c("hip", "mtl", "acc", "dlPFC", "pPFC")
+
+# New facet label names for encoding/retrieval variable
+mem.labs <- c("Encoding", "Retrieval")
+names(mem.labs) <- c("Enc", "Ret")
+
+hmVals = c("Hit", "Miss")
+erVals = c("Enc", "Ret")
+for(hm in 1:2){
+  for(er in 1:2){
+    tmpMod = filter(m1..eff.df, encRet == erVals[er], hitMiss == hmVals[hm])
+    tmpPnts = filter(glmer_summary, encRet == erVals[er], hitMiss == hmVals[hm])
+    
+  outPlot <- ggplot(tmpMod, aes(x=hitMiss,y=fit,ymin=lower,ymax=upper)) + 
+                  geom_point(aes(colour = factor(reg, level = reg_order)), 
+                             position = pd_2) + 
+                  geom_errorbar(aes(colour = factor(reg, level = reg_order), 
+                                    ymin = lower, ymax = upper), 
+                                    width = 0.6, alpha = 1, linewidth = 3, 
+                                    position = pd_2) + 
+                  labs(colour = "Region") +
+                  scale_x_discrete(expand = c(0, 0)) +
+                  scale_color_manual(values=c( regColors$Hip,
+                                               regColors$parahip,
+                                     regColors$ACC, 
+                                     regColors$dlPFC,
+                                     regColors$polarPFC),
+                                     labels=reg_order) +
+                  #scale_color_manual(values=c("turquoise4", "black")) +
+                  ylab("Peak Latency [proportion]") +
+                  ylim(c(0.25, 0.75)) +
+                  geom_point(aes(hitMiss, avg, colour = factor(reg, level = reg_order)), 
+                            alpha = 0.3, size = 8, data = tmpPnts, 
+                            position = position_jitterdodge()) +
+                  xlab("") +
+                  theme_classic() +
+                  theme(legend.position="none",
+                        panel.border = element_blank(),
+                        panel.grid.major = element_blank(),
+                        panel.grid.minor = element_blank(),
+                        axis.line = element_blank(),
+                        axis.ticks.length = unit(-0.4, "cm"),
+                        axis.ticks.x = element_blank(),
+                        axis.text.x = element_blank(),
+                        axis.line.x = element_line(size = 2),  
+                        axis.line.y = element_line(size = 2),
+                        axis.ticks = element_line(size = 2),
+                        axis.text.y = element_text(size = 12, face = "bold", 
+                                               margin = margin(r = 10)),
+                        plot.margin = margin(l = 30)  
+                  
+                  )
+    
+  png(paste( "R:\\MSS\\Johnson_Lab\\dtf8829\\publicationFigureData\\pubFigs\\" ,
+                'latencyBox','_',hmVals[hm],'_', erVals[er], '.png', 
+                sep = ''),         # File name
+      width=600, height=600)
+  print(outPlot)
+  dev.off()
+  
+  }
+  
+}
+
+estMeans <- as.data.frame(emmeans(glm_test, pairwise ~ hitMiss * encRet | hitMiss * reg | 
+                    encRet * reg, transform="response")) 
+
+#I'm going to make difference plots for hit - miss difference within each phase
+hmVals = c("Hit", "Miss")
+erVals = c("Enc", "Ret")
+  for(er in 1:2){
+    targContrast = paste("Hit ", erVals[er], ' - ', "Miss ", erVals[er], 
+                         sep = '')
+    tmpMod = filter(estMeans, contrast == targContrast)
+    tmpPnts = filter(glmer_summary, encRet == erVals[er])
+    
+    # negative values mean that hit is before miss
+    diff_df <- aggregate(avg ~ realID, tmpPnts, function(x) -diff(x)[1])
+    metaDat = tmpPnts %>% filter(hitMiss == "Hit")
+    tmpPnts = merge(metaDat, diff_df, by = "realID", all.x = FALSE)
+    
+    tmpMod <- aggregate(avg.y ~ reg, tmpPnts, function(x) mean(x))
+    tmpModSE <- aggregate(avg.y ~ reg, tmpPnts, 
+                          function(x) sd(x) / sqrt(length(x)))
+    tmpMod = merge(tmpMod, tmpModSE, by = "reg")
+    tmpMod$emmean = tmpMod$avg.y.x
+    tmpMod$SE = tmpMod$avg.y.y
+    
+    
+    tmpMod$lower = tmpMod$emmean - tmpMod$SE
+    tmpMod$upper = tmpMod$emmean + tmpMod$SE
+    tmpMod$hitMiss = "Hit"
+    
+    
+  outPlot <- ggplot(tmpMod, aes(x=hitMiss,y=emmean,ymin=lower,ymax=upper)) + 
+                  geom_point(aes(colour = factor(reg, level = reg_order)), 
+                             position = pd_2) + 
+                  geom_errorbar(aes(colour = factor(reg, level = reg_order), 
+                                    ymin = lower, ymax = upper), 
+                                    width = 0.6, alpha = 1, linewidth = 3, 
+                                    position = pd_2) + 
+                  labs(colour = "Region") +
+                  scale_x_discrete(expand = c(0, 0)) +
+                  scale_color_manual(values=c( regColors$Hip,
+                                               regColors$parahip,
+                                     regColors$ACC, 
+                                     regColors$dlPFC,
+                                     regColors$polarPFC),
+                                     labels=reg_order) +
+                  geom_hline(yintercept = 0, linetype = "dashed", 
+                             color = "black", size = 2) +
+                  #scale_color_manual(values=c("turquoise4", "black")) +
+                  ylab("Peak Latency [proportion]") +
+                  ylim(c(-.25, 0.25)) +
+                  geom_point(aes(hitMiss, avg.y, colour = factor(reg, level = reg_order)), 
+                            alpha = 0.3, size = 5, data = tmpPnts, 
+                            position = position_jitterdodge()) +
+                  xlab("") +
+                  theme_classic() +
+                  theme(legend.position="none",
+                        panel.border = element_blank(),
+                        panel.grid.major = element_blank(),
+                        panel.grid.minor = element_blank(),
+                        axis.line = element_blank(),
+                        axis.ticks.length = unit(-0.4, "cm"),
+                        axis.ticks.x = element_blank(),
+                        axis.text.x = element_blank(),
+                        axis.line.x = element_line(size = 2),  
+                        axis.line.y = element_line(size = 2),
+                        axis.ticks = element_line(size = 2),
+                        axis.text.y = element_text(size = 12, face = "bold", 
+                                               margin = margin(r = 10)),
+                        plot.margin = margin(l = 30)  
+                  
+                  )
+    
+  png(paste( "R:\\MSS\\Johnson_Lab\\dtf8829\\publicationFigureData\\pubFigs\\" ,
+                'latencyBox','_','hmDif','_', erVals[er], '.png', 
+                sep = ''),         # File name
+      width=600, height=600)
+  print(outPlot)
+  dev.off()
+  
+  }
+
+#plots for the enc - ret difference wtihin hits and within misses
+hmVals = c("Hit", "Miss")
+erVals = c("Enc", "Ret")
+  for(hm in 1:2){
+        targContrast = paste(hmVals[hm],  ' Enc', ' - ', hmVals[hm], ' Ret', 
+                         sep = '')
+    tmpMod = filter(estMeans, contrast == targContrast)
+    tmpPnts = filter(glmer_summary, hitMiss == hmVals[hm])
+    
+    # negative values mean that hit is before miss
+    diff_df <- aggregate(avg ~ realID, tmpPnts, function(x) -diff(x)[1])
+    metaDat = tmpPnts %>% filter(hitMiss == hmVals[hm])
+    tmpPnts = merge(metaDat, diff_df, by = "realID", all.x = FALSE)
+    
+    tmpMod <- aggregate(avg.y ~ reg, tmpPnts, function(x) mean(x))
+    tmpModSE <- aggregate(avg.y ~ reg, tmpPnts, 
+                          function(x) sd(x) / sqrt(length(x)))
+    tmpMod = merge(tmpMod, tmpModSE, by = "reg")
+    tmpMod$emmean = tmpMod$avg.y.x
+    tmpMod$SE = tmpMod$avg.y.y
+    
+    
+    tmpMod$lower = tmpMod$emmean - tmpMod$SE
+    tmpMod$upper = tmpMod$emmean + tmpMod$SE
+    tmpMod$hitMiss =  hmVals[hm]
+    
+    
+  outPlot <- ggplot(tmpMod, aes(x=hitMiss,y=emmean,ymin=lower,ymax=upper)) + 
+                  geom_point(aes(colour = factor(reg, level = reg_order)), 
+                             position = pd_2) + 
+                  geom_errorbar(aes(colour = factor(reg, level = reg_order), 
+                                    ymin = lower, ymax = upper), 
+                                    width = 0.6, alpha = 1, linewidth = 3, 
+                                    position = pd_2) + 
+                  labs(colour = "Region") +
+                  scale_x_discrete(expand = c(0, 0)) +
+                  scale_color_manual(values=c( regColors$Hip,
+                                               regColors$parahip,
+                                     regColors$ACC, 
+                                     regColors$dlPFC,
+                                     regColors$polarPFC),
+                                     labels=reg_order) +
+                  geom_hline(yintercept = 0, linetype = "dashed", 
+                             color = "black", size = 2) +
+                  #scale_color_manual(values=c("turquoise4", "black")) +
+                  ylab("Peak Latency [proportion]") +
+                  ylim(c(-.25, 0.25)) +
+                  geom_point(aes(hitMiss, avg.y, colour = factor(reg, level = reg_order)), 
+                            alpha = 0.3, size = 5, data = tmpPnts, 
+                            position = position_jitterdodge()) +
+                  xlab("") +
+                  theme_classic() +
+                  theme(legend.position="none",
+                        panel.border = element_blank(),
+                        panel.grid.major = element_blank(),
+                        panel.grid.minor = element_blank(),
+                        axis.line = element_blank(),
+                        axis.ticks.length = unit(-0.4, "cm"),
+                        axis.ticks.x = element_blank(),
+                        axis.text.x = element_blank(),
+                        axis.line.x = element_line(size = 2),  
+                        axis.line.y = element_line(size = 2),
+                        axis.ticks = element_line(size = 2),
+                        axis.text.y = element_text(size = 12, face = "bold", 
+                                               margin = margin(r = 10)),
+                        plot.margin = margin(l = 30)  
+                  
+                  )
+    
+  png(paste( "R:\\MSS\\Johnson_Lab\\dtf8829\\publicationFigureData\\pubFigs\\" ,
+                'latencyBox','_','erDif','_', hmVals[hm], '.png', 
+                sep = ''),         # File name
+      width=600, height=600)
+  print(outPlot)
+  dev.off()
+  
+  }
+
+
+
+
+# plot the modeled effects with raw data
+ggplot(m1..eff.df, aes(x=hitMiss,y=fit,ymin=lower,ymax=upper)) + 
+  geom_point(aes(colour = factor(reg, level = reg_order)), position = pd_2) + 
+  geom_errorbar(aes(colour = factor(reg, level = reg_order), ymin = lower, 
+                    ymax = upper), width = 0.6, alpha = 1, linewidth = 3, 
+                position = pd_2) + 
+  labs(colour = "Region") +
+  scale_color_manual(values=c( regColors$parahip, 
+                               regColors$Hip,
+                               regColors$dlPFC,
+                               regColors$ACC,
+                               regColors$polarPFC),
+                         labels=reg_order) +
+  #scale_color_manual(values=c("turquoise4", "black")) +
+  ylab("Peak Latency [proportion]") +
+  ylim(c(0.25, 0.75)) +
+  geom_point(aes(hitMiss, avg, colour = factor(reg, level = reg_order)), 
+             alpha = 0.3, size = 2, data = glmer_summary, position = position_jitterdodge()) +
+  xlab("") +
+  theme_light() +
+  theme(legend.position="right",
+        legend.text = element_text(size = 10, colour = "black"),
+        legend.title = element_text(size = 12, colour = "black"),
+        panel.border = element_rect(color="black", fill=NA, size = 1), 
+        strip.background = element_rect(fill="gray", color="black"), 
+        strip.text.x = element_text(size = 12, colour = "black"),
+        strip.text.y = element_text(size = 12, colour = "black"),
+        axis.text = element_text(size = 12),
+        plot.title = element_text(size = 16, face = "bold"),
+        axis.title = element_text(size = 16)) +
+  facet_grid(~encRet, labeller = labeller(encRet = mem.labs))
+
+```
+
+
+## Get session information
+
+```{r session info}
+# session info
+pander::pander(sessionInfo(), compact = FALSE)
+```

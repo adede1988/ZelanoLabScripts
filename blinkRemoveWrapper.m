@@ -1,5 +1,5 @@
 function [out, badChan, blinkIndicator] = blinkRemoveWrapper(outDat, ...
-                                                            chanIDX, fs)
+                                                            chanIDX, fs, interpChan)
 
     data = outDat.data(chanIDX, :); 
     origIs2D = ismatrix(data);
@@ -136,16 +136,22 @@ function [out, badChan, blinkIndicator] = blinkRemoveWrapper(outDat, ...
     test = eyeBlinkDat>2;
     blinkIndicator = reshape(test, 1, T, N); 
        
-
+  
        
     startIdx = [1:500:length(test)-100000]; 
-    blinkCounts = arrayfun(@(x) sum(test(x:x+100000)), startIdx); 
-    idx = find(blinkCounts>median(blinkCounts)-100 & ...
-        blinkCounts<median(blinkCounts)+100);
+    blinkCounts = arrayfun(@(x) sum(test(x:x+100000)), startIdx);
+    interpCounts= arrayfun(@(x) mean(interpChan(x:x+100000)), startIdx); 
+    idx = find(blinkCounts>prctile(blinkCounts, 75) & ...
+        blinkCounts<prctile(blinkCounts, 90));
+    interpIDX = interpCounts(idx); 
 
-
-    startIdx = startIdx(idx(1)); 
-
+    idx = idx(min(interpIDX) == interpIDX);
+    if length(idx)>1
+        targ = round(length(idx)/2); 
+        startIdx = startIdx(idx(targ));
+    else
+        startIdx = idx; 
+    end
 
 
 
