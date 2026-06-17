@@ -1,52 +1,24 @@
 
 clear
-codePre = 'G:\My Drive\GitHub\';
-datPre  = {'R:\Neurology\Zelano_Lab\Lab_Common\Dupi\', ...
-         'R:\Neurology\Zelano_Lab\Lab_Common\OBEControl\', ...
-         'R:\Neurology\Zelano_Lab\Lab_Common\AllStudyData\EEGbreathing\'};
+codePre = 'C:\Users\Adam\Documents\GitHub\';
 
-sessionIDs = {'250818_Dupi_NMH_JH_1', ...
-              '250623_DUPI_NMH_KS_2', ...
-              '250623_Dupi_NMH_KS_1', ...
-              '250908_OBE_NWU_AS', ...
-              '250904_OBE_NWU_TI', ...
-              '250818_Dupi_NMH_JH_2', ...
-              '250811_Dupi_NMH_TPB_1', ...
-              '250811_Dupi_NMH_TB_2', ...
-              '250929_Dupi_NMH_GH_1', ...
-              '251009_OBE_NWU_CP_1', ...
-              '251002_Dupi_NMH_AB_1', ...
-              '251027_Dupi_NMH_DL_1', ...
-              '250929_Dupi_NMH_GH_2', ...
-              '251002_Dupi_NMH_AB_2', ...
-              '251013_Dupi_NMH_JN_2', ...
-              '251006_OBE_NWU_RY_1', ...
-              '251030_Dupi_NMH_DB_1', ...
-              '251110_Dupi_NMH_PC_1', ...
-              '250623_Dupi_NMH_KS_3', ...
-              '251030_Dupi_NMH_DB_2', ...
-              '251120_Dupi_NMH_JL_1', ...
-              '250818_Dupi_NMH_JH_3'};
-  
-
-
-
-datPrei = [1,1,1,2,2,1,1,1,1,2,1,1,1,1,1,2,1,1,1,1,1,1];       
-
-addpath(genpath('C:\Users\dtf8829\Documents\eeglab2025.0.0'))
+addpath(genpath('C:\Users\Adam\Documents\eeglab2026.0.0'))
 addpath(genpath([codePre 'ZelanoLabScripts']))
 
 figPath = 'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\';
 % Load once, reuse
-EEGLOC = readtable([codePre 'ZelanoLabScripts/myEEGcoords_thetaPhi.csv']);
+EEGLOC = readtable([codePre 'ZelanoLabScripts/eegLocs_standard_coords.csv']);
 
-for s = 18:numel(sessionIDs)
+cfg        = applyParams('O15','main');
+sessionIDs = cfg.sessionIDs;
+
+for s = 1:numel(sessionIDs)
 
   
 
   disp(['working on ', sessionIDs{s}])
   S.id   = sessionIDs{s};
-  S.root = datPre{datPrei(s)};
+  S.root = cfg.root{s};
    matPath = fullfile(S.root, S.id);
   if ~exist(fullfile(matPath,  'preProc', ...
                 [S.id '_O15preproc.mat']), 'file')    
@@ -55,14 +27,12 @@ for s = 18:numel(sessionIDs)
       mkdir(fullfile(S.figPath, S.id))
   end
   % <<< all subject-specifics here
-  [raw, P]      = getSessionParams_O15(S);
+  P             = applyParams('O15', S.id);
   disp(['........................Loaded ', sessionIDs{s}])
-  % trialStarts, buttonPresses, sniffMarks    
-  [TTL, raw]    = detect_ttls_O15(raw, P);
+  % trialStarts, buttonPresses, sniffMarks
+  [outDat, raw, TTL] = assemble_outDat_all(S, P);   % loads raw, detects TTLs, assembles
 
-  outDat = assemble_outDat_O15(raw, S, P);   % copies metadata, sets task/type
-
-  outDat.TTL = TTL; 
+  outDat.TTL = TTL;
 
   
   outDat = downsample_data(outDat, P.fs_target);

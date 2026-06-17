@@ -1,56 +1,31 @@
 
 clear
 
-codePre = 'G:\My Drive\GitHub\';
-datPre = { 'R:\Neurology\Zelano_Lab\Lab_Common\Dupi\', ... 
-           'R:\Neurology\Zelano_Lab\Lab_Common\OBEControl\'};
-
-%prefix index for data folder: 
-datPrei = [1,1,1,1,1,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1]; 
-
-sessionIDs = {'250818_Dupi_NMH_JH_1', ... %preprocessed
-               '250623_DUPI_NMH_KS_2',... 
-               '250623_Dupi_NMH_KS_1',... 
-                '250818_Dupi_NMH_JH_2',... 
-                '250811_Dupi_NMH_TPB_1',... 
-              '230611_OBE_NMH_AZ',... 
-                '241017_OBE_NMH_AS',...  
-                '240923_OBE_NMH_HRM',... 
-                '250310_OBE_NMH_FS',...
-                '250313_OBE_NMH_CS',...
-                 '250929_Dupi_NMH_GH_1',...
-            '251002_Dupi_NMH_AB_1',...
-            '251027_Dupi_NMH_DL_1', ...
-            '250929_Dupi_NMH_GH_2',...
-            '251002_Dupi_NMH_AB_2'...
-            '251013_Dupi_NMH_JN_2', ...
-            '250811_Dupi_NMH_TB_2',...
-                '251030_Dupi_NMH_DB_1',...
-                '251110_Dupi_NMH_PC_1',...
-                '250623_Dupi_NMH_KS_3',...
-    '251030_Dupi_NMH_DB_2',...
-    '251120_Dupi_NMH_JL_1',...
-    '250818_Dupi_NMH_JH_3'};  
+codePre = 'C:\Users\Adam\Documents\GitHub\';
 
 % %there are multiple respiration channels in many recordings
-% %which one is right for each session: 
-% rspIDX = [1,1,3,1,1,1,1,1,1,1]; 
+% %which one is right for each session:
+% rspIDX = [1,1,3,1,1,1,1,1,1,1];
 % rspFlip = [1,1,-1,1,1,1,1,-1,-1,1]; %hard code flip
 
 
 addpath(genpath([codePre 'ZelanoLabScripts']))
-addpath(genpath('C:\Users\dtf8829\Documents\eeglab2025.0.0'))
+addpath(genpath('C:\Users\Adam\Documents\eeglab2026.0.0'))
 
 
 figPath = 'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\';
 
-EEGLOC = readtable(fullfile(codePre, 'ZelanoLabScripts','myEEGcoords_thetaPhi.csv'));
+EEGLOC = readtable(fullfile(codePre, 'ZelanoLabScripts','eegLocs_standard_coords.csv'));
 
 set(0, 'defaultfigurewindowstyle', 'normal')
-for s = 20:numel(sessionIDs)
+
+cfg        = applyParams('cueTask','main');
+sessionIDs = cfg.sessionIDs;
+
+for s = 1:numel(sessionIDs)
     % --- Session descriptor (adjust to your system) ---
     S.id   = sessionIDs{s};
-    S.root = datPre{datPrei(s)};     % holds exampCueTaskDat.mat
+    S.root = cfg.root{s};     % holds exampCueTaskDat.mat
     S.fig  = fullfile(figPath, S.id);
     disp(['working on ', sessionIDs{s}])
     preDir = fullfile(S.root, S.id, 'preProc');
@@ -69,10 +44,10 @@ for s = 20:numel(sessionIDs)
         continue
     end
     % --- Params + raw load ---
-    [raw, P] = getSessionParams_cueTask(S);
-    
+    P = applyParams('cueTask', S.id);
+
     % --- Assemble, preprocess shared pieces ---
-    outDat = assemble_outDat_breathing_cue_Task(raw, S, P);
+    [outDat, raw, TTL] = assemble_outDat_all(S, P);
      disp(['........................Loaded ', sessionIDs{s}])
   % trialStarts, buttonPresses, sniffMarks    
     outDat = downsample_data(outDat, P.fs_target);
