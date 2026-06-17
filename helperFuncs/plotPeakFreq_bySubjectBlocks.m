@@ -4,8 +4,21 @@ function [hFig, subInfo] = plotPeakFreq_bySubjectBlocks(idxVec, subjectInfo, dat
 %
 % For each selected cell in dataCell:
 %   - assumes data are [breath x block(5) x frequency]
-%   - finds row-wise peak frequency in 25-60 Hz for each of the 5 block levels
+%   - first finds, for each of the 5 respiratory epochs:
+%         (1) the row-wise peak power in 25-60 Hz
+%         (2) the frequency at which that peak power occurs
+%   - then collapses those 5 epoch-wise values into:
+%         inhale = frequency from whichever of epochs 1:2 has the larger peak power
+%         exhale = frequency from whichever of epochs 3:4 has the larger peak power
+%   - then 0-centers each subject by subtracting that subject's overall mean
+%     across all final inhale and exhale points
 %   - plots jittered dots with faint within-breath linking lines
+%   - overlays a thicker line for each subject mean
+%
+% Assumption here:
+%   "two early epochs" = epochs 1:2
+%   "two late epochs"  = epochs 3:4
+%   pause (epoch 5) is calculated but not used in inhale/exhale selection
 %
 % Colors indicate which dup1Cells index the breath came from.
 %
@@ -14,8 +27,8 @@ function [hFig, subInfo] = plotPeakFreq_bySubjectBlocks(idxVec, subjectInfo, dat
 
 frex = logspace(log10(.1),log10(200),300);
 
-phaseNames = {'inhale rise', 'inhale fall', 'exhale rise', 'exhale fall', 'pause'};
-xBase = 1:5;
+phaseNames = {'inhale', 'exhale'};
+xBase = 1:2;
 
 % --- pull selected cells + names ---
 dup1Cells = dataCell(idxVec);
@@ -42,10 +55,14 @@ subInfo = table( ...
     nan(nCell,1), ...
     nan(nCell,1), ...
     nan(nCell,1), ...
-    'VariableNames', {'cellIdx','subName','nBreaths','meanPeakHz','sdPeakHz'});
+    nan(nCell,1), ...
+    nan(nCell,1), ...
+    nan(nCell,1), ...
+    'VariableNames', {'cellIdx','subName','nBreaths','subjectGrandMeanHz', ...
+                      'meanInhaleHz','sdInhaleHz','meanExhaleHz','sdExhaleHz'});
 
 % --- figure ---
-hFig = figure('Color', bgCol, 'Position', [50 50 1100 700], 'InvertHardcopy', 'off');
+hFig = figure('Color', bgCol, 'Position', [50 50 500 700], 'InvertHardcopy', 'off');
 ax = axes('Parent', hFig);
 hold(ax, 'on');
 
@@ -81,8 +98,9 @@ for i = 1:nCell
 
     nBreath = size(tmp,1);
     peakHz  = nan(nBreath, 5);
+    peakPow = nan(nBreath, 5);
 
-    % row-wise peak frequency for each block level
+    % row-wise peak power and its frequency for each block level
     for b = 1:5
         cur = squeeze(tmp(:,b,:));   % [breath x nBand]
         if isvector(cur)
@@ -91,59 +109,92 @@ for i = 1:nCell
 
         goodRow = any(isfinite(cur), 2);
         if any(goodRow)
-            [~, pkIdx] = max(cur(goodRow,:), [], 2);
-            peakHz(goodRow,b) = fBand(pkIdx);
+            [pkPow, pkIdx] = max(cur(goodRow,:), [], 2);
+            peakPow(goodRow,b) = pkPow;
+            peakHz(goodRow,b)  = fBand(pkIdx);
         end
     end
 
     % keep only breaths with all 5 block peaks defined
-    keepRow = all(isfinite(peakHz), 2);
+    keepRow = all(isfinite(peakHz), 2) & all(isfinite(peakPow), 2);
     peakHz  = peakHz(keepRow,:);
+    peakPow = peakPow(keepRow,:);
 
     if isempty(peakHz)
         continue
     end
 
-    % summary info
-    subInfo.nBreaths(i)   = size(peakHz,1);
-    subInfo.meanPeakHz(i) = mean(peakHz, 'all', 'omitnan');
-    subInfo.sdPeakHz(i)   = std(peakHz(:), 'omitnan');
+    % inhale: choose the frequency from epochs 1:2 with larger peak power
+    [~, inhSel] = max(peakPow(:,1:2), [], 2);  % 1 or 2
+    inhaleHz = peakHz(sub2ind(size(peakHz), (1:size(peakHz,1))', inhSel));
+
+    % exhale: choose the frequency from epochs 3:4 with larger peak power
+    [~, exSelLocal] = max(peakPow(:,3:4), [], 2); % 1 or 2
+    exSel = exSelLocal + 2;                       % 3 or 4
+    exhaleHz = peakHz(sub2ind(size(peakHz), (1:size(peakHz,1))', exSel));
+
+    inhaleExhaleHz = [inhaleHz exhaleHz];
+
+    % subject-level 0-centering using mean across all final inhale/exhale points
+    subjectGrandMeanHz = mean(inhaleExhaleHz, 'all', 'omitnan');
+    inhaleExhaleHz = inhaleExhaleHz - subjectGrandMeanHz;
+
+    % summary info (on centered values)
+    subInfo.nBreaths(i)          = size(inhaleExhaleHz,1);
+    subInfo.subjectGrandMeanHz(i)= subjectGrandMeanHz;
+    subInfo.meanInhaleHz(i)      = mean(inhaleExhaleHz(:,1), 'omitnan');
+    subInfo.sdInhaleHz(i)        = std(inhaleExhaleHz(:,1), 'omitnan');
+    subInfo.meanExhaleHz(i)      = mean(inhaleExhaleHz(:,2), 'omitnan');
+    subInfo.sdExhaleHz(i)        = std(inhaleExhaleHz(:,2), 'omitnan');
 
     thisCol = dotColors(i,:);
-    lineCol = 0.25*bgCol + 0.75*thisCol;   % faint line against dark bg
-    lineCol = thisCol; 
-    % one jitter offset per breath, shared across all 5 points for that breath
-    jit = (rand(size(peakHz,1),1) - 0.5) * 0.22;
+    lineCol = thisCol;
 
-    for r = 1:size(peakHz,1)
+    % one jitter offset per breath, shared across both plotted points
+    jit = (rand(size(inhaleExhaleHz,1),1) - 0.5) * 0.22;
+
+    % breath-wise lines and dots
+    for r = 1:size(inhaleExhaleHz,1)
         xPlot = xBase + jit(r);
-        yPlot = peakHz(r,:);
+        yPlot = inhaleExhaleHz(r,:);
 
-        % faint linking line
-        plot(ax, xPlot, yPlot, '-', 'Color', lineCol, 'LineWidth', 0.4, ...
+        plot(ax, xPlot, yPlot, '-', 'Color', [lineCol, .1], 'LineWidth', 3, ...
             'HandleVisibility', 'off');
 
-        % dots
         scatter(ax, xPlot, yPlot, 28, ...
             'MarkerFaceColor', thisCol, ...
             'MarkerEdgeColor', thisCol, ...
-            'MarkerFaceAlpha', 0.6, ...
-            'MarkerEdgeAlpha', 0.6, ...
+            'MarkerFaceAlpha', 0.1, ...
+            'MarkerEdgeAlpha', 0.1, ...
             'HandleVisibility', 'off');
     end
 
-    allPeakVals = [allPeakVals; peakHz(:)];
+    % thicker subject mean line
+    meanPlot = [subInfo.meanInhaleHz(i), subInfo.meanExhaleHz(i)];
+    plot(ax, xBase, meanPlot, '-', ...
+        'Color', thisCol, ...
+        'LineWidth', 8, ...
+        'HandleVisibility', 'off');
+
+    % mean markers
+    scatter(ax, xBase, meanPlot, 90, ...
+        'MarkerFaceColor', thisCol, ...
+        'MarkerEdgeColor', labCol, ...
+        'LineWidth', 1.2, ...
+        'HandleVisibility', 'off');
+
+    allPeakVals = [allPeakVals; inhaleExhaleHz(:); meanPlot(:)];
 end
 
 % drop empty summary rows if any cells were skipped/empty
 subInfo = subInfo(subInfo.nBreaths > 0, :);
 
 % --- axis formatting ---
-xlim([0.5 5.5])
-xticks(1:5)
+xlim([0.5 2.5])
+xticks(1:2)
 xticklabels(phaseNames)
 
-ylabel('Peak frequency (Hz)', ...
+ylabel('Centered peak frequency (Hz)', ...
     'FontSize', 20, ...
     'FontWeight', 'bold', ...
     'FontName', 'Dotum', ...
@@ -155,19 +206,19 @@ xlabel('Respiratory epoch', ...
     'FontName', 'Dotum', ...
     'Color', labCol);
 
-title('Breath-wise peak frequency by respiratory epoch', ...
-    'FontSize', 20, ...
-    'FontWeight', 'bold', ...
-    'FontName', 'Dotum', ...
-    'Color', labCol);
+% title('Breath-wise peak frequency by respiratory epoch (subject-centered)', ...
+%     'FontSize', 20, ...
+%     'FontWeight', 'bold', ...
+%     'FontName', 'Dotum', ...
+%     'Color', labCol);
 
 set(ax, 'Layer', 'top')
-
+ylim([-7 10])
 % sensible y-limits
-if ~isempty(allPeakVals)
-    ylim([max(24, floor(min(allPeakVals)-1)), min(61, ceil(max(allPeakVals)+1))])
-else
-    ylim([25 60])
-end
+% if ~isempty(allPeakVals)
+%     ylim([floor(min(allPeakVals)-1), ceil(max(allPeakVals)+1)])
+% else
+%     ylim([-5 5])
+% end
 
 end

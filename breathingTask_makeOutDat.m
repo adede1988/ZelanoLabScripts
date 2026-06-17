@@ -17,7 +17,7 @@ datPre = { ...
 % 3 = EEG_breathing
 datPrei = [ ...
     1,1,1,2,3,3,3,3,3,3,2,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1,1, ...
-    3,3,3,3,3,3,3,3,3,3,3,3,3];
+    3,3,3,3,3,3,3,3,3,3,3,3,3,3,3];
 
 sessionIDs = { ...
     '250818_Dupi_NMH_JH_1', ...
@@ -59,7 +59,9 @@ sessionIDs = { ...
     '251113_EEG_NWU_GH', ...
     '251118_EEG_NWU_ADtest', ...
     '251202_EEG_NWU_GJ', ...
-    '260109_EEG_NWU_AA'};
+    '260109_EEG_NWU_AA', ...
+    '251205_EEG_NWU_AK', ...
+    '251208_EEG_NWU_ZA'};
 
 % participants with new TTL style for more standardized read in:
 newList = { ...
@@ -89,17 +91,19 @@ newList = { ...
     '251113_EEG_NWU_GH', ...
     '251118_EEG_NWU_ADtest', ...
     '251202_EEG_NWU_GJ', ...
-    '260109_EEG_NWU_AA'};
+    '260109_EEG_NWU_AA', ...
+    '251205_EEG_NWU_AK', ...
+    '251208_EEG_NWU_ZA'};
 
 % there are multiple respiration channels in many recordings
 % which one is right for each session:
 rspIDX = [ ...
     3,3,3,3,1,1,1,1,1,1,3,3,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1, ...
-    1,1,1,1,1,1,1,1,1,1,1,1,1];
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1];
 
 rspFlip = [ ...
    -1,-1,-1,-1,-1,-1,-1, 1,-1, 1, 1, 1, 1,-1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,1,1];
 % addpath([codePre 'HpcAccConnectivityProject/helperFuncs'])
 % addpath(genpath([codePre 'myFrequentUse']))
 % addpath([codePre 'myFrequentUse/export_fig_repo'])
@@ -114,11 +118,14 @@ addpath([codePre 'ZelanoLabScripts'])
 % ft_defaults
 
 parfor sessi = 1:length(sessionIDs)
+    % if ~ismember(sessi, [27, 29, 37, 33, 32, 31, 40])
+    %     continue
+    % end
 try
 %% custom import for different participants: 
 disp(sessi)
 %check for pre existing processing: 
-if ~exist([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\' 'REDO'...
+if ~exist([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\redoAGAIN' ...
                 sessionIDs{sessi} '_breathingPreProc.mat'], 'file')
 
 
@@ -441,7 +448,11 @@ if ~exist([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\' 'REDO'...
         
         
         if strcmp(sessionIDs{sessi} , '251030_Dupi_NMH_DB_2')
-            dat.rawData.trial{1}(:,1:1023000) = []; %eliminate initial recording before computer glitch
+            dat.rawData.trial{1}(:,1:1003000) = []; %eliminate initial recording before computer glitch
+        end
+
+        if strcmp(sessionIDs{sessi} , '251105_EEG_NWU_GL')
+            dat.rawData.trial{1}(:,11373400:end) = []; %eliminate final half block
         end
     
         outDat = struct; 
@@ -478,36 +489,72 @@ if ~exist([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\' 'REDO'...
             rawData = fillmissing(rawData, 'nearest', 2);
         end
 
+        wo = 60/(outDat.fs/2);                 % normalized center freq
+        bw = wo/35;                     % Q=35 ~ 1.7 Hz 3-dB bandwidth at 60 Hz
+        [b,a] = iirnotch(wo, bw);
+        photoDiode = filtfilt(b, a, double(photoDiode)); 
+        wo = 120/(outDat.fs/2);                 % normalized center freq
+        bw = wo/35;                     % Q=35 ~ 1.7 Hz 3-dB bandwidth at 60 Hz
+        [b,a] = iirnotch(wo, bw);
+        photoDiode = filtfilt(b, a, double(photoDiode)); 
+        wo = 180/(outDat.fs/2);                 % normalized center freq
+        bw = wo/35;                     % Q=35 ~ 1.7 Hz 3-dB bandwidth at 60 Hz
+        [b,a] = iirnotch(wo, bw);
+        photoDiode = filtfilt(b, a, double(photoDiode)); 
+        photoDiode = smoothdata(photoDiode, 'gaussian', 200); 
         dat.rawData.trial{1} = rawData;
         
         %audio, focused, slow shadow, fast shadow, focus shadow
         cndSeps = [1, 1.1, 1.3, 1.6, 1.7, 1.8, 1.9];
 
-        thresh = prctile(photoDiode, 2);
-        TTLs = find(photoDiode(1:length(photoDiode)-1)>thresh &...
-                                photoDiode(2:length(photoDiode))<thresh);
-        minDist = min(cndSeps) *outDat.fs - 700; 
-        TTLs = TTLs([1,  ...
-                                find(diff(TTLs)> minDist), end]);
-        % TTLs: vector of time stamps (samples or seconds)
-        TTLs = TTLs(:);                 % make sure it's a column
+        % thresh = prctile(photoDiode, 2);
+        % TTLs = find(photoDiode(1:length(photoDiode)-1)>thresh &...
+        %                         photoDiode(2:length(photoDiode))<thresh);
+        absPho = abs(photoDiode); 
         
-        % 1) Intervals between consecutive TTLs
-        dTTL = diff(TTLs);
-        
-        % 2) Find the "long" gaps (between blocks)
-        %    Here I use a robust outlier rule; tweak 'ThresholdFactor'
-        isLongGap = dTTL>outDat.fs*5;
-        
-        % indices in dTTL of long gaps
-        gapIntIdx = find(isLongGap);
-        
-        % 3) Indices in TTLs:
-        idx_before_gap = gapIntIdx;          % last TTL of each block
-        idx_after_gap  = gapIntIdx + 1;      % first TTL of next block
+        isLow  = absPho(1:end-80) < 40;
+        next40High = conv(double(absPho(2:end) >= 40), ones(1,80), 'valid') == 80;
 
-        startTTLs = [TTLs(1); TTLs(idx_after_gap)];
-        endTTLs = [TTLs(idx_before_gap); TTLs(end)]; 
+        TTLs = find(isLow & next40High);
+        TTLs = TTLs(:);                 % make sure it's a column
+        TTLs = [1; TTLs; linspace(max(TTLs), max(TTLs)^3, 5)'];
+        dTTL = diff(TTLs); 
+
+        gapThr = outDat.fs * 3;
+
+        next5Close  = conv(double(dTTL(2:end)   < gapThr), ones(1,5), 'valid') == 5;
+        isLongGap   = dTTL(1:end-5) > gapThr;
+        startTTLs   = find(isLongGap & next5Close) + 1;
+        startTTLs   = TTLs(startTTLs) - 0*outDat.fs; %adjustment for dead time at condition start
+        
+        prior5Close = conv(double(dTTL(1:end-1) < gapThr), ones(1,5), 'valid') == 5;
+        next1Far    = dTTL(6:end) > gapThr;
+        endTTLs     = TTLs(find(prior5Close & next1Far) + 5);
+
+        % minDist = min(cndSeps) *outDat.fs - 700; 
+        % TTLs = TTLs([1,  ...
+        %                         find(diff(TTLs)> minDist), end]);
+        % TTLs: vector of time stamps (samples or seconds)
+       
+        % 1) Intervals between consecutive TTLs
+        % dTTL = diff(TTLs);
+        % 
+        % isLongGap = dTTL>outDat.fs*5;
+        % gapIntIdx = find(isLongGap);
+        % 
+        % % 2) Find the "long" gaps (between blocks)
+        % %    Here I use a robust outlier rule; tweak 'ThresholdFactor'
+        % isLongGap = dTTL>outDat.fs*5;
+        % 
+        % % indices in dTTL of long gaps
+        % gapIntIdx = find(isLongGap);
+        % 
+        % % 3) Indices in TTLs:
+        % idx_before_gap = gapIntIdx;          % last TTL of each block
+        % idx_after_gap  = gapIntIdx + 1;      % first TTL of next block
+        % 
+        % startTTLs = [TTLs(1); TTLs(idx_after_gap)];
+        % endTTLs = [TTLs(idx_before_gap); TTLs(end)]; 
 
         blockLens = (endTTLs - startTTLs) ./ outDat.fs;
 
@@ -516,11 +563,11 @@ if ~exist([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\' 'REDO'...
         endTTLs = endTTLs(blockLens>180 & blockLens<400); 
         endTTLs = sort(endTTLs); 
 
-        % figure
-        % plot(photoDiode)
-        % xline(TTLs)
-        % title(sessi)
-        % xline(endTTLs, 'color', 'red')
+        figure
+        plot(photoDiode)
+        xline(TTLs)
+        title(sessi)
+        xline(endTTLs, 'color', 'red')
        % block lengths from true start/end indices
         blockLens = endTTLs - TTLs + 1;
         

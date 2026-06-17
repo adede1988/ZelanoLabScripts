@@ -4,7 +4,14 @@
 %
 % MINIMAL CHANGE: adds plot_diff() calls + helper to make Dupi sess2-sess1 difference maps
 % without changing how your existing plot_group() frequency axis labeling works.
+% allChan = makeAllChannel();
 
+%eliminate participants not used: 
+elim = {'HRM', 'CP', 'TB', 'DL', 'JN', 'PC', 'JL'};
+for i = 1:length(elim)
+    test = cellfun(@(x) strcmp(x, elim{i}), {allChan.subID});
+    allChan(test) = []; 
+end
 % ---------- per-channel mean(powZ over breaths) ----------
 n = numel(allChan);
 chanMeanPowZ = cell(n,1);
@@ -17,12 +24,17 @@ for i = 1:n
     breathSeg = allChan(i).tf.breathSeg;
     use  = (allChan(i).use(:) == 1);           % breaths x 1 logical
 
-    %quick and dirty selection for audio book only in breathing task
+    %try selecting only the happy video breaths
     try 
-        use = use & cellfun(@(x)strcmp(x, 'focus'), allChan(i).behDat.task); 
-        disp('here')
+        use = use & allChan(i).behDat.condition == 1;
     catch
     end
+    %quick and dirty selection for audio book only in breathing task
+    % try 
+    %     use = use & cellfun(@(x)strcmp(x, 'focus'), allChan(i).behDat.task); 
+    %     disp('here')
+    % catch
+    % end
     m = powZ(use,:,:);
     b = breathSeg(use,:);
 
@@ -44,13 +56,19 @@ task    = string({allChan.task});
 type    = string({allChan.type});
 sessNum = [allChan.sessNum];
 
-idxDupi1 = find(task=="breathingTask" & sessNum==1 & type=="Dupi");
+idxDupi1 = find((task=="breathingTask" )  & sessNum==1 & type=="Dupi");
 idxDupi2 = find(task=="breathingTask" & sessNum==2 & type=="Dupi");
 idxOBE   = find(task=="breathingTask" & type=="OBE");   % ignore sessNum
 
-idxDupCue1 = find(task=="cueTask" & sessNum==1 & type=="Dupi");
-idxDupCue2 = find(task=="cueTask" & sessNum==2 & type=="Dupi");
-idxOBECue  = find(task=="cueTask" & type=="OBE");       % ignore sessNum
+idxDupCue1 = find((task=="cueTask"    | ...
+                   task=="O15"        | ...
+                   task=="threshTask") & sessNum==1 & type=="Dupi");
+idxDupCue2 = find((task=="cueTask"    | ...
+                   task=="O15"        | ...
+                   task=="threshTask") & sessNum==2 & type=="Dupi");
+idxOBECue  = find((task=="cueTask"    | ...
+                   task=="O15"        | ...
+                   task=="threshTask") & type=="OBE");       % ignore sessNum
 
 idxDupO151 = find(task=="O15" & sessNum==1 & type=="Dupi");
 idxDupO152 = find(task=="O15" & sessNum==2 & type=="Dupi");
@@ -59,11 +77,16 @@ idxOBEO15  = find(task=="O15" & type=="OBE");           % ignore sessNum
 idxDupThresh1 = find(task=="threshTask" & sessNum==1 & type=="Dupi");
 idxDupThresh2 = find(task=="threshTask" & sessNum==2 & type=="Dupi");
 
+
+idxEMO_OBE = find(task=="EmotionalMovieTask");
+
+plot_group(idxEMO_OBE,   "emotion | type=Neutral");
+
 % ---------- make + plot group means ----------
-plot_group(idxDupi1, "focusBreathing | sessNum=1 | type=Dupi");
-plot_group(idxDupi2, "focusBreathing | sessNum=2 | type=Dupi");
-plot_group(idxOBE,   "focusBreathing | type=Control");
-% 
+% plot_group(idxDupi1, "focusBreathing | sessNum=1 | type=Dupi");
+% plot_group(idxDupi2, "focusBreathing | sessNum=2 | type=Dupi");
+% plot_group(idxOBE,   "focusBreathing | type=Control");
+% % 
 % plot_group(idxDupCue1, "cueTask | sessNum=1 | type=Dupi");
 % plot_group(idxDupCue2, "cueTask | sessNum=2 | type=Dupi");
 % plot_group(idxOBECue,  "cueTask | type=Control");
@@ -117,71 +140,108 @@ function plot_group(idx, titleStr)
     frex = frex(1:min(numel(frex), fMin));
 
     % ---------------- PLOT (unchanged style) ----------------
-    figure('Color','w', 'position', [0,0,600,400]);
+    hFig = figure( ...
+    'Color', 'w', ...
+    'Position', [50 50 1000 600], ...
+    'InvertHardcopy', 'off');
 
-    % ---- limit freqs to >= 2 Hz ----
-    fMask   = frex >= 2;
-    frexUse = frex(fMask);
+% ---- colors / styling to match the other figures ----
+labCol   = [78 42 132]/255;
+xlineCol = [203 157 6]/255;
+rspCol   = [195 176 163]/255;
 
-    % groupMean is [time x frex]
-    gm = groupMean(:, fMask);                 % [tMin x nF>=2]
+% ---- limit freqs to >= 2 Hz ----
+fMask   = frex >= 2;
+frexUse = frex(fMask);
 
-    % ---- heatmap (freq x time) ----
-    imagesc(1:tMin, [], gm');            % y-axis = index into frexUse (YOUR STYLE)
-    axis xy
-    clim([-3 4])
+% groupMean is [time x frex]
+gm = groupMean(:, fMask);   % [tMin x nF>=2]
 
-    cb = colorbar;
-    cb.Label.String = 'power (z-score)';
+ax = axes('Parent', hFig);
+hold(ax, 'on')
 
-    % ---- axes styling (darker, bolder ticks) ----
-    ax = gca;
-    ax.Box       = 'off';
-    ax.LineWidth = 1.5;
-    ax.FontWeight= 'bold';
-    ax.FontSize  = 12;
-    ax.XColor    = [0 0 0];
-    ax.YColor    = [0 0 0];
-    ax.TickDir   = 'out';
+ax.Color      = 'w';
+ax.LineWidth  = 2.2;
+ax.FontSize   = 16;
+ax.FontWeight = 'bold';
+ax.FontName   = 'Dotum';
+ax.XColor     = labCol;
+ax.YColor     = labCol;
+ax.TickDir    = 'out';
+ax.TickLength = [0 0];
+box(ax, 'off');
 
-    % ---- x-axis: labels only, no tick marks ----
-    xticks([5 15 25 35 45])
-    xticklabels({'inhale rise','inhale fall','exhale rise','exhale fall','pause'})
-    ax.TickLength = [0 0];                    % removes tick marks but keeps labels
-    xlabel('normalized time across sniff')
+% ---- heatmap (freq x time) ----
+imagesc(ax, 1:tMin, [], gm');
+axis(ax, 'xy')
+clim([-3 4])
 
-    % ---- y-axis (left) ----
-    yyaxis left
-    ylabel('Frequency (Hz)')
-    yticks(20:20:180)
-    yticklabels(round(frexUse(20:20:180)))
+% ---- colorbar ----
+cb = colorbar;
+cb.Label.String = 'Power (z-score)';
+cb.Label.Color = labCol;
+cb.Color = labCol;
+cb.LineWidth = 1.8;
+cb.FontSize = 14;
+cb.FontWeight = 'bold';
+cb.FontName = 'Dotum';
 
-    title(sprintf('%s  (n=%d)', titleStr, numel(idx)), 'Interpreter','none')
+% ---- x-axis ----
+xticks([5 15 25 35 45])
+xticklabels({'inhale rise','inhale fall','exhale rise','exhale fall','pause'})
+xlabel('Normalized time across sniff', ...
+    'FontSize', 20, ...
+    'FontWeight', 'bold', ...
+    'FontName', 'Dotum', ...
+    'Color', labCol);
 
-    % ---- vertical dotted epoch boundaries ----
-    hold on
-    xline(10.5, ':', 'Color', [0.85 0.85 0.85], 'LineWidth', 2);
-    xline(20.5, ':', 'Color', [0.85 0.85 0.85], 'LineWidth', 2);
-    xline(30.5, ':', 'Color', [0.85 0.85 0.85], 'LineWidth', 2);
-    xline(40.5, ':', 'Color', [0.85 0.85 0.85], 'LineWidth', 2);
+% ---- y-axis (left) ----
+yyaxis left
+ylabel('Frequency (Hz)', ...
+    'FontSize', 20, ...
+    'FontWeight', 'bold', ...
+    'FontName', 'Dotum', ...
+    'Color', labCol);
 
-    % ---- respiration overlay on right axis ----
-    yyaxis right
-    if exist('groupB','var') && ~isempty(groupB)
-        if numel(groupB) ~= tMin
-            xOld = linspace(1, tMin, numel(groupB));
-            groupB = interp1(xOld, groupB(:), 1:tMin, 'linear', 'extrap');
-        end
-        plot(1:tMin, groupB, 'k--', 'LineWidth', 3);   % thicker + dashed
+yticks(20:20:180)
+yticklabels(round(frexUse(20:20:180)))
+ax.YAxis(1).Color = labCol;
+ax.YAxis(1).LineWidth = 2.2;
+
+% ---- vertical dotted epoch boundaries ----
+xline(10.5, ':', 'Color', xlineCol, 'LineWidth', 8, 'HandleVisibility', 'off');
+xline(20.5, ':', 'Color', xlineCol, 'LineWidth', 8, 'HandleVisibility', 'off');
+xline(30.5, ':', 'Color', xlineCol, 'LineWidth', 8, 'HandleVisibility', 'off');
+xline(40.5, ':', 'Color', xlineCol, 'LineWidth', 8, 'HandleVisibility', 'off');
+
+% ---- respiration overlay on right axis ----
+yyaxis right
+if exist('groupB','var') && ~isempty(groupB)
+    if numel(groupB) ~= tMin
+        xOld = linspace(1, tMin, numel(groupB));
+        groupB = interp1(xOld, groupB(:), 1:tMin, 'linear', 'extrap');
     end
-    ylabel('normalized respiration (inhale up)')
-    ax.YAxis(2).Color = [0 0 0];
-    ax.YAxis(2).LineWidth = 1.5;
+    plot(1:tMin, groupB, '--', ...
+        'Color', rspCol, ...
+        'LineWidth', 8.0, ...
+        'HandleVisibility', 'off');
+end
 
-    hold off
+ylabel('Template Sampled Respiration (flow rate au)', ...
+    'FontSize', 20, ...
+    'FontWeight', 'bold', ...
+    'FontName', 'Dotum', ...
+    'Color', labCol);
+
+ax.YAxis(2).Color = labCol;
+ax.YAxis(2).LineWidth = 2.2;
+
+set(ax, 'Layer', 'top')
+hold(ax, 'off')
+xlim([1 50])
 
     % ---------------- SAVE (unchanged) ----------------
-    saveDir = "R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\groupStatFigs";
+    saveDir = "G:\My Drive\cZelano\ACHEMS_2026\figs";
     if ~exist(saveDir,'dir'), mkdir(saveDir); end
 
     taskTok = regexp(titleStr, '^\s*([^|]+?)\s*(?:\||$)', 'tokens', 'once');

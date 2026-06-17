@@ -21,10 +21,15 @@ function [outDat, targTraces] = alignTargetBreathingTrace(outDat, targTraceDir)
 
     % Number of conditions (rows) and samples (columns)
     nCond      = max(outDat.behDat.order);
-    nSamples   = outDat.fs * 300;  % 300 s window at fs
-    targTraces = zeros(nCond, nSamples);
+    nSamples   = diff([outDat.TTL size(outDat.data,2)]); 
+
+    targTraces = cell(length(nSamples), 1); 
+
+    % nSamples   = outDat.fs * 300;  % 300 s window at fs
+    % targTraces = zeros(nCond, nSamples);
 
     dataDir = fullfile(targTraceDir);
+
     if ismember('cndName', outDat.behDat.Properties.VariableNames)
         orderIdx = arrayfun(@(x) find(outDat.behDat.order == x, 1),...
                                 unique(outDat.behDat.order));
@@ -34,14 +39,21 @@ function [outDat, targTraces] = alignTargetBreathingTrace(outDat, targTraceDir)
         while searchOn
             if strcmp(OrderCndNames{startFrom}, 'pre') || ...
                strcmp(OrderCndNames{startFrom}, 'audio')
+
+                targTraces{startFrom} = zeros(1, nSamples(startFrom)); 
                 startFrom = startFrom + 1; 
             else
                 searchOn = false; 
             end
         end
+        startFrom = outDat.behDat.order(orderIdx(startFrom)); 
     else
         startFrom = 3; 
+        targTraces{1} = zeros(1, nSamples(1)); 
+        targTraces{2} = zeros(1, nSamples(2)); 
     end
+    
+    
 
     % Get the target files for the shadow conditions:
     for cndi = startFrom:nCond
@@ -52,6 +64,7 @@ function [outDat, targTraces] = alignTargetBreathingTrace(outDat, targTraceDir)
             continue;
         end
 
+     
         % Determine which shadow file to use
         sfName = tmpBehDat.shadowFile{idx};
         if strcmp(sfName, 'NA')
@@ -75,15 +88,17 @@ function [outDat, targTraces] = alignTargetBreathingTrace(outDat, targTraceDir)
         % Remove any zero-voltage rows
         targTbl(targTbl.voltage == 0, :) = [];
 
+
+
         % Tempo scale can be a string or numeric
         try
-            tempo_scale = str2num(tmpBehDat.warp{idx}); %#ok<ST2NM>
+            tempo_scale = str2num(tmpBehDat.warp{idx}); 
         catch
             tempo_scale = tmpBehDat.warp(idx);
         end
 
         % Target length in "stim samples" (before mapping to ephys fs)
-        targ_len = round(tmpBehDat.trialTim(idx) * tmpBehDat.FPS(idx) * 2);
+        targ_len = round(nSamples(cndi) /outDat.fs * tmpBehDat.FPS(idx) * 2);
         new_len  = round(length(targTbl.voltage) / tempo_scale);
 
         % Resample original voltage trace to tempo-scaled length
@@ -91,8 +106,11 @@ function [outDat, targTraces] = alignTargetBreathingTrace(outDat, targTraceDir)
         timRec   = linspace(1/L, 1, L);
         timGoal  = linspace(1/new_len, 1, new_len);
         voltages_resampled = interp1(timRec, ...
-                                     targTbl.voltage, ...
+                                     targTbl.target, ...
                                      timGoal, 'linear');
+
+       
+
 
         % Take loop segment, trimming 180 s (scaled) from each end
         loop_start   = round(180 / tempo_scale);
@@ -120,11 +138,11 @@ function [outDat, targTraces] = alignTargetBreathingTrace(outDat, targTraceDir)
         targTime = 1/outDat.fs : 1/outDat.fs : 300;
         voltages = interp1(tmpTim, voltages, targTime, 'linear');
 
-        targTraces(cndi, :) = voltages;
+        targTraces{cndi} = voltages;
     end
-
+    
     % Time x condition
-    targTraces = targTraces';
+    targTraces = cat(2, targTraces{:});
 
     % Append flattened target trace into outDat
     try
@@ -137,13 +155,13 @@ function [outDat, targTraces] = alignTargetBreathingTrace(outDat, targTraceDir)
      %% Per-condition plots: respiration vs target trace
     % One figure per condition (cndi = 3:nCond → nCond-2 figures)
     if ~isempty(rspDat)
-        nSamples  = outDat.fs * 300;       % already used above
-        [~, nCond] = size(targTraces);     % time x condition
+       
+        
 
         for cndi = 3:nCond
             % Segment indices for this condition in the full-session rspDat
-            startIdx = (cndi-1) * nSamples + 1;
-            endIdx   = cndi * nSamples;
+            startIdx = outDat.TTL(cndi)+1; 
+            endIdx   = outDat.TTL(cndi+1);
 
             if startIdx > numel(rspDat)
                 warning('alignTargetBreathingTrace:RespTooShort', ...
@@ -156,7 +174,7 @@ function [outDat, targTraces] = alignTargetBreathingTrace(outDat, targTraceDir)
             segLen = endIdx - startIdx + 1;
 
             segRsp  = rspDat(startIdx:endIdx);
-            segTarg = targTraces(1:segLen, cndi);
+            segTarg = targTraces(startIdx:endIdx);
 
             t = (0:segLen-1) / outDat.fs;
 

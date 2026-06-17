@@ -19,9 +19,13 @@ excludeHzAroundPeak  = 5;
 % ---------- Find .mat files (top level only) ----------
 files = dir(fullfile(procDir, "*.mat"));
 files = files(~[files.isdir]);
+test = cellfun(@(x) sum(strfind(x, 'EEG'))>0, {files.name}); 
+files(test) = []; 
 if isempty(files)
     error("No .mat files found in %s", procDir);
 end
+
+
 
 % ---------- Group key = filename minus final _NN ----------
 keys = strings(numel(files),1);

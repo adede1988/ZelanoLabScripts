@@ -453,14 +453,6 @@ function [raw, P] = getSessionParams_breathingTask(S)
             % P.spikeClean  = false;
             P.getBeats    = @(ECGz, beatSep)...
                   getBeats_251205_EEG_NWU_AK(ECGz, beatSep);
-        case '251208_EEG_NWU_ZA'
-            P.rspIDX      = 1;
-            P.rspFlip     =  -1;
-            P.hasEEG      = true;
-            P.hasMacros   = false;
-            % P.spikeClean  = false;
-            P.getBeats    = @(ECGz, beatSep)...
-                  getBeats_251009_EEG_NWU_SM(ECGz, beatSep);
         otherwise
             % Defaults if you hit an unexpected session:
             error('participant needs parameter specification')
@@ -470,12 +462,12 @@ function [raw, P] = getSessionParams_breathingTask(S)
 end
 
  % 
- % idx = cellfun(@(x) contains(x, 'rsp'), od.labels);
- %    rspDat = od.data(idx,:); 
- %    figure
- %    plot(-rspDat(1,:))
- %    hold on 
- %    plot(rspDat(3,:))
+ idx = cellfun(@(x) contains(x, 'rsp'), od.labels);
+    rspDat = od.data(idx,:); 
+    figure
+    plot(-rspDat(1,:))
+    hold on 
+    plot(rspDat(3,:))
 
 
 %% evaluate macros for spike params: 

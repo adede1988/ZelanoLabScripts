@@ -32,12 +32,14 @@ function outDat = downsample_data(outDat, fs_new)
     
     % Design filters
     highd = designfilt('highpassiir','FilterOrder',4, ...
-        'HalfPowerFrequency',0.05,'SampleRate',fs_new);
+        'HalfPowerFrequency',0.03,'SampleRate',fs_new);
     lowd = designfilt('lowpassiir','FilterOrder',4, ...
         'HalfPowerFrequency',fs_new/2 - 0.1,'SampleRate',fs_new); % Nyquist-safe
     
     % Process each channel & trial
     for ii = 1:ch
+        
+
         for jj = 1:tr
             sig = double(squeeze(data(ii,:,jj)));
             sig = resample(sig, p, q);

@@ -12,6 +12,20 @@ rspDat = load('R:\Neurology\Zelano_Lab\Lab_Common\OBEControl\260105_OBE_NWU_ZF_1
 rspDat = rspDat.curDat; 
 
 
+% Inputs:
+t40 =  rspDat.rawData.time{1}(:); % timestamps for 40 kHz signal (Nx1)
+x40 =  rspDat.rawData.trial{1}(1,:); % 40 kHz signal (Nx1)
+x40 =  x40(:); 
+t2  =  curDat.rawData.time{1}(:); % timestamps for 2 kHz signal (Mx1)
+
+% Output:
+% x40_at_2kHz - resampled 40 kHz signal at t2 timestamps
+
+x40_at_2kHz = interp1(t40, x40, t2, 'linear');
+
+
+
+
 rspDat2 = load('R:\Neurology\Zelano_Lab\Lab_Common\OBEControl\260105_OBE_NWU_ZF_1\raw\raw_focusedBreathing_multiSniff_echem\raw_focusedBreathing_multiSniff_echem.mat')
 rspDat2 = rspDat2.curDat; 
 
