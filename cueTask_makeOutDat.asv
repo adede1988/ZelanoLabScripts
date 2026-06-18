@@ -29,7 +29,7 @@ newSet     = cfg.newIDs;
 rspIDX     = cfg.rspIDX;
 rspFlip    = cfg.rspFlip;
 
-for sessi = 32:length(sessionIDs)
+for sessi = 30:length(sessionIDs)
     disp(['Working on: ' sessionIDs{sessi}])
 
     
@@ -234,11 +234,8 @@ if sum(cellfun(@(x) strcmp(sessionIDs{sessi}, x), newSet))==1
         plot(photoDiode)
         xline(cueTTLs, 'color', 'magenta', 'linewidth', 2)
         xline(sniffTTLs, 'color', 'green', 'linewidth', 2)
-        try
-            xline(responseTTLs, 'color', 'k', 'linewidth',2)
-        catch
-            warning('missing all responses')
-        end
+        xline(responseTTLs, 'color', 'k', 'linewidth',2)
+
 
         behDat = [behDat1; behDat2];
         %store all TTLs into one matrix: 

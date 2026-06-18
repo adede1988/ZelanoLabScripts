@@ -11,8 +11,7 @@ codePre = 'G:\My Drive\GitHub\';
 
 
 addpath(genpath([codePre 'ZelanoLabScripts']))
-% addpath(genpath('C:\Users\Adam\Documents\eeglab2026.0.0'))
-addpath(genpath("C:\Users\dtf8829\Documents\eeglab2025.0.0"))
+addpath(genpath('C:\Users\Adam\Documents\eeglab2026.0.0'))
 
 
 figPath = 'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\';
@@ -24,7 +23,7 @@ set(0, 'defaultfigurewindowstyle', 'normal')
 cfg        = applyParams('cueTask','main');
 sessionIDs = cfg.sessionIDs;
 
-for s = 27:numel(sessionIDs)
+for s = 1:numel(sessionIDs)
     % --- Session descriptor (adjust to your system) ---
     S.id   = sessionIDs{s};
     S.root = cfg.root{s};     % holds exampCueTaskDat.mat
@@ -76,12 +75,8 @@ for s = 27:numel(sessionIDs)
 
     outDat = refine_onsets_with_phase(outDat, R, P); % uses precomputed phase
 
-    if strcmp(P.paramSource, 'guess')
-        warning('check that onsets have been well-detected')
-        x = 5;
-    end
-    P.paramSource = 'curated'; 
-    writeParams(P, S.id);
+    if P.s
+
 
     plot_sniff_epochs(outDat, R);
    
