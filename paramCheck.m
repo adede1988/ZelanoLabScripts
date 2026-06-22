@@ -30,6 +30,7 @@ function [outDat, P] = paramCheck(outDat, P)
             end
             userData = 1; 
         end
+        ii = ii+1;
     end
 
 

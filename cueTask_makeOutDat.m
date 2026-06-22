@@ -29,12 +29,12 @@ newSet     = cfg.newIDs;
 rspIDX     = cfg.rspIDX;
 rspFlip    = cfg.rspFlip;
 
-for sessi = 32:length(sessionIDs)
+for sessi = 1:length(sessionIDs)
     disp(['Working on: ' sessionIDs{sessi}])
 
     
 
-    if ~exist([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\redo' ...
+    if ~exist([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\' ...
                     sessionIDs{sessi} '_cueTaskPreProc.mat'], 'file')
 %% new set 
 if sum(cellfun(@(x) strcmp(sessionIDs{sessi}, x), newSet))==1

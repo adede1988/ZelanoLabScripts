@@ -24,7 +24,7 @@ set(0, 'defaultfigurewindowstyle', 'normal')
 cfg        = applyParams('cueTask','main');
 sessionIDs = cfg.sessionIDs;
 
-for s = 27:numel(sessionIDs)
+for s = 35:numel(sessionIDs)
     % --- Session descriptor (adjust to your system) ---
     S.id   = sessionIDs{s};
     S.root = cfg.root{s};     % holds exampCueTaskDat.mat
@@ -77,8 +77,8 @@ for s = 27:numel(sessionIDs)
     outDat = refine_onsets_with_phase(outDat, R, P); % uses precomputed phase
 
     if strcmp(P.paramSource, 'guess')
-        warning('check that onsets have been well-detected')
-        x = 5;
+        error('check that onsets have been well-detected')
+        
     end
     P.paramSource = 'curated'; 
     writeParams(P, S.id);
