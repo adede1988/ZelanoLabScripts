@@ -31,6 +31,10 @@ function [outDat, raw, TTL] = assemble_outDat_all(S, P)
     raw = struct();
     TTL = [];
 
+    % ================= TASK-SPECIFIC: raw load per task =================
+    % Each case knows where a task's raw data lives and how to read it (and,
+    % for O15, runs detect_ttls_O15). To add a new task, add a new case here.
+    % Everything AFTER the switch (common raw fields + outDat assembly) is SHARED.
     switch task
         % =================================================================
         case 'breathingTask'

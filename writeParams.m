@@ -267,8 +267,9 @@ function p = resolveDefaultXlsx()
 % to this file. Cached for the session.
     persistent RESOLVED
     if ~isempty(RESOLVED), p = RESOLVED; return; end
-    adminP = 'R:\Neurology\Zelano_Lab\Lab_Common\Admin\dataTracking.xlsx';
-    localP = fullfile(fileparts(mfilename('fullpath')), 'dataTracking.xlsx');
+    L = labPaths();
+    adminP = L.adminXlsx;
+    localP = fullfile(L.repo, 'dataTracking.xlsx');
     if hasParamCols(adminP)
         p = adminP;
     elseif exist(localP, 'file') == 2

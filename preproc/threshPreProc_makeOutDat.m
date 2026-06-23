@@ -1,11 +1,19 @@
+% TASK-SPECIFIC ingestion (PEA photodiode/TTL + behavior outMat ->
+% <id>_PEA_threshold_preproc.mat). The whole body below is threshTask-specific;
+% for a new task write a new <task>_makeOutDat.m. Only the header (labPaths +
+% the applyParams cfg block) is shared boilerplate.
+
 clear
 
-%% Paths + session list (carried over from cueTask loader)
-
-codePre   = 'C:\Users\Adam\Documents\GitHub\';
+%% Paths + session list
+% This file lives in preproc/, so bootstrap the repo ROOT (one level up) onto
+% the path before calling labPaths().
+addpath(fileparts(fileparts(mfilename('fullpath'))));
+L                 = labPaths();
+codePre           = L.codePre;
 
 % Centralized behavioral results location for "newSet" participants
-behDatPath_newSet = 'R:\Neurology\Zelano_Lab\Lab_Common\OBE_task_backup\tasks\pea_threshold\results';
+behDatPath_newSet = L.behThresh;
 
 
 
@@ -14,18 +22,12 @@ behDatPath_newSet = 'R:\Neurology\Zelano_Lab\Lab_Common\OBE_task_backup\tasks\pe
 
  
 
-%% Toolboxes / paths (kept from original PEA script; adjust as needed on your machine)
-addpath([codePre 'HpcAccConnectivityProject/helperFuncs'])
-addpath(genpath([codePre 'myFrequentUse']))
-addpath([codePre 'myFrequentUse/export_fig_repo'])
-addpath(genpath('C:\Users\Adam\Documents\eeglab2026.0.0'))
-
-addpath([codePre 'fieldtrip-20230118'])
-addpath([codePre 'emotionDecoding'])
-addpath([codePre 'slowBreathing'])
+%% Toolboxes / paths
+addpath(genpath(L.repo))
+addpath(genpath(L.eeglab))
+addpath(genpath(L.slowBreathing))
 
 set(0, 'defaultfigurewindowstyle', 'docked')
-% ft_defaults  % FieldTrip not installed on this machine and not used by this script
 
 %% Main loop
 cfg        = applyParams('threshTask','makeOutDat');

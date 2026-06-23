@@ -1,18 +1,36 @@
 
 clear
+% ---- machine paths (everything machine-specific comes from labPaths) ----
+addpath(fileparts(mfilename('fullpath')));   % ensure labPaths() is reachable
+L            = labPaths();
+codePre      = L.codePre;
+addpath(genpath(L.repo))
+addpath(genpath(L.slowBreathing))
+addpath(genpath(L.eeglab))
+% NB: breathmetrics toolbox is not used in this pipeline -> not loaded
 
-codePre = 'C:\Users\Adam\Documents\GitHub\';
+targTraceDir = L.targTraceDir;
+figPath      = L.figPath;
 
-addpath(genpath([codePre 'ZelanoLabScripts']))
-addpath(genpath([codePre 'slowBreathing']))
-% breathmetrics toolbox is not used in this pipeline -> not loaded
-addpath(genpath('C:\Users\Adam\Documents\eeglab2026.0.0'))
-
-targTraceDir = 'G:\My Drive\cZelano\breathingDataFiles'; 
-figPath = 'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\';
-
-EEGLOC = readtable(fullfile(codePre, 'ZelanoLabScripts','eegLocs_standard_coords.csv'));
+EEGLOC       = readtable(L.eegLocCsv);
 set(0, 'defaultfigurewindowstyle', 'normal')
+
+% =====================================================================
+%  breathingTask preprocessing -- main pipeline
+%  TASK-SHARED sections are identical across all four pipelines; do NOT edit
+%  them when adding a new task. TASK-SPECIFIC sections must be rewritten.
+%  Breathing is the richest task: it alone has ECG/HRV and target-trace alignment.
+%  TASK-SPECIFIC pieces for breathingTask (rewrite these for a new task):
+%    - breathingTask_makeOutDat.m            (per-session photodiode ingestion)
+%    - process_respiration_breathing.m       (per-breath metrics, bmObj)
+%    - alignTargetBreathingTraceSimplify.m   (paced/shadow target-trace alignment)
+%    - build_behavior_table_breathingTask.m
+%    - processECG.m / buildECGz.m / paramCheckECG.m   (ECG beat detection + HRV)
+%    - flagBadBreaths.m, plotBreathLengths.m
+%  Everything else is SHARED: applyParams, assemble_outDat_all, downsample_data,
+%  preprocess_eeg, preprocess_macros, preprocess_respiration_wholetrace,
+%  paramCheck, writeParams, writePreProcX, plot_sniff_epochs.
+% =====================================================================
 
 cfg        = applyParams('breathingTask','main');
 sessionIDs = cfg.sessionIDs;
@@ -24,7 +42,7 @@ for s = 1:numel(sessionIDs)
     % --- Session descriptor (adjust to your system) ---
     S = struct;
     S.id   = sessionIDs{s};
-    S.root = cfg.root{s};     % holds exampCueTaskDat.mat
+    S.root = cfg.root{s};
     S.fig  = fullfile(figPath, S.id);
     
     % --- Check if the session is already done --- %
@@ -43,18 +61,14 @@ for s = 1:numel(sessionIDs)
 
     % --- Params + raw load ---
     P = applyParams('breathingTask', S.id);
-    %% quick debug stopper:
-%     catch
-%         disp('oops')
-%     end
-% end
-
-%% end debug stopper
-
+    isGuess = strcmp(P.paramSource, 'guess');
 
     disp(['........................Loaded ', sessionIDs{s}])
     % --- Assemble, preprocess shared pieces ---
     [outDat, raw, TTL] = assemble_outDat_all(S, P);
+
+    % Guessed params: verify rsp channel + macro/spike choices interactively
+    if isGuess, [outDat, P] = paramCheck(outDat, P); end
 
     outDat = downsample_data(outDat, P.fs_target);
 
@@ -65,7 +79,10 @@ for s = 1:numel(sessionIDs)
     
     disp(['........................spike and blink ', sessionIDs{s}])
 
-    outDat = process_respiration_breathing(outDat, P); 
+    % ===== TASK-SPECIFIC (breathing): per-breath metrics + target trace +
+    %       behavior table + ECG/HRV + breath QC. (preprocess_respiration_wholetrace
+    %       and plot_sniff_epochs below are shared helpers reused for plotting.) =====
+    outDat = process_respiration_breathing(outDat, P);
     if isfield(outDat, 'TTL')
         TaskBreaks = [outDat.TTL/outDat.fs size(outDat.data,2)/outDat.fs];
     else
@@ -88,6 +105,10 @@ for s = 1:numel(sessionIDs)
     end
     outDat = build_behavior_table_breathingTask(outDat, outDat.bmObj);
 
+    % Guessed params: verify ECG beat-detection spec (breathing-only) before it
+    % drives processECG / HRV
+    if isGuess, P = paramCheckECG(outDat, P); end
+
     outDat = processECG(outDat, P);
     
     disp(['........................breath behave heart ', sessionIDs{s}])
@@ -99,15 +120,29 @@ for s = 1:numel(sessionIDs)
     plot_sniff_epochs(outDat, R);
 
     plotBreathLengths(outDat, R)
-   
+    % ===== end TASK-SPECIFIC (breathing) =====
+
+    % --- Guess gate: stop before writing back / exporting / saving so the user
+    %     can verify the rsp, macro, ECG and breath figures first. (The
+    %     per-session try/catch below reports this halt like any other stop.) ---
+    if isGuess
+        error(['breathingTask guess params: inspect the saved figures (rsp / ' ...
+               'macros / ECG / breaths), then set paramSource=curated in ' ...
+               'dataTracking.xlsx (or call writeParams(P, S.id)) and re-run.']);
+    end
+    P.paramSource = 'curated';
+    writeParams(P, S.id);
+
     writetable(outDat.behDat, [codePre 'closed-loop-respiration\processedBehavior\' ...
                     outDat.sessID  '_processedBreathing.csv']);
-   
+
     % --- Save ---
     preDir = fullfile(S.root, S.id, 'preProc');
     if ~exist(preDir,'dir'), mkdir(preDir); end
     parSave(fullfile(preDir, [S.id '_breathingPreproc.mat']), outDat);
-  
+
+    writePreProcX(P, S.id);   % mark Data Preprocessed = X in dataTracking.xlsx
+
     catch ME
         success(s) = 0; 
         disp(['fail for ', sessionIDs{s}, ': ', ME.message])
@@ -115,20 +150,3 @@ for s = 1:numel(sessionIDs)
     
     
 end
-
-% USE THIS CODE TO REMOVE AND REDO MACRO CLEANING TO ADJUST SPIKE THRESHOLD
-% % labels we want to remove
-% rmLabs = {'macBP1','macBP2','macBP3','macBP4','macBP5','spikeCleanVec'};
-% 
-% % Convert labels to string array for easy comparison
-% lblStr = string(outDat.labels);
-% 
-% % Indices of rows to remove
-% rmIdx = ismember(lblStr, rmLabs);
-% 
-% % Remove rows from data and labels
-% outDat.data(rmIdx, :)   = [];
-% outDat.labels(rmIdx)    = [];
-% 
-% % Reset spikeRemoval flag
-% outDat.spikeRemoval = 0;

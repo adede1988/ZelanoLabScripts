@@ -1,0 +1,4 @@
+# Optional untracked per-machine path override for labPaths.m.
+# Drop a labPaths_local.m next to labPaths.m to set codePre/eeglab/labCommon/gdrive
+# for a machine you don't want to commit a case for.
+labPaths_local.m

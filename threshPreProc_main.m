@@ -1,17 +1,30 @@
 
 clear
+% ---- machine paths (everything machine-specific comes from labPaths) ----
+addpath(fileparts(mfilename('fullpath')));   % ensure labPaths() is reachable
+L       = labPaths();
+codePre = L.codePre;
+addpath(genpath(L.repo))
+addpath(genpath(L.eeglab))
 
-codePre = 'C:\Users\Adam\Documents\GitHub\';
-
-addpath(genpath([codePre 'ZelanoLabScripts']))
-addpath(genpath('C:\Users\Adam\Documents\eeglab2026.0.0'))
-
-
-figPath = 'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\';
-
-EEGLOC = readtable(fullfile(codePre, 'ZelanoLabScripts','eegLocs_standard_coords.csv'));
+figPath = L.figPath;
+EEGLOC  = readtable(L.eegLocCsv);
 
 set(0, 'defaultfigurewindowstyle', 'normal')
+
+% =====================================================================
+%  threshTask preprocessing -- main pipeline
+%  TASK-SHARED sections are identical across all four pipelines; do NOT edit
+%  them when adding a new task. TASK-SPECIFIC sections must be rewritten.
+%  TASK-SPECIFIC pieces for threshTask (rewrite these for a new task):
+%    - threshPreProc_makeOutDat.m  (PEA photodiode/behavior ingestion)
+%    - the per-trial sniff-TTL table rebuild in the loop below
+%    - build_behavior_table_threshTask.m
+%  Everything else is SHARED: applyParams, assemble_outDat_all, downsample_data,
+%  preprocess_eeg, preprocess_macros, preprocess_respiration_wholetrace,
+%  detect_sniffs_from_TTLs, refine_onsets_with_phase, paramCheck, writeParams,
+%  writePreProcX, plot_sniff_epochs.
+% =====================================================================
 
 cfg        = applyParams('threshTask','main');
 sessionIDs = cfg.sessionIDs;
@@ -19,7 +32,7 @@ sessionIDs = cfg.sessionIDs;
 for s = 1:numel(sessionIDs)
     % --- Session descriptor (adjust to your system) ---
     S.id   = sessionIDs{s};
-    S.root = cfg.root{s};     % holds exampCueTaskDat.mat
+    S.root = cfg.root{s};
     S.fig  = fullfile(figPath, S.id);
     disp(['working on ', sessionIDs{s}])
     preDir = fullfile(S.root, S.id, 'preProc');
@@ -39,9 +52,13 @@ for s = 1:numel(sessionIDs)
     end
     % --- Params + raw load ---
     P = applyParams('threshTask', S.id);
+    isGuess = strcmp(P.paramSource, 'guess');
 
     % --- Assemble, preprocess shared pieces ---
     [outDat, raw, TTL] = assemble_outDat_all(S, P); %this works for thresh task too!
+
+    % Guessed params: verify rsp channel + macro/spike choices interactively
+    if isGuess, [outDat, P] = paramCheck(outDat, P); end
      disp(['........................Loaded ', sessionIDs{s}])
   % trialStarts, buttonPresses, sniffMarks    
     outDat = downsample_data(outDat, P.fs_target);
@@ -51,32 +68,48 @@ for s = 1:numel(sessionIDs)
   disp(['........................spike and blink ', sessionIDs{s}])
     R = preprocess_respiration_wholetrace(outDat); % fields: rsp, rsp_smooth, phase, onset_metric
 
-    
-    trial = 1:45; 
-    sniff = outDat.TTL.sniff; 
+    % ----- TASK-SPECIFIC (threshTask): rebuild a 45-trial sniff-TTL table
+    %       (start = sniff-1000 samples) before the shared sniff detector -----
+    trial = 1:45;
+    sniff = outDat.TTL.sniff;
     x = table(sniff(:)-1000, trial(:), sniff(:), ...
-        'variablenames', {'start', 'trial', 'sniff'}); 
-    outDat.TTL = x; 
+        'variablenames', {'start', 'trial', 'sniff'});
+    outDat.TTL = x;
+    % ----- end TASK-SPECIFIC -----
     sniffs = detect_sniffs_from_TTLs(R, P, outDat);  % returns table or matrix
-    
+
     %there's more than one sniff per trial
-    
+
     outDat.rspIDX = P.rspIDX;
-    outDat.rspFlip = P.rspFlip; 
+    outDat.rspFlip = P.rspFlip;
 
 
+    % ----- TASK-SPECIFIC (threshTask): behavior table from sniffs + raw behavior -----
     outDat.behDat = build_behavior_table_threshTask(sniffs, raw.beh);
+    % ----- end TASK-SPECIFIC -----
 
     outDat = refine_onsets_with_phase(outDat, R, P); % uses precomputed phase
 
 
     plot_sniff_epochs(outDat, R);
-   outDat.moreThan1 = 0; 
+   outDat.moreThan1 = 0;
   disp(['........................breath behave ', sessionIDs{s}])
+
+    % --- Guess gate: stop before writing back / saving so the user can verify
+    %     onset detection in the saved figures first ---
+    if isGuess
+        error(['threshTask guess params: inspect the saved figures, then set ' ...
+               'paramSource=curated in dataTracking.xlsx (or call ' ...
+               'writeParams(P, S.id)) and re-run.']);
+    end
+    P.paramSource = 'curated';
+    writeParams(P, S.id);
+
     % --- Save ---
     preDir = fullfile(S.root, S.id, 'preProc');
     if ~exist(preDir,'dir'), mkdir(preDir); end
     save(fullfile(preDir, [S.id '_PEA_threshold_preproc.mat']), 'outDat','-v7.3');
-    
+
+    writePreProcX(P, S.id);   % mark Data Preprocessed = X in dataTracking.xlsx
 end
 

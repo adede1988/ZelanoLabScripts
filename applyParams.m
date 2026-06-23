@@ -27,9 +27,11 @@ function out = applyParams(task, sel, xlsxPath)
     end
 
     % --- canonical roots (order is load-bearing: 1=Dupi 2=OBEControl 3=EEGbreathing) ---
-    ROOT_DUPI = 'R:\Neurology\Zelano_Lab\Lab_Common\Dupi\';
-    ROOT_OBE  = 'R:\Neurology\Zelano_Lab\Lab_Common\OBEControl\';
-    ROOT_EEG  = 'R:\Neurology\Zelano_Lab\Lab_Common\AllStudyData\EEGbreathing\';
+    % Sourced from labPaths so they follow the machine's lab-common drive.
+    L = labPaths();
+    ROOT_DUPI = L.rootDupi;
+    ROOT_OBE  = L.rootOBE;
+    ROOT_EEG  = L.rootEEG;
 
     tkey = taskKey(task);
     if isempty(tkey)
@@ -108,7 +110,7 @@ function out = applyParams(task, sel, xlsxPath)
             id = strtrim(asChar(rows{r, cSub}));
             cfg.sessionIDs{r} = id;
 
-            rt = rootForRow(rows{r, cPre}, rows{r, cType}, ROOT_DUPI, ROOT_OBE, ROOT_EEG);
+            rt = rootForRow(rows{r, cPre}, rows{r, cType}, L);
             cfg.root{r} = rt;
 
             cfg.rspIDX(r)  = num_or(rows{r, cRsp}, 1);
@@ -214,8 +216,9 @@ function p = resolveDefaultXlsx()
 % lives next to applyParams.m. Resolution is cached for the session.
     persistent RESOLVED
     if ~isempty(RESOLVED), p = RESOLVED; return; end
-    adminP = 'R:\Neurology\Zelano_Lab\Lab_Common\Admin\dataTracking.xlsx';
-    localP = fullfile(fileparts(mfilename('fullpath')), 'dataTracking.xlsx');
+    L = labPaths();
+    adminP = L.adminXlsx;
+    localP = fullfile(L.repo, 'dataTracking.xlsx');
     if hasParamCols(adminP)
         p = adminP;
     elseif exist(localP, 'file') == 2
@@ -383,15 +386,25 @@ function t = typeStr(study)
     end
 end
 
-function rt = rootForRow(preVal, typeVal, ROOT_DUPI, ROOT_OBE, ROOT_EEG)
+function rt = rootForRow(preVal, typeVal, L)
     if ~isBlank(preVal)
-        rt = strtrim(asChar(preVal));
+        rt = rebaseLabCommon(strtrim(asChar(preVal)), L);
         return;
     end
     switch studyOf(typeVal)
-        case 'dupi', rt = ROOT_DUPI;
-        case 'eeg',  rt = ROOT_EEG;
-        otherwise,   rt = ROOT_OBE;
+        case 'dupi', rt = L.rootDupi;
+        case 'eeg',  rt = L.rootEEG;
+        otherwise,   rt = L.rootOBE;
+    end
+end
+
+function rt = rebaseLabCommon(rt, L)
+% The sheet stores absolute datPre paths under the canonical Lab_Common prefix.
+% Swap that prefix for this machine's labCommon so the sheet stays portable.
+% No-op when they match (every machine that maps the share to R:).
+    canon = L.labCommonCanon;
+    if numel(rt) >= numel(canon) && strncmpi(rt, canon, numel(canon))
+        rt = [L.labCommon, rt(numel(canon)+1:end)];
     end
 end
 

@@ -1,15 +1,28 @@
 
 clear
-codePre = 'C:\Users\Adam\Documents\GitHub\';%HOME COMPUTER PATH
-codePre = 'G:\My Drive\GitHub\'; 
+% ---- machine paths (everything machine-specific comes from labPaths) ----
+addpath(fileparts(mfilename('fullpath')));   % ensure labPaths() is reachable
+L       = labPaths();
+codePre = L.codePre;
+addpath(genpath(L.repo))
+addpath(genpath(L.eeglab))
 
-% addpath(genpath('C:\Users\Adam\Documents\eeglab2026.0.0'))
-addpath(genpath("C:\Users\dtf8829\Documents\eeglab2025.0.0"))
-addpath(genpath([codePre 'ZelanoLabScripts']))
+figPath = L.figPath;
+EEGLOC  = readtable(L.eegLocCsv);   % load once, reuse
 
-figPath = 'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\';
-% Load once, reuse
-EEGLOC = readtable([codePre 'ZelanoLabScripts/eegLocs_standard_coords.csv']);
+% =====================================================================
+%  O15 preprocessing -- main pipeline
+%  Sections marked TASK-SHARED are identical across all four pipelines
+%  (breathing / cue / thresh / O15); do NOT edit them when adding a new task.
+%  Sections marked TASK-SPECIFIC must be rewritten per task.
+%  TASK-SPECIFIC pieces for O15 (rewrite these for a new task):
+%    - assemble_outDat_all.m  (O15 branch: raw_O15 load + detect_ttls_O15)
+%    - detect_ttls_O15.m      (photodiode -> TTL table)
+%    - build_behavior_table_O15.m
+%  Everything else is SHARED: applyParams, downsample_data, preprocess_eeg,
+%  preprocess_macros, preprocess_respiration_wholetrace, detect_sniffs_from_TTLs,
+%  refine_onsets_with_phase, paramCheck, writeParams, writePreProcX, plot_sniff_epochs.
+% =====================================================================
 
 cfg        = applyParams('O15','main');
 sessionIDs = cfg.sessionIDs;
@@ -22,13 +35,12 @@ for s = 1:numel(sessionIDs)
   S.id   = sessionIDs{s};
   S.root = cfg.root{s};
    matPath = fullfile(S.root, S.id);
-  if ~exist(fullfile(matPath,  'preProc_REDO', ...
-                [S.id '_O15preproc.mat']), 'file')    
+  if ~exist(fullfile(matPath,  'preProc', ...
+                [S.id '_O15preproc.mat']), 'file')
   S.figPath = figPath; 
   if ~isfolder(fullfile(S.figPath, S.id))
       mkdir(fullfile(S.figPath, S.id))
   end
-  % <<< all subject-specifics here
   P             = applyParams('O15', S.id);
 
 
@@ -69,7 +81,9 @@ for s = 1:numel(sessionIDs)
     writeParams(P, S.id);
 
 
+  % ----- TASK-SPECIFIC (O15): behavior table from sniffs + raw behavior -----
   outDat.behDat = build_behavior_table_O15(sniffs, raw.beh);
+  % ----- end TASK-SPECIFIC -----
 
   outDat = refine_onsets_with_phase(outDat, R, P); % uses precomputed phase
   
@@ -81,11 +95,11 @@ for s = 1:numel(sessionIDs)
   save(fullfile(outDat.OGdataDir,  'preProc', ...
                 [outDat.sessID '_O15preproc.mat']), ...
                 'outDat', "-v7.3")
+
+  writePreProcX(P, S.id)   % mark Data Preprocessed = X in dataTracking.xlsx
   else
        disp(['finished file detected for: ', sessionIDs{s}])
   end
-
-  writePreProcX(P, S.id)
 
 end
 
