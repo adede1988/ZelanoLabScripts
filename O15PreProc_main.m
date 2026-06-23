@@ -35,7 +35,7 @@ for s = 1:numel(sessionIDs)
   S.id   = sessionIDs{s};
   S.root = cfg.root{s};
    matPath = fullfile(S.root, S.id);
-  if ~exist(fullfile(matPath,  'preProc', ...
+  if ~exist(fullfile(matPath,  'preProc       REDO ALL ', ...
                 [S.id '_O15preproc.mat']), 'file')
   S.figPath = figPath; 
   if ~isfolder(fullfile(S.figPath, S.id))
@@ -44,14 +44,15 @@ for s = 1:numel(sessionIDs)
   P             = applyParams('O15', S.id);
 
 
-  disp(['........................Loaded ', sessionIDs{s}])
   % trialStarts, buttonPresses, sniffMarks
   [outDat, raw, TTL] = assemble_outDat_all(S, P);   % loads raw, detects TTLs, assembles
+  disp(['........................Loaded ', sessionIDs{s}])
 
   if strcmp(P.paramSource, 'guess')
         [outDat, P] = paramCheck(outDat, P);
   end
-
+  outDat.rspIDX = P.rspIDX;
+  outDat.rspFlip = P.rspFlip;
   outDat.TTL = TTL;
 
   
@@ -65,8 +66,6 @@ for s = 1:numel(sessionIDs)
     
   %there's more than one sniff per trial
   outDat.moreThan1 = 1; 
-  outDat.rspIDX = P.rspIDX;
-  outDat.rspFlip = P.rspFlip; 
 
   % Precompute whole-trace respiration features ONCE
   R = preprocess_respiration_wholetrace(outDat); % fields: rsp, rsp_smooth, phase, onset_metric

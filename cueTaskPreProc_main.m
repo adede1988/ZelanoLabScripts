@@ -56,6 +56,8 @@ for s = 1:numel(sessionIDs)
     if strcmp(P.paramSource, 'guess')
         [outDat, P] = paramCheck(outDat, P);
     end
+    outDat.rspIDX = P.rspIDX;
+    outDat.rspFlip = P.rspFlip; 
 
 
     % --- Assemble, preprocess shared pieces ---
@@ -73,8 +75,6 @@ for s = 1:numel(sessionIDs)
     
     %there's more than one sniff per trial
     outDat.moreThan1 = 0; 
-    outDat.rspIDX = P.rspIDX;
-    outDat.rspFlip = P.rspFlip; 
 
 
     % ----- TASK-SPECIFIC (cueTask): behavior table from sniffs + raw behavior -----

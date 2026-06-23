@@ -29,7 +29,7 @@ set(0, 'defaultfigurewindowstyle', 'normal')
 cfg        = applyParams('threshTask','main');
 sessionIDs = cfg.sessionIDs;
 
-for s = 29:numel(sessionIDs)
+for s = 28:numel(sessionIDs)
     % --- Session descriptor (adjust to your system) ---
     S.id   = sessionIDs{s};
     S.root = cfg.root{s};

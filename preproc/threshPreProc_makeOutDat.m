@@ -204,13 +204,28 @@ for sessi = 1:numel(sessionIDs)
     % Normalize photodiode
     photoDiode = (photoDiode - mean(photoDiode)) / std(photoDiode);
 
+    if strcmp(sessID, '251120_Dupi_NMH_JL_2')
+        photoDiode(1.7e6:end) = []; 
+    end
+
+    
+
     % Subject-specific diode threshold (kept from original script)
     switch sessID
-        case '250623_DUPI_NMH_KS_2'
+        case '250623_Dupi_NMH_KS_2'
             diodeThresh = -2;
         otherwise
             diodeThresh = -1.5;
     end
+
+    if strcmp(sessID, '260316_Dupi_NMH_PD_1')
+        tmp = photoDiode;
+        tmp(1: 2e5) = []; 
+        diodeThresh = -5; 
+        downs = find(tmp(1:end-1) > diodeThresh & tmp(2:end) < diodeThresh);
+        downs(end) = []; 
+        downs = downs + 2e5; 
+    else
 
     downs = find(photoDiode(1:end-1) > diodeThresh & photoDiode(2:end) < diodeThresh);
     ups   = find(photoDiode(1:end-1) < diodeThresh & photoDiode(2:end) > diodeThresh);
@@ -234,6 +249,8 @@ for sessi = 1:numel(sessionIDs)
     end
     downs(1:starti)   = [];
     difVals(1:starti) = [];
+
+    end
 
     if length(downs) ~= 45
         error('PEA loader: wrong number of TTLs for %s (expected 45, found %d).', sessID, length(downs));
