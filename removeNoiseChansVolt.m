@@ -1,26 +1,73 @@
 function [badTS, badChans, newEEG, interpChan] = removeNoiseChansVolt(EEG, fs, skipChans, chanLocs)
 
-%input: 
-%       EEG             channels X time matrix of EEG data
-%       labels          1 X channels cell array of channel labels
-%       fs              sampling rate in Hz
+%input:
+%       EEG         channels X time matrix of EEG data (microvolts)
+%       fs          sampling rate in Hz
+%       skipChans   vector of channel indices to protect from high-amplitude
+%                   flagging (e.g. EOG, which is legitimately high-amplitude
+%                   and should not be removed for exceeding the voltage
+%                   thresholds). These channels ARE still eligible to be
+%                   flagged and removed if flat/dead.
+%       chanLocs    struct with fields .X .Y .Z giving channel coordinates,
+%                   used for Perrin spherical-spline interpolation
 
-%output: 
-%       nbChanOrig      original number of channels in the dataset
-%       nbChanFinal     final number of channels after cleaning
-%       nbTrialOrig     original number of trials in the dataset
-%       nbTrialFinal    final number of trials in the dataset
+%output:
+%       badTS       L X 1 binary time mask. A timepoint is 1 only when its
+%                   parent 2 s trial had ALL channels rejected, i.e. trials
+%                   that tripped the trial-level thresholds. Use as a
+%                   "drop these segments entirely" mask. The final trial is
+%                   forced to 0.
+%       badChans    vector of unique channel indices to drop entirely.
+%                   Combines (a) channels flagged in >=60% of trials in the
+%                   second pass and (b) channels flagged in >50% of trials by
+%                   the first-pass blockwise detector. These channels are NOT
+%                   removed from newEEG; removal is left to the caller.
+%       newEEG      channels X time cleaned data, same shape as EEG, with
+%                   transient bad channels spatially interpolated per 2 s
+%                   trial (only where fewer than half the channels were bad
+%                   in that trial).
+%       interpChan  L X 1 count, per timepoint, of how many channels were
+%                   interpolated in the covering trial. A repair-intensity
+%                   trace: high stretches were heavily reconstructed.
 
-%this function calculates the maximum observed deflection in a sliding 80ms
-%window across each trial for each channel in the data
-%noise channels are defined as channels that have over 50% of their trials
-%with max deflections of greater than 100uV
-%noise trials are defined as trials that have over 25% of their channels
-%with max deflections of greater than 100uV deflections
+%PROCESSING OVERVIEW
+%The function epochs the data into non-overlapping 2 s trials. The final
+%short epoch is handled at its true length: internally it is edge-padded
+%(its last real sample is replicated) only so the sliding peak-to-peak
+%stats reflect its real data, and on write-back only its real samples are
+%used. Two passes are then run.
+%
+%PASS 1 (detect + repair, ~10 ms sliding window):
+%  - Compute peak-to-peak amplitude in a sliding ~10 ms window; reduce to the
+%    single largest deflection per channel/trial.
+%  - Reject the worst trials first: trials where >75% of channels exceed
+%    100 uV are marked bad and removed from the channel statistics.
+%  - Blockwise channel detection over a sliding 6-trial block: in each block,
+%    flag a channel as noisy if it exceeds 50 uV in >=3 trials, or as flat if
+%    it falls below 5 uV in >=3 trials. skipChans are exempt from the noisy
+%    (high-amplitude) test so that EOG is preserved, but are NOT exempt from
+%    the flat test. This yields a time-resolved bad-channel map (a channel
+%    may be bad in some epochs and fine in others).
+%  - Channels flagged in >50% of trials are held aside (outBad).
+%  - For each trial with flagged channels: if fewer than half the channels
+%    are bad, interpolate them with interpolate_perrinX and log the count;
+%    otherwise mark the whole trial bad.
+%  - Reassemble the interpolated trials into newEEG and build interpChan.
+%  - Plot first 32 channels (green = original, black = cleaned) for QC.
+%
+%PASS 2 (decide what is irreparable, ~80 ms sliding window):
+%  - Re-epoch newEEG and recompute max deflection with an ~80 ms window
+%    (sensitive to slower, larger swings rather than fast spikes).
+%  - Flag channels exceeding 100 uV in >50% of trials (skipChans exempt, to
+%    preserve EOG -- including the heavy-noise recompute branch).
+%  - If that would remove >25% of channels, do a rough trial purge
+%    (>75% channels bad), recompute channels, then a moderate trial purge
+%    (>25% channels bad). Otherwise remove the flagged channels, then purge
+%    trials with >25% channels bad.
+%  - Collapse the accumulated bad-record into badTS, badChans, and outBad.
 
-%in general, noise channels are removed first. However, if over 25% of
-%channels are flagged as noise, then trials with 75% of channels with max
-%deflections of greater than 100uV are removed first.
+%window sizes (10 ms / 80 ms) and the inline comments below are the live
+%values; the commented-out loop versions are legacy and may differ.
 
 %written by Adam Dede (adam.osman.dede@gmail.com)
 %Fall 2025
@@ -29,16 +76,26 @@ function [badTS, badChans, newEEG, interpChan] = removeNoiseChansVolt(EEG, fs, s
 
 [c, L] = size(EEG); 
 
-snipL = fs*2; 
-starts = [1:snipL:L]; 
-tmpEEG = zeros([c,snipL,length(starts)]); 
+snipL  = fs*2; 
+starts = 1:snipL:L; 
+nTrial = length(starts); 
+tmpEEG   = zeros([c, snipL, nTrial]); 
+epochLen = zeros(nTrial, 1);   % true (unpadded) length of each epoch
 
-for ii = 1:length(starts)
+for ii = 1:nTrial
     snipStart = starts(ii); 
-    snipEnd = min(L, snipStart+snipL-1);
-    tmpL = snipEnd - snipStart + 1; 
+    snipEnd   = min(L, snipStart+snipL-1);
+    tmpL      = snipEnd - snipStart + 1; 
+    epochLen(ii) = tmpL; 
     tmpEEG(:,1:tmpL,ii) = EEG(:,snipStart:snipEnd); 
-    
+    if tmpL < snipL
+        % Final short epoch: pad the remainder with the last real sample
+        % (edge replication) instead of zeros. The padded region then
+        % contributes ~0 to the sliding peak-to-peak, so the deflection
+        % stats reflect only the real data. The epoch is written back at
+        % its true length below.
+        tmpEEG(:, tmpL+1:snipL, ii) = repmat(EEG(:,snipEnd), 1, snipL - tmpL); 
+    end
 end
 
 % 
@@ -127,19 +184,18 @@ for tt = 1:size(tmpEEG,3)
         interpCount(tt) = sum(badChans(:,tt));
             
         else
-            badRecord(:,badChans(:,tt)==1) = 1; 
+            badRecord(badChans(:,tt)==1,tt) = 1; 
         end
     end
 end
 
-newEEG = zeros(size(EEG)); 
+newEEG     = zeros(size(EEG)); 
 interpChan = zeros(size(newEEG,2),1);
-for tt = 1:size(tmpEEG,3)
-    try
-    newEEG(:, starts(tt):min(L,starts(tt)+snipL-1) ) = tmpEEG(:,:,tt); 
-    interpChan(starts(tt):min(L,starts(tt)+snipL-1)) = interpCount(tt); 
-    catch
-    end
+for tt = 1:nTrial
+    vLen = epochLen(tt); 
+    cols = starts(tt):starts(tt)+vLen-1;        % true-length range, never exceeds L
+    newEEG(:, cols)  = tmpEEG(:, 1:vLen, tt);   % write only the real samples
+    interpChan(cols) = interpCount(tt); 
 end
 
 figure; 
@@ -158,16 +214,20 @@ end
 
 %% recalculate the max deflections: 
 
-snipL = fs*2; 
-starts = [1:snipL:L]; 
-tmpEEG = zeros([c,snipL,length(starts)]); 
+snipL  = fs*2; 
+starts = 1:snipL:L; 
+nTrial = length(starts); 
+tmpEEG = zeros([c, snipL, nTrial]); 
 
-for ii = 1:length(starts)
+for ii = 1:nTrial
     snipStart = starts(ii); 
-    snipEnd = min(L, snipStart+snipL-1);
-    tmpL = snipEnd - snipStart + 1; 
+    snipEnd   = min(L, snipStart+snipL-1);
+    tmpL      = snipEnd - snipStart + 1; 
     tmpEEG(:,1:tmpL,ii) = newEEG(:,snipStart:snipEnd); 
-    
+    if tmpL < snipL
+        % same edge-padding as Pass 1 for the final short epoch
+        tmpEEG(:, tmpL+1:snipL, ii) = repmat(newEEG(:,snipEnd), 1, snipL - tmpL); 
+    end
 end
 
 % 
@@ -236,6 +296,10 @@ if length(noiseChans) > size(tmpEEG,1)/4 %if over a quarter of channels are abou
    
     % then go back and do channel removal
     noiseChans = find(sum(maxDeflection>100,2) ./ size(maxDeflection,2)>.50);
+    idx = ismember(noiseChans, skipChans);   % protect EOG from amplitude rejection here too
+    if ~isempty(idx)
+        noiseChans(idx) = []; 
+    end
     if ~isempty(noiseChans) 
         badRecord(noiseChans,:) = 1; 
         maxDeflection(noiseChans,:) = 0; 
@@ -273,7 +337,7 @@ badTrials(end) = false;
 badTS = zeros(L,1); 
 for ii = 1:length(starts)
     if badTrials(ii)
-        badTS(starts(ii):starts(ii)+snipL-1) = 1; 
+        badTS(starts(ii):min(L, starts(ii)+snipL-1)) = 1; 
     end
 end
 
@@ -281,7 +345,7 @@ badChans = badChans(:);
 outBad = outBad(:); 
 badChans = [badChans; outBad];
 
-
+badChans = unique(badChans); 
 
 
 

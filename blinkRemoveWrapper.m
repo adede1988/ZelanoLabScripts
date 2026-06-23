@@ -28,18 +28,18 @@ function [out, badChan, blinkIndicator] = blinkRemoveWrapper(outDat, ...
     dataTrim   = data(:, 1:nEpochs*epochSamples);
     dataEpochs = reshape(dataTrim, C, epochSamples, nEpochs);  % [ch x samples x epochs]
     
-    highRangeThresh = 700;   % µV: max - min ≥ 700 counts as a "bad" epoch
-    epochFracThresh = 0.15;  % 25% of epochs
+    highRangeThresh = 700;   % µV: max - min >= 700 counts as a "bad" epoch
+    epochFracThresh = 0.15;  % 15% of epochs
     
     % Range per channel per epoch
     epochMax   = squeeze(max(dataEpochs, [], 2));   % [nCh x nEpochs]
     epochMin   = squeeze(min(dataEpochs, [], 2));   % [nCh x nEpochs]
     epochRange = epochMax - epochMin;               % [nCh x nEpochs]
     
-    % Epoch is "bad" if range ≥ 200 µV
+    % Epoch is "bad" if range >= 700 µV
     epochBad = epochRange >= highRangeThresh;       % logical [nCh x nEpochs]
     
-    % Channel is bad if ≥ 25% of its epochs are bad
+    % Channel is bad if >= 15% of its epochs are bad
     badHighDev = (sum(epochBad, 2) ./ nEpochs) >= epochFracThresh;   % [nCh x 1]
     
     
@@ -48,7 +48,7 @@ function [out, badChan, blinkIndicator] = blinkRemoveWrapper(outDat, ...
     flatAmpThresh      = 1;                % µV: between -1 and +1
     flatLenSec         = 0.100;            % 100 ms
     flatLenSamples     = round(flatLenSec * fs);
-    flatTotalSecThresh = 30;                % 5 seconds total
+    flatTotalSecThresh = 30;               % 30 seconds total
     flatTotalSamples   = round(flatTotalSecThresh * fs);
     
     badFlat = false(C,1);
@@ -72,7 +72,7 @@ function [out, badChan, blinkIndicator] = blinkRemoveWrapper(outDat, ...
         longSegIdx = segLen >= flatLenSamples;
         totalFlatSamples = sum(segLen(longSegIdx));
     
-        % Mark channel as bad if total flat time ≥ 5 s
+        % Mark channel as bad if total flat time >= 30 s
         badFlat(ch) = totalFlatSamples >= flatTotalSamples;
     end
     
@@ -135,40 +135,64 @@ function [out, badChan, blinkIndicator] = blinkRemoveWrapper(outDat, ...
 
     test = eyeBlinkDat>2;
     blinkIndicator = reshape(test, 1, T, N); 
-       
-  
-       
-    startIdx = [1:500:length(test)-100000]; 
-    blinkCounts = arrayfun(@(x) sum(test(x:x+100000)), startIdx);
-    interpCounts= arrayfun(@(x) mean(interpChan(x:x+100000)), startIdx); 
-    idx = find(blinkCounts>prctile(blinkCounts, 75) & ...
-        blinkCounts<prctile(blinkCounts, 90));
-    interpIDX = interpCounts(idx); 
 
-    idx = idx(min(interpIDX) == interpIDX);
-    if length(idx)>1
-        targ = round(length(idx)/2); 
-        startIdx = startIdx(idx(targ));
+
+    %% ---------- Select an ICA training window ----------
+    % Prefer a window with a moderate blink rate (enough blinks to define the
+    % component, but not so many the data are dominated by artifact) and the
+    % fewest interpolated samples. Falls back gracefully for short recordings
+    % or when no window lands in the target blink-density band.
+    winLen = 100000; 
+    if length(test) <= winLen + 1
+        % recording too short for windowed selection: train on all of it
+        selStart = 1; 
+        selEnd   = size(trainDat, 2); 
     else
-        startIdx = idx; 
+        cand         = 1:500:(length(test) - winLen); 
+        blinkCounts  = arrayfun(@(x) sum(test(x:x+winLen)), cand); 
+        interpCounts = arrayfun(@(x) mean(interpChan(x:x+winLen)), cand); 
+        sel = find(blinkCounts > prctile(blinkCounts, 75) & ...
+                   blinkCounts < prctile(blinkCounts, 90)); 
+        if isempty(sel)
+            % nothing in the target band: fall back to the busiest window
+            [~, sel] = max(blinkCounts); 
+        end
+        interpSel = interpCounts(sel); 
+        sel = sel(min(interpSel) == interpSel);   % among those, fewest interpolated
+        if numel(sel) > 1
+            sel = sel(round(numel(sel)/2));        % middle of the ties
+        end
+        selStart = cand(sel);                      % FIX: sample index, not list position
+        selEnd   = selStart + winLen; 
     end
 
+    %% ---------- Learn the blink topography on the >2 Hz band ----------
+    % ICA is trained on a 2 Hz high-passed copy so slow drift does not smear
+    % or split the blink component. The resulting spatial filter is applied
+    % to the broadband data below (blink topography is frequency-stable, so a
+    % filter learned >2 Hz is valid across the full band). Fs is deliberately
+    % NOT passed to ica_blinks, so it applies no additional high-pass/notch.
+    [bHP, aHP] = butter(4, 2/(fs/2), 'high'); 
+    trainDatHP = filtfilt(bHP, aHP, trainDat.').'; 
+    trainDatHP = trainDatHP(:, selStart:selEnd); 
 
+    out = ica_blinks(trainDatHP, 'blinkChan', blinkChan); 
 
-    trainDat = trainDat(:,startIdx:startIdx+100000);
-
-
-    out = ica_blinks(trainDat, 'blinkChan', ...
-        blinkChan);
     if ~isempty(out.badICs)
         ax = figure; 
         miniTopo(out.A(:,out.badICs(1)), outDat.eegLocs.X_flat(chanIDX), outDat.eegLocs.Y_flat(chanIDX)); 
       
         saveas(ax,fullfile(outDat.figs, 'removedBlink.jpg'));
     end
-    Sclean = out.W * data; 
-    Sclean(out.badICs,:) = 0; % removal of blink IC entirely 
-    data_clean = out.A * Sclean;                     % back to channel space
+
+    %% ---------- Apply the spatial filter to the BROADBAND data ----------
+    % Mean-centre first so that zeroing the blink IC does not subtract a
+    % blink-shaped fraction of the channel means; add the means back after.
+    dataMean = mean(data, 2); 
+    Sclean   = out.W * (data - dataMean); 
+    Sclean(out.badICs,:) = 0;                 % removal of blink IC entirely
+    data_clean = out.A * Sclean + dataMean;   % back to channel space, means restored
+
     newEphys = outDat.data(1:32,:); 
     newEphys(chanIDX,:) = data_clean; 
     if ~origIs2D

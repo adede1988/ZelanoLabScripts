@@ -37,6 +37,8 @@ function outDat = preprocess_eeg(outDat, standardEEGlocs, P)
     % 3) Build good-channel index for blink removal
     chanIDX = setdiff(1:32, badChans);% includes 1 & 32 even if detected bad
 
+
+    if length(chanIDX) > 10
     % 4) Blink removal on good channels 
    
     [out, badChan2, blinkIndicator] = blinkRemoveWrapper(outDat,...
@@ -46,20 +48,28 @@ function outDat = preprocess_eeg(outDat, standardEEGlocs, P)
     tmp = chanIDX(badChan2); 
     badChans = [badChans(:); tmp(:)]; 
   
-    
+    % Interpolate bad channels into a TEMPORARY copy used ONLY for the surface
+    % Laplacian. The Laplacian is a spatial high-pass and is corrupted by bad
+    % channels, so they must be interpolated before it is computed. The
+    % broadband data written back to outDat.data below keeps the bad channels
+    % at their real (blink-cleaned) values, leaving their disposition to the
+    % end user. Epoch-wise interpolation and blink removal have already
+    % removed the worst transient artifact from those real values.
     if ~isempty(badChans)
-        ephysDat = interpolate_perrinX(out,X,Y,Z,badChans);
+        lapInput = interpolate_perrinX(out, X, Y, Z, badChans);
     else
-        ephysDat = out;
+        lapInput = out;
     end
-    ephysDat = ephysDat - mean(ephysDat,1); 
-
-    dataLap = laplacian_perrinX(ephysDat, X, Y, Z); 
+    dataLap = laplacian_perrinX(lapInput, X, Y, Z); 
 
    
     outDat.badChans = outDat.labels(badChans); 
     outDat.dataLap = dataLap; 
-    outDat.data(1:32,:) = ephysDat; 
+    % dataLap was computed on a copy with badChans interpolated, so it carries
+    % no independent information at those sites; mask outDat.badChans for any
+    % per-channel Laplacian analysis.
+    outDat.dataLapFromInterp = 1; 
+    outDat.data(1:32,:) = out; 
     outDat.data(end+1, :,:) = blinkIndicator; 
     outDat.labels{end+1} = "blinkIndicator";
     outDat.data(end+1, :,:) = badTS; 
@@ -69,6 +79,27 @@ function outDat = preprocess_eeg(outDat, standardEEGlocs, P)
     outDat.EEGInterpolation = 1;
     outDat.EEGCleaning = 1;
     outDat.blinkRemoval = 1; 
+
+    else
+
+    outDat.badChans = outDat.labels(badChans); 
+    outDat.dataLap = []; 
+    outDat.dataLapFromInterp = 0; 
+    % outDat.data(1:32,:) = ephysDat; 
+    % outDat.data(end+1, :,:) = blinkIndicator; 
+    % outDat.labels{end+1} = "blinkIndicator";
+    outDat.data(end+1, :,:) = badTS; 
+    outDat.labels{end+1} = "badTS";
+    outDat.data(end+1, :,:) = interpChan; 
+    outDat.labels{end+1} = "interpChan";
+    outDat.EEGInterpolation = 1;
+    outDat.EEGCleaning = 1;
+    outDat.blinkRemoval = 0; 
+
+
+
+
+    end
 
 
 

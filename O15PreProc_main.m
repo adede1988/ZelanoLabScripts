@@ -1,8 +1,10 @@
 
 clear
-codePre = 'C:\Users\Adam\Documents\GitHub\';
+codePre = 'C:\Users\Adam\Documents\GitHub\';%HOME COMPUTER PATH
+codePre = 'G:\My Drive\GitHub\'; 
 
-addpath(genpath('C:\Users\Adam\Documents\eeglab2026.0.0'))
+% addpath(genpath('C:\Users\Adam\Documents\eeglab2026.0.0'))
+addpath(genpath("C:\Users\dtf8829\Documents\eeglab2025.0.0"))
 addpath(genpath([codePre 'ZelanoLabScripts']))
 
 figPath = 'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\';
@@ -20,7 +22,7 @@ for s = 1:numel(sessionIDs)
   S.id   = sessionIDs{s};
   S.root = cfg.root{s};
    matPath = fullfile(S.root, S.id);
-  if ~exist(fullfile(matPath,  'preProc', ...
+  if ~exist(fullfile(matPath,  'preProc_REDO', ...
                 [S.id '_O15preproc.mat']), 'file')    
   S.figPath = figPath; 
   if ~isfolder(fullfile(S.figPath, S.id))
@@ -28,9 +30,15 @@ for s = 1:numel(sessionIDs)
   end
   % <<< all subject-specifics here
   P             = applyParams('O15', S.id);
+
+
   disp(['........................Loaded ', sessionIDs{s}])
   % trialStarts, buttonPresses, sniffMarks
   [outDat, raw, TTL] = assemble_outDat_all(S, P);   % loads raw, detects TTLs, assembles
+
+  if strcmp(P.paramSource, 'guess')
+        [outDat, P] = paramCheck(outDat, P);
+  end
 
   outDat.TTL = TTL;
 
@@ -53,7 +61,12 @@ for s = 1:numel(sessionIDs)
 
   sniffs = detect_sniffs_from_TTLs(R, P, outDat);  % returns table or matrix
 
-  
+    if strcmp(P.paramSource, 'guess')
+        error('check that onsets have been well-detected')
+        
+    end
+    P.paramSource = 'curated'; 
+    writeParams(P, S.id);
 
 
   outDat.behDat = build_behavior_table_O15(sniffs, raw.beh);
@@ -71,5 +84,8 @@ for s = 1:numel(sessionIDs)
   else
        disp(['finished file detected for: ', sessionIDs{s}])
   end
+
+  writePreProcX(P, S.id)
+
 end
 

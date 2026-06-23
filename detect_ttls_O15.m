@@ -51,7 +51,7 @@ function [outTTLs, raw] = detect_ttls_O15(raw, P)
     for di = 5:length(downs)
         if downs(di) - downs(di-4) < 3500
             starti = di; 
-            break
+            % break
         end
     end
     downs(1:starti) = []; 

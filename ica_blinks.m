@@ -154,7 +154,7 @@ if isempty(S.knownIC)
             if ic==1
                 title('Choose blink-like IC (then close figure)'); 
             end
-            if ic==K
+            if ic==plotK
                 xlabel('Samples'); 
             end
             grid(ax,'on');
