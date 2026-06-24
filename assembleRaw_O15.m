@@ -1,7 +1,9 @@
-function raw = assembleRaw_O15(S)
-%ASSEMBLERAW_O15  TASK-SPECIFIC raw load for O15 (raw_O15.mat + behavior CSV).
-%   Does NOT run detect_ttls_O15 -- the dispatcher does that after the shared
-%   common raw fields (type/paths) are set, because detection needs raw.paths.fig.
+function [raw, TTL] = assembleRaw_O15(S, P)
+%ASSEMBLERAW_O15  TASK-SPECIFIC raw load for O15.
+%   Loads raw_O15.mat + the behavior CSV, then parses the photodiode into the
+%   TTL table via detect_ttls_O15 (which saves TTLs.jpg into the figure dir).
+%   Returns the raw struct and the O15 TTL table. The O15-only outDat fields are
+%   added afterwards by assembleOutDat_O15extras.
 
     matPath = fullfile(S.root, S.id, 'raw', 'raw_O15', 'raw_O15.mat');
     if ~exist(matPath, 'file')
@@ -28,5 +30,9 @@ function raw = assembleRaw_O15(S)
     raw.beh    = readtable(behPath);
     raw.paths.mat = matPath;
     raw.paths.beh = behPath;
+    raw.paths.fig = resolveFigDir(S);   % detect_ttls_O15 saves TTLs.jpg here
     if isstring(raw.labels), raw.labels = cellstr(raw.labels); end
+
+    % O15-specific: photodiode -> TTL table
+    [TTL, raw] = detect_ttls_O15(raw, P);
 end

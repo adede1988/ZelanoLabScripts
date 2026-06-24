@@ -184,10 +184,12 @@ existing task as a template (cue is the simplest end-to-end).
 3. **Assembly** — write `assembleRaw_<task>.m` that loads your raw into a `raw`
    struct (`.sessID .fs_raw .data .labels .beh`, plus `.TTL` if you have one); if it
    loads a `<task>PreProc.mat` intermediate, call the shared `loadIntermediateRaw`
-   for the load. Then add a one-line `case '<task>'` to the `assemble_outDat_all`
-   dispatcher. The shared `assembleOutDat` (common `outDat`) needs no changes — every
-   assemble function is now either completely task-specific (`assembleRaw_*`) or
-   completely shared (`assembleOutDat`, `loadIntermediateRaw`).
+   for the load. Your `_main.m` calls it directly — every main does
+   `raw = assembleRaw_<task>(S); outDat = assembleOutDat(raw, S, P);` so the
+   task-specific loader is visible right in the main. The shared `assembleOutDat`
+   needs no changes — every assemble function is now either completely task-specific
+   (`assembleRaw_*`) or completely shared (`assembleOutDat`, `resolveFigDir`,
+   `loadIntermediateRaw`).
 4. **Behavior table** — write `build_behavior_table_<task>.m`. If your task is
    sniff-based, start from `behDatFromSniffs(sniffs, sniffTypes)` for the shared
    first six columns and add only your task's broadcast loop.

@@ -17,10 +17,11 @@ set(0, 'defaultfigurewindowstyle', 'normal')
 %  TASK-SHARED sections are identical across all four pipelines; do NOT edit
 %  them when adding a new task. TASK-SPECIFIC sections must be rewritten.
 %  TASK-SPECIFIC pieces for cueTask (rewrite these for a new task):
+%    - assembleRaw_cueTask.m  (raw load -> raw struct)
 %    - cueTask_makeOutDat.m   (photodiode/behavior ingestion -> _cueTaskPreProc.mat)
 %    - outMat_to_table.m      (cue behavioral .mat -> table; used by makeOutDat)
 %    - build_behavior_table_cueTask.m
-%  Everything else is SHARED: applyParams, assemble_outDat_all, downsample_data,
+%  Everything else is SHARED: applyParams, assembleOutDat, downsample_data,
 %  preprocess_eeg, preprocess_macros, preprocess_respiration_wholetrace,
 %  detect_sniffs_from_TTLs, refine_onsets_with_phase, paramCheck, writeParams,
 %  writePreProcX, plot_sniff_epochs.
@@ -60,8 +61,9 @@ for s = 1:numel(sessionIDs)
     outDat.rspFlip = P.rspFlip; 
 
 
-    % --- Assemble, preprocess shared pieces ---
-    [outDat, raw, TTL] = assemble_outDat_all(S, P);
+    % --- Assemble: TASK-SPECIFIC loader + shared assembler ---
+    raw    = assembleRaw_cueTask(S);    % <-- TASK-SPECIFIC: edit/replace for a new task
+    outDat = assembleOutDat(raw, S, P);  % shared
      disp(['........................Loaded ', sessionIDs{s}])
   % trialStarts, buttonPresses, sniffMarks    
     outDat = downsample_data(outDat, P.fs_target);

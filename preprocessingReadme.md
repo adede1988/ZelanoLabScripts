@@ -30,7 +30,7 @@ RAW (Neuralynx .mat + behavioral file)
 <root>/<id>/preProc/<id>_<task>PreProc.mat        ("intermediate")
    │   <task>PreProc_main.m
    │     • applyParams -> P            (per-session params from the sheet)
-   │     • assemble_outDat_all(S,P)    (dispatch: assembleRaw_<task> -> shared assembleOutDat)
+   │     • assembleRaw_<task>(S) + assembleOutDat(raw,S,P)  (each main calls its own loader)
    │     • shared pipeline + task-specific behavior/onset detection
    ▼
 <root>/<id>/preProc/<id>_<task>preproc.mat        ("final")
@@ -184,15 +184,15 @@ isolate one session and clear big vars each iteration).
 
 | Kind | Files |
 |---|---|
-| **Config / loaders (shared)** | `labPaths.m`, `applyParams.m`, `writeParams.m`, `writePreProcX.m`, `assemble_outDat_all.m` (the task dispatcher) |
-| **Shared pipeline (do not edit per task)** | `assembleOutDat.m`, `loadIntermediateRaw.m`, `downsample_data.m`, `preprocess_eeg.m`, `preprocess_macros.m`, `preprocess_respiration_wholetrace.m`, `detect_sniffs_from_TTLs.m`, `refine_onsets_with_phase.m`, `plot_sniff_epochs.m`, `paramCheck.m`, `behDatFromSniffs.m`, `parSave.m` |
+| **Config / loaders (shared)** | `labPaths.m`, `applyParams.m`, `writeParams.m`, `writePreProcX.m`, `assemble_outDat_all.m` (backward-compat one-call wrapper for the `_dev` harnesses — the mains don't use it) |
+| **Shared pipeline (do not edit per task)** | `assembleOutDat.m`, `resolveFigDir.m`, `loadIntermediateRaw.m`, `downsample_data.m`, `preprocess_eeg.m`, `preprocess_macros.m`, `preprocess_respiration_wholetrace.m`, `detect_sniffs_from_TTLs.m`, `refine_onsets_with_phase.m`, `plot_sniff_epochs.m`, `paramCheck.m`, `behDatFromSniffs.m`, `parSave.m` |
 | **Task-specific (rewrite for a new task)** | `assembleRaw_<task>.m`, `<task>_makeOutDat.m`, `build_behavior_table_<task>.m`; O15: `assembleRaw_O15.m`, `detect_ttls_O15.m`, `assembleOutDat_O15extras.m`; breathing: `process_respiration_breathing.m`, `alignTargetBreathingTraceSimplify.m`, `processECG.m`/`buildECGz.m`/`paramCheckECG.m`, `flagBadBreaths.m`, `plotBreathLengths.m` |
 | **Deliverable scripts** | `breathingTaskPreProc_main.m`, `cueTaskPreProc_main.m`, `threshPreProc_main.m`, `O15PreProc_main.m` and the three `_makeOutDat` scripts |
 
 Adding a participant is a sheet edit (a row + its parameter columns), no code
 changes. Adding a whole new task means a new `<task>_makeOutDat.m`, an
 `assembleRaw_<task>.m` (load its raw into a `raw` struct — reuse
-`loadIntermediateRaw` if it loads a `<task>PreProc.mat`) plus a one-line case in
-the `assemble_outDat_all` dispatcher, a `build_behavior_table_<task>.m`, and a
-`_main.m` modeled on an existing one — see the tutorial. The shared assembler
-(`assembleOutDat`) and downstream pipeline are untouched.
+`loadIntermediateRaw` if it loads a `<task>PreProc.mat`) that the new `_main.m`
+calls directly, a `build_behavior_table_<task>.m`, and a `_main.m` modeled on an
+existing one — see the tutorial. The shared assembler (`assembleOutDat`) and
+downstream pipeline are untouched.

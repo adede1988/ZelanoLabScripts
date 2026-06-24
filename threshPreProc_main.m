@@ -17,10 +17,11 @@ set(0, 'defaultfigurewindowstyle', 'normal')
 %  TASK-SHARED sections are identical across all four pipelines; do NOT edit
 %  them when adding a new task. TASK-SPECIFIC sections must be rewritten.
 %  TASK-SPECIFIC pieces for threshTask (rewrite these for a new task):
+%    - assembleRaw_threshTask.m    (raw load -> raw struct)
 %    - threshPreProc_makeOutDat.m  (PEA photodiode/behavior ingestion)
 %    - the per-trial sniff-TTL table rebuild in the loop below
 %    - build_behavior_table_threshTask.m
-%  Everything else is SHARED: applyParams, assemble_outDat_all, downsample_data,
+%  Everything else is SHARED: applyParams, assembleOutDat, downsample_data,
 %  preprocess_eeg, preprocess_macros, preprocess_respiration_wholetrace,
 %  detect_sniffs_from_TTLs, refine_onsets_with_phase, paramCheck, writeParams,
 %  writePreProcX, plot_sniff_epochs.
@@ -54,8 +55,9 @@ for s = 29:numel(sessionIDs)
     P = applyParams('threshTask', S.id);
     isGuess = strcmp(P.paramSource, 'guess');
 
-    % --- Assemble, preprocess shared pieces ---
-    [outDat, raw, TTL] = assemble_outDat_all(S, P); %this works for thresh task too!
+    % --- Assemble: TASK-SPECIFIC loader + shared assembler ---
+    raw    = assembleRaw_threshTask(S);   % <-- TASK-SPECIFIC: edit/replace for a new task
+    outDat = assembleOutDat(raw, S, P);    % shared
 
     % Guessed params: verify rsp channel + macro/spike choices interactively
     if isGuess, [outDat, P] = paramCheck(outDat, P); end

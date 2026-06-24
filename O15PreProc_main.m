@@ -16,8 +16,9 @@ EEGLOC  = readtable(L.eegLocCsv);   % load once, reuse
 %  (breathing / cue / thresh / O15); do NOT edit them when adding a new task.
 %  Sections marked TASK-SPECIFIC must be rewritten per task.
 %  TASK-SPECIFIC pieces for O15 (rewrite these for a new task):
-%    - assemble_outDat_all.m  (O15 branch: raw_O15 load + detect_ttls_O15)
+%    - assembleRaw_O15.m      (raw_O15 load + detect_ttls_O15 -> raw, TTL)
 %    - detect_ttls_O15.m      (photodiode -> TTL table)
+%    - assembleOutDat_O15extras.m  (O15-only outDat fields: CSClist, loadFile, ...)
 %    - build_behavior_table_O15.m
 %  Everything else is SHARED: applyParams, downsample_data, preprocess_eeg,
 %  preprocess_macros, preprocess_respiration_wholetrace, detect_sniffs_from_TTLs,
@@ -45,7 +46,10 @@ for s = 1:numel(sessionIDs)
 
 
   % trialStarts, buttonPresses, sniffMarks
-  [outDat, raw, TTL] = assemble_outDat_all(S, P);   % loads raw, detects TTLs, assembles
+  % --- Assemble: TASK-SPECIFIC loader (+ TTL detect) + shared assembler ---
+  [raw, TTL] = assembleRaw_O15(S, P);                    % <-- TASK-SPECIFIC: edit/replace for a new task
+  outDat     = assembleOutDat(raw, S, P);                % shared
+  outDat     = assembleOutDat_O15extras(outDat, S, raw); % <-- TASK-SPECIFIC: O15-only outDat fields
   disp(['........................Loaded ', sessionIDs{s}])
 
   if strcmp(P.paramSource, 'guess')

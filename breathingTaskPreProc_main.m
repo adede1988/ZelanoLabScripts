@@ -21,13 +21,14 @@ set(0, 'defaultfigurewindowstyle', 'normal')
 %  them when adding a new task. TASK-SPECIFIC sections must be rewritten.
 %  Breathing is the richest task: it alone has ECG/HRV and target-trace alignment.
 %  TASK-SPECIFIC pieces for breathingTask (rewrite these for a new task):
+%    - assembleRaw_breathingTask.m           (raw load -> raw struct)
 %    - breathingTask_makeOutDat.m            (per-session photodiode ingestion)
 %    - process_respiration_breathing.m       (per-breath metrics, bmObj)
 %    - alignTargetBreathingTraceSimplify.m   (paced/shadow target-trace alignment)
 %    - build_behavior_table_breathingTask.m
 %    - processECG.m / buildECGz.m / paramCheckECG.m   (ECG beat detection + HRV)
 %    - flagBadBreaths.m, plotBreathLengths.m
-%  Everything else is SHARED: applyParams, assemble_outDat_all, downsample_data,
+%  Everything else is SHARED: applyParams, assembleOutDat, downsample_data,
 %  preprocess_eeg, preprocess_macros, preprocess_respiration_wholetrace,
 %  paramCheck, writeParams, writePreProcX, plot_sniff_epochs.
 % =====================================================================
@@ -64,8 +65,9 @@ for s = 1:numel(sessionIDs)
     isGuess = strcmp(P.paramSource, 'guess');
 
     disp(['........................Loaded ', sessionIDs{s}])
-    % --- Assemble, preprocess shared pieces ---
-    [outDat, raw, TTL] = assemble_outDat_all(S, P);
+    % --- Assemble: TASK-SPECIFIC loader + shared assembler ---
+    raw    = assembleRaw_breathingTask(S);   % <-- TASK-SPECIFIC: edit/replace for a new task
+    outDat = assembleOutDat(raw, S, P);      % shared
 
     % Guessed params: verify rsp channel + macro/spike choices interactively
     if isGuess, [outDat, P] = paramCheck(outDat, P); end
