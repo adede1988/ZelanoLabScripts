@@ -1,167 +1,422 @@
-# CLAUDE.md — Respiration/EEG preprocessing refactor
+# CLAUDE.md — Respiration / EEG / iEEG preprocessing pipeline & preprocessed‑data reference
 
 ## What this project is
 
-MATLAB preprocessing pipelines for intracranial/EEG + respiration data across **four
-tasks**: `breathingTask`, `cueTask`, `threshTask`, `O15`. Sessions are tracked in
-`dataTracking.xlsx`. Today, session lists and per-session parameters are hard-coded and
-duplicated across many `.m` files; adding a participant means editing parallel arrays by
-hand in up to seven scripts plus a large per-session `switch`. The refactor makes
-`dataTracking.xlsx` the single source of truth and routes everything through a small set
-of loader functions.
+MATLAB preprocessing pipelines for intracranial‑EEG / scalp‑EEG + respiration (+ ECG)
+data across **four tasks**: `breathingTask`, `cueTask`, `threshTask`, `O15`. Every
+session is tracked in **`dataTracking.xlsx`**, which is the single source of truth for
+session lists and per‑session parameters — no lists or params are hard‑coded in scripts.
 
-## Data flow (current)
+This document is written for the **next stage of work**: editing the pipeline, adding a
+new task to it, or — most importantly — **analysing the preprocessed `.mat` files**. The
+pipeline itself (the big refactor + the "simplify / standardize" pass) is **complete and
+validated**; the sections below describe what it produces and how to consume it.
 
-```
-RAW (Neuralynx .mat + behavioral CSV)
-   │   *_makeOutDat.m         (breathing/cue/thresh only; heavy per-session ingestion)
-   ▼
-<root>/<id>/preProc/<id>_<task>PreProc.mat   (the "outDat")
-   │   *_main.m  → getSessionParams_<task>(S)  → loads that .mat back in as `raw`, sets P
-   │            → (O15 only) detect_ttls_O15(raw,P)
-   │            → assemble_outDat_<task>(raw,S,P)  → fresh outDat
-   ▼   ...shared pipeline (downsample_data → preprocess_eeg → preprocess_macros → ...)
-final <id>_<task>preproc.mat
-```
+> If you only want to *run* preprocessing, read `preprocessingReadme.md` (reference) and
+> `tutorialPreprocessing.md` (step‑by‑step). This file is the architecture + **data‑structure**
+> reference. `REFACTOR_NOTES.md`, `taskList.md`, `SimplifyStandardize*.md` are the historical
+> change logs for how the current code came to be.
 
-O15 has **no** `_makeOutDat`: ingestion lives inside `O15PreProc_main.m` via
-`detect_ttls_O15` and `getSessionParams_O15` loads genuinely raw `raw_O15.mat`.
+---
 
-## Refactor target (what to build)
+## 1. The four tasks
 
-1. **`applyParams.m`** — single source of truth. Reads `dataTracking.xlsx`. Two modes:
-   session list (for the loops) and P-struct (per session). Replaces the hard-coded
-   arrays and the entire `getSessionParams_*` parameter `switch`.
-2. **`detectBeats.m`** — one generic ECG beat detector parameterised by a spec string;
-   replaces the 25 bespoke `getBeats_*` local functions in
-   `getSessionParams_breathingTask.m`.
-3. **`assemble_outDat_all.m`** — `[outDat, raw, TTL] = assemble_outDat_all(S, P)`.
-   Combines the raw-loading half of `getSessionParams_*` (+ `detect_ttls_O15` for O15)
-   with the four `assemble_outDat_*` assemblers, branching on `P.task`. Future direction:
-   this becomes the only loader (P comes in from `applyParams`, raw is loaded here).
-4. **Rewrite the 7 scripts** to call `applyParams` at the top and
-   `assemble_outDat_all` in place of `getSessionParams_* + detect_ttls + assemble_*`:
-   `breathingTask_makeOutDat.m`, `cueTask_makeOutDat.m`, `threshPreProc_makeOutDat.m`,
-   `breathingTaskPreProc_main.m`, `cueTaskPreProc_main.m`, `O15PreProc_main.m`,
-   `threshPreProc_main.m`.
-5. **`dataTracking.xlsx`** — already regenerated with the parameter columns (see schema
-   below). It is the input the new functions read.
+The same family of scripts preprocesses four experiment types. They differ only in raw
+layout, photodiode/TTL structure, and behavioral file; the downstream signal processing is
+shared.
 
-## Key files
-
-| File | Role | Touch? |
-|---|---|---|
-| `dataTracking.xlsx` | session tracker + (new) parameter columns; the source of truth | regenerated; keep updating at the Excel level |
-| `applyParams.m` | NEW loader: session lists + P struct | **create** |
-| `detectBeats.m` | NEW generic ECG detector | **create** |
-| `assemble_outDat_all.m` | NEW combined raw-load + assemble | **create** |
-| `*_makeOutDat.m` (×3) | raw ingestion → `_PreProc.mat` | **edit head only** |
-| `*_main.m` (×4) | shared pipeline | **edit head + loader calls only** |
-| `getSessionParams_*.m` (×4) | OLD param/raw loaders | keep as **test oracle**; eventually delete |
-| `assemble_outDat_*.m` (×3/4) | OLD assemblers | keep as oracle; eventually delete |
-| `detect_ttls_O15.m` | O15 photodiode/TTL parser | unchanged; called inside `assemble_outDat_all` |
-| `downsample_data / preprocess_eeg / preprocess_macros / process_respiration_breathing / alignTargetBreathingTraceSimplify / build_behavior_table_* / processECG / flagBadBreaths / preprocess_respiration_wholetrace / refine_onsets_with_phase / detect_sniffs_from_TTLs / plot_*` | shared pipeline helpers | unchanged |
-
-## Hard constraints / conventions (do not violate)
-
-- **`datPrei` index order is load-bearing.** `*_makeOutDat.m` and `threshPreProc_main.m`
-  branch on `datPrei(...)==1/2/3` to set `outDat.type`. The order **must** stay:
-  `1 = Dupi`, `2 = OBEControl`, `3 = EEGbreathing`. `applyParams` returns `datPre`
-  with those three first (always present), extras appended after.
-- **Roots:**
-  - Dupi → `R:\Neurology\Zelano_Lab\Lab_Common\Dupi\`
-  - OBEControl → `R:\Neurology\Zelano_Lab\Lab_Common\OBEControl\`
-  - EEGbreathing → `R:\Neurology\Zelano_Lab\Lab_Common\AllStudyData\EEGbreathing\`
-  - Per-session root now lives in the `datPre` column of the sheet (fall back to the
-    Type→root map only if blank). This lets new roots be added at the Excel level.
-- **"Unchanged after assemble."** In each `_main.m`, everything from the first
-  `outDat = downsample_data(...)` onward is byte-for-byte unchanged. In O15 that means the
-  line `outDat.TTL = TTL;` (immediately after the old assemble) stays — so
-  `assemble_outDat_all` must **return** `TTL`.
-- **`raw` is used after assemble** in cue/thresh/O15 (`build_behavior_table_*(sniffs,
-  raw.beh)`), so `assemble_outDat_all` must **return** `raw`.
-- **`_makeOutDat.m` bodies are unchanged below the array block.** The bespoke per-session
-  ingestion (`if/elseif/switch` on `sessionIDs{sessi}`, the `newList`/`newSet` "standard"
-  branch, `datPrei==1/2` type-setting, the save) all stay. `applyParams` only replaces the
-  top arrays with drop-in variables of the **same names** (`sessionIDs`, `datPre`,
-  `datPrei`, `newList`/`newSet`, `rspIDX`, `rspFlip`).
-- **Matching is case-insensitive and whitespace-trimmed.** Sheet IDs are canonical at
-  runtime (e.g. `…_KS_2` vs the old switch's `…KS_2` in caps are the same session).
-- **Windows / case-insensitive FS.** Files use CRLF. Some legacy filename quirks exist
-  (`_breathingPreproc.mat` loaded vs `_breathingPreProc.mat` written; `redoAGAIN` prefix;
-  the `250904_OBE_NWU_TI` vs sheet `250904_OBE_NWU_TI_1` mismatch). These are **known and
-  intentionally left as-is** for now — do not "fix" them as part of this work.
-
-## New spreadsheet schema
-
-Parameter columns appended to `Sheet1` (header row = row 2; data from row 3). Populated
-only for rows whose `Task` maps to one of the four pipelines **and** that have raw data
-extracted; `datPre` is filled for every row with a known study.
-
-| Column | Type | Tasks | Notes |
+| Task | sheet `Task` value(s) | `outDat.task` | What's unique |
 |---|---|---|---|
-| `datPre` | text path | all | per-session root |
-| `rspIDX` | int | all | respiration channel |
-| `rspFlip` | ±1 | all | |
-| `hasEEG` | true/false | all | default true (O15 false) |
-| `spikeClean` | true/false | all | default true (O15 false) |
-| `spikeThresh` | int | all | default 20 |
-| `spikeWin` | int | all | default 11 |
-| `macroRemove` | "a,b,c" | all | "" = none → `[]` |
-| `hasMacros` | true/false | breathing | |
-| `respThresh` | num | cue/thresh/O15 | default 500 |
-| `cuedBackBuff` | num | cue/thresh/O15 | default 150 |
-| `adjWin` | num | cue/thresh/O15 | default 500 |
-| `beatSpec` | text | breathing | detectBeats spec; default `1,0,gt,3` |
-| `ttlRemoveIdx` | "a,b" | O15 | aberrant TTL indices to drop |
-| `ttlNote` | text | O15 | |
-| `isNewStd` | true/false | breathing/cue/thresh | drives `newList`/`newSet` membership |
-| `paramSource` | `curated`/`guess` | target rows | `guess` = carried forward, review before trusting |
+| `breathingTask` | `breathingTasks`, `waveBreathing` | `breathingTask` (legacy files: `breathing`) | paced‑breathing blocks; **ECG/HRV**, **per‑breath metrics (`bmObj`)**, **paced target‑trace alignment**, **emotion ratings**. The richest task. |
+| `cueTask` | `odorCueTask` | `cueTask` | odor cue / sniff / response TTLs; hit/miss/cr/fa behavior |
+| `threshTask` | `Threshold` | `threshTask` | PEA intensity/pleasantness threshold; 45 single‑sniff trials |
+| `O15` | `O15` | `O15` | loads genuinely raw data directly; photodiode TTLs parsed by `detect_ttls_O15`; EEG/macros usually absent |
 
-"Guess" rows were filled by carrying forward the most recent **same-study** curated
-session's values (including `beatSpec`). `getSessionParams_*.m` remain the authority for
-how curated values were derived — use them as the test oracle.
+---
 
-## Function contracts (summary; full detail in taskList.md)
+## 2. Data flow & file naming
+
+```
+RAW  (Neuralynx .mat + behavioral .mat/.csv)
+  │   <task>_makeOutDat.m            (breathing / cue / thresh ONLY)
+  │     • parse photodiode → TTLs, load raw behavior, stitch blocks
+  ▼
+<root>\<id>\preProc\<id>_<task>PreProc.mat        ← INTERMEDIATE  ("raw" outDat)
+  │   <task>PreProc_main.m
+  │     • applyParams(task,id) → P                 (per‑session params from the sheet)
+  │     • assemble_outDat_all(S,P) → outDat,raw,TTL (load intermediate/raw → outDat)
+  │     • shared pipeline + task‑specific onset/behavior
+  ▼
+<root>\<id>\preProc\<id>_<task>preproc.mat         ← FINAL  (the file you analyse)
+```
+
+**O15 has no `_makeOutDat`** — `O15PreProc_main.m` loads `raw_O15.mat` directly, and
+`assemble_outDat_all`'s O15 branch runs `detect_ttls_O15` inside it.
+
+### Exact filenames (load name → save name)
+
+| Task | intermediate loaded by `assemble_outDat_all` | final saved by `_main` | top‑level var in `.mat` |
+|---|---|---|---|
+| breathing | `<id>_breathingPreProc.mat` | `<id>_breathingPreproc.mat` | **`chanDat`** (via `parSave`) |
+| cue | `<id>_cueTaskPreProc.mat` | `<id>_cueTaskPreproc.mat` | `outDat` |
+| thresh | `<id>_PEA_threshold_preproc.mat` | `<id>_PEA_threshold_preproc.mat` | `outDat` |
+| O15 | `<id>\raw\raw_O15\raw_O15.mat` (`curDat`) | `<id>_O15preproc.mat` | `outDat` |
+
+> **Windows / case‑insensitive FS quirk (intentional, do not "fix"):** for
+> breathing/cue/thresh the intermediate (`…_PreProc.mat`) and the final (`…_preproc.mat`)
+> are the **same file** — `_main` overwrites the intermediate in place. So a fully
+> processed session has only the final on disk. Older breathing finals may store the
+> variable as `out` or `chanDat`; loaders try `outDat → chanDat → out`.
+
+**To load a final robustly:**
+```matlab
+s = load(finalPath);
+fn = fieldnames(s);                 % {'outDat'} or {'chanDat'} or {'out'}
+outDat = s.(fn{1});
+```
+A file is **fully processed** iff it has `outDat.moreThan1` (and, for breathing,
+`outDat.bmObj` / `outDat.baseEmotion`). `splitToSingleChan_allTasks.m` errors on files
+lacking `moreThan1`.
+
+---
+
+## 3. `dataTracking.xlsx` — the source of truth
+
+Default path `R:\Neurology\Zelano_Lab\Lab_Common\Admin\dataTracking.xlsx`, `Sheet1`,
+**header row = row 2, data from row 3**. Read through one function, **`applyParams.m`**:
 
 ```matlab
-% Mode A — session list for a loop
-cfg = applyParams(task, stage [, xlsxPath])   % stage = 'makeOutDat' | 'main'
-%   cfg.sessionIDs (n×1 cell)  .root (n×1 cell)  .datPre (1×k cell, fixed order)
-%   cfg.datPrei (1×n)  .isNewStd (1×n logical)  .newIDs (cell)  .rspIDX/.rspFlip (1×n)
-%   cfg.paramSource (1×n cell)
-
-% Mode B — parameters for one session
-P = applyParams(task, sessID [, xlsxPath])
-
+cfg = applyParams(task, 'makeOutDat'|'main')   % Mode A: session list for a loop
+P   = applyParams(task, sessID)                % Mode B: one session's parameter struct
 % task ∈ {'breathingTask','cueTask','threshTask','O15'}
-% default xlsxPath = R:\Neurology\Zelano_Lab\Lab_Common\Admin\dataTracking.xlsx
 ```
+A row is used only if its `Task` maps to one of the four pipelines **and** `Raw Data
+Extracted` is non‑blank and not `INCOMPLETE`. Rows are deduped by `Subject ID`
+(case‑insensitive, first wins), in sheet order. Live counts: ~55 breathing / 35 cue /
+29 thresh / 38 O15 sessions.
 
+### Parameter columns (read by `applyParams`, written by `writeParams`)
+
+| Column | Tasks | Meaning / default |
+|---|---|---|
+| `datPre` | all | per‑session data root (blank → Type→root default; rebased from the canonical `R:\…\Lab_Common\` prefix onto this machine's `labCommon`) |
+| `rspIDX` / `rspFlip` | all | which respiration channel (among labels containing `rsp`), and ±1 polarity. Defaults `1` / `1`. |
+| `hasEEG` | all | run `preprocess_eeg` (default true; O15 false) |
+| `spikeClean` | all | targeted‑ICA spike clean of macros (default true; O15 false) |
+| `spikeThresh` / `spikeWin` | all | spike detector params (default `20` / `11`) |
+| `macroRemove` | all | macro channels to drop before bipolar (`""`=none → `[]`) |
+| `hasMacros` | breathing | run `preprocess_macros` (cue/thresh/O15 always run it) |
+| `respThresh` / `cuedBackBuff` / `adjWin` | cue/thresh/O15 | sniff‑detection windows (default `500` / `150` / `500`) |
+| `beatSpec` | breathing | ECG beat‑detection spec for `detectBeats` (default `1,0,gt,3`) |
+| `ttlRemoveIdx` / `ttlNote` | O15 | aberrant photodiode TTL indices to drop / note |
+| `isNewStd` | breathing/cue/thresh | selects the "new standard" ingestion branch (`newList`/`newSet`) |
+| `paramSource` | target rows | `curated` (trusted, runs unattended) or `guess` (carried forward → forces interactive verification before any save) |
+| `Data Preprocessed` | all | set to `X` by `writePreProcX` when a final is saved |
+
+`P` (Mode B) always carries: `task, type ('Dupi'|'OBE'|'EEG'), fs_target=500, debug,
+computeResp, rspIDX, rspFlip, hasEEG, spikeClean, spikeThresh, spikeWin, macroRemove,
+paramSource` + task extras (breathing: `hasMacros, beatSpec, getBeats`; cue/thresh/O15:
+`respThresh, cuedBackBuff, adjWin` + `ttlMap`; O15 also `pd`, `ttl`).
+
+---
+
+## 4. Running on any machine — `labPaths.m`
+
+Every machine‑specific path comes from `labPaths.m`, which auto‑detects the machine by
+`USERNAME` (cases: `adam` = home desktop, `dtf8829` = lab workstation) and derives
+everything else (repo, eeglab, lab‑common roots, Admin sheet, behavioral dirs, figure dir,
+breathing target‑trace dir). **New machine = add one `case`** (or a git‑ignored
+`labPaths_local.m`); unknown machines error with a copy‑paste template. The four lab data
+roots:
+
+- Dupi → `…\Lab_Common\Dupi\`  · OBEControl → `…\Lab_Common\OBEControl\`
+- EEGbreathing → `…\Lab_Common\AllStudyData\EEGbreathing\`  · figures → `…\Lab_Common\Adam\Dupi_processing\<id>\`
+
+---
+
+## 5. What the pipeline computes (stage by stage)
+
+`assemble_outDat_all(S,P)` builds the initial `outDat` (see §6), then `_main` runs:
+
+**Shared (identical across all four tasks — never edit per‑task):**
+
+1. **`downsample_data(outDat, 500)`** — `resample` to **`fs_target = 500 Hz`**, then per
+   channel: 4th‑order IIR **high‑pass 0.03 Hz**, 4th‑order IIR **low‑pass ≈Nyquist**, and
+   **notch 60/120/180 Hz** (Q≈35). Sets `fs=500, origFS, downsampled=1`.
+2. **`preprocess_eeg(outDat, EEGLOC, P)`** *(only if `P.hasEEG`)* — validates the **first
+   32 channels** against `eegLocs_standard_coords.csv`, attaches coords, detects+interpolates
+   noisy channels (`removeNoiseChansVolt`), removes blinks on the good channels (when >10
+   survive, via `blinkRemoveWrapper`), and computes a **surface Laplacian**. Appends QC
+   channels and EEG fields (see §6.3).
+3. **`preprocess_macros(outDat, P)`** *(breathing only if `P.hasMacros`; others always)* —
+   finds `macro` channels, optional `macroRemove`, **bipolar re‑references adjacent pairs →
+   `macBP1..5`**; if `P.spikeClean`, splits the >10 Hz component and removes spike artifacts
+   via targeted ICA; appends `macBP*` + `spikeCleanVec`.
+
+**Respiration / onsets:**
+
+- **cue / thresh / O15:** `preprocess_respiration_wholetrace` → `R` (chosen `rsp` channel,
+  smoothed, Hilbert phase, a deflection metric `testSig`); `detect_sniffs_from_TTLs(R,P,outDat)`
+  finds a sniff onset near each TTL (windows from `respThresh/cuedBackBuff/adjWin`);
+  `refine_onsets_with_phase` snaps onsets to a respiration‑phase zero‑crossing.
+- **breathing:** `process_respiration_breathing` derives the per‑breath **`bmObj`** matrix
+  over the whole recording; `alignTargetBreathingTraceSimplify` aligns each paced block to
+  its target trace and appends a `targTrace` channel; `processECG` band‑passes the `ECG`
+  channels 5–40 Hz and z‑scores them (`buildECGz`), detects beats (`detectBeats` driven by
+  `beatSpec`, min separation `fs/20`), physiologically filters the inter‑beat intervals, and
+  appends an interpolated **`RRint`** (RR‑interval / HRV) channel; `flagBadBreaths` adds
+  per‑breath QC.
+
+**Behavior table:** `build_behavior_table_<task>` joins raw behavior to detected onsets
+(§6.4). **Save** (§2) + `writeParams` + `writePreProcX`.
+
+**`guess` rows** force interactive verification before any save: `paramCheck` (rsp + macro
+choices), `paramCheckECG` (breathing ECG beats), and a deliberate **onset‑gate `error`** so
+the user inspects figures, then promotes the row to `curated` and re‑runs.
+
+---
+
+## 6. THE PREPROCESSED DATA STRUCTURE  (what's in the final `.mat`)
+
+The final variable (`outDat`, or `chanDat` for breathing) is a **struct**. The signal lives
+in `outDat.data` (rows = channels, addressed by `outDat.labels`); everything else is
+metadata/behavior. **Sampling rate is `fs = 500 Hz`** for all final signals.
+
+### 6.1 Common fields (every task)
+
+| Field | Type | Meaning |
+|---|---|---|
+| `data` | `double [nChan × nSamp]` | all channels; row *i* ↔ `labels{i}`. (Raw load is 2‑D ch×time; epoching happens downstream, not here.) |
+| `labels` | `cell` of char/string | channel labels parallel to `data` rows. **Index channels by label string, never by fixed position** (except the EEG block, see 6.3). |
+| `fs` | `500` | sample rate (Hz). Also `origFS`, `downsampled=1`. |
+| `sessID` | char | e.g. `250623_Dupi_NMH_KS_2` (= raw session folder name) |
+| `task` | char | `breathingTask` / `cueTask` / `threshTask` / `O15` (legacy breathing files: `breathing`) |
+| `type` | char | `Dupi` / `OBE` / `EEG` (study/cohort) |
+| `figs` | char | path to this session's figure folder |
+| `rspIDX` | int | which `rsp`‑labelled channel is the respiration trace |
+| `rspFlip` | ±1 | polarity to multiply the respiration trace by (so inhale ↑) |
+| `TTL` | table or vector | task‑specific event markers in **fs=500 samples** (see 6.5) |
+| `moreThan1` | 0/1 | "more than one sniff per trial" flag; **also the done‑sentinel** (1 = breathing/O15, 0 = cue/thresh) |
+
+**O15‑only common extras:** `CSClist` (NCS channel labels), `OGdataDir`, `loadFile`
+(the `*LoadData*.m` in the session dir), `preProcScript`.
+
+### 6.2 Channel taxonomy in `outDat.data` (find rows by label)
+
+| Channel(s) | Label match | Present when | Added by |
+|---|---|---|---|
+| 32‑ch scalp EEG montage | exact 10‑20 names, **rows 1–32** | `hasEEG` | raw load; validated in `preprocess_eeg` |
+| macro (raw depth/strip) | `contains('macro')` | recorded | raw load |
+| respiration | `contains('rsp')` | always | raw load (select with `rspIDX`, flip with `rspFlip`) |
+| ECG (≈3 ch) | `contains('ECG')` | breathing | raw load (→ `buildECGz`) |
+| photodiode / events | `contains('event')` | O15 (others vary) | raw load (drives `detect_ttls_O15`) |
+| `blinkIndicator` | `=="blinkIndicator"` | `hasEEG` **and** >10 good EEG ch | `preprocess_eeg` |
+| `badTS` | `=="badTS"` | `hasEEG` | `preprocess_eeg` (bad‑time‑sample mask) |
+| `interpChan` | `=="interpChan"` | `hasEEG` | `preprocess_eeg` (interpolation mask) |
+| `macBP1`…`macBP5` | `contains('macBP')` | macros run | `preprocess_macros` (bipolar pairs; count = nMacro−1) |
+| `spikeCleanVec` | `=="spikeCleanVec"` | macros run | `preprocess_macros` (spike mixing vector; all‑ones if `spikeClean` off) |
+| `targTrace` | `=="targTrace"` | breathing | `alignTargetBreathingTraceSimplify` (flattened paced target) |
+| `RRint` | `contains('RRint')` | breathing | `processECG` (interpolated RR‑interval / HRV series, seconds) |
+
+The 32 EEG montage order (validated, rows 1–32): `Fp1 Fz F3 F7 FT9 FC5 FC1 C3 T7 TP9 CP5
+CP1 Pz P3 P7 O1 Oz O2 P4 P8 TP10 CP6 CP2 Cz C4 T8 FT10 FC6 FC2 F4 F8 Fp2`.
+
+> The non‑EEG raw channel set (intracranial contacts, etc.) **varies by session/montage** —
+> always locate channels by `cellfun(@(x) contains(x,'…'), outDat.labels)`, exactly as the
+> pipeline and `splitToSingleChan_allTasks.m` do.
+
+### 6.3 EEG‑derived fields (only if `hasEEG`)
+
+| Field | Type | Meaning |
+|---|---|---|
+| `eegLocs` | table `[32×8]` | `labels, X, Y, Z, theta, phi, X_flat, Y_flat` (3‑D + flattened 2‑D coords) |
+| `dataLap` | `[32×nSamp]` or `[]` | surface Laplacian (Perrin spline). `[]` if ≤10 good channels. |
+| `dataLapFromInterp` | 0/1 | Laplacian was computed on a bad‑channel‑interpolated copy → carries no independent info at `badChans`; mask them for per‑channel Laplacian analysis. |
+| `badChans` | cell of labels | channels flagged noisy (the broadband `data(1:32)` keeps their real, blink‑cleaned values) |
+| `EEGInterpolation`, `EEGCleaning` | 1 | flags |
+| `blinkRemoval` | 0/1 | 1 ⇒ blinks removed and `blinkIndicator` appended; 0 ⇒ ≤10 good channels, skipped |
+
+### 6.4 `behDat` — the behavior table (task‑specific)
+
+**`behDat` is a MATLAB `table`** in current finals. Access by **named column**, not numeric
+index (older analysis code that does `behDat(:,13)` predates the table layout — see §8).
+
+**cue / thresh / O15 — per‑sniff table.** Shared first 6 columns from `behDatFromSniffs`:
+
+| Column | Meaning |
+|---|---|
+| `sniffOnset` | coarse sniff onset (sample @500 Hz) |
+| `n` | trial number |
+| `wiTriali` | sniff index within the trial |
+| `TTLoffSet` | offset of the onset from its TTL (samples) |
+| `sniffType` | integer sniff class |
+| `sniffLabel` | readable label (cue/thresh: `cued`; O15: `start`/`free`/`confirm`) |
+
+Then the **task‑specific** columns (raw behavior broadcast onto each sniff row):
+
+- **cue:** `cue` (odor‑cue id 1–10), `odor` (presented‑odor id 1–10), `response` (1/2),
+  `respString` (`"Yes"`/`"No"`/`"SKIP"`), `type` (signal‑detection outcome `hit`/`miss`/`cr`/`fa`)
+- **thresh:** `odor` (1–3), `pleasantness`, `intensity` (rating‑slider values), `type` (`air`/`low`/`med`)
+- **O15:** `target` (string odor name), `response` (string free identification), `expScore` (`0`/`0.5`/`1`)
+
+Finally `refine_onsets_with_phase` appends the **last two** columns: **`adjust`** (signed
+sample offset) and **`finalOnset`** (phase‑refined onset sample — *use this for epoching*).
+
+> Verified against real Dupi files: cue `behDat` = `[40 sniffs × 13]`, thresh `[45 × 12]`,
+> O15 `[81 × 11]`. O15 has `wiTriali` 1–8 and `sniffLabel` ∈ {`start`,`free`,`confirm`};
+> cue/thresh are one sniff per trial (`wiTriali==1`, `sniffLabel=="cued"`, `moreThan1==0`).
+
+**breathing — per‑breath table** (from `build_behavior_table_breathingTask`, derived from
+`bmObj`; one row per detected breath):
+
+| Column | Meaning |
+|---|---|
+| `sniffOnset`, `finalOnset` | inhale‑onset sample (equal for breathing) |
+| `condition` | block/condition id (from `bmObj` col 12, tagged by `TaskBreaks`) |
+| `Yonset`, `inhaleMax`, `Yend`, `exhaleMin` | respiration amplitudes (a.u.) at onset / inhale peak / breath end / exhale trough |
+| `inMaxTim`, `endTim`, `exMinTim` | corresponding sample indices |
+| `length` | breath duration (s) · `amp` amplitude · `index` breath index |
+| `task`, `noseMouth`, `shadowFile`, `warp` | per‑block stimulus metadata (e.g. `task='audio'`, `noseMouth='nose'`) |
+| `<question>_<category>` | dynamic: one column per emotion question × rating category, e.g. `calm_affective`, `tense_affective`, `emoAware_mindfulness`, `tht_come_go_mindfulness`; value = that block's rating (broadcast to every breath in the block) |
+| `goodBreath` | 1/0 quality flag (from `flagBadBreaths`) |
+| `maxRR`, `minRR`, `RR_max_min` | within‑breath HRV (s) |
+
+> Empirically (a 32‑ch‑EEG Dupi breathing session) `behDat` is `[389 breaths × 33 vars]`;
+> `baseEmotion` is a 1‑row table of the same `<question>_<category>` columns (the `order==0`
+> baseline) plus `task`/`noseMouth`/`shadowFile`/`warp`. The emotion column set varies by
+> the questions a session asked.
+
+Breathing also stores **`baseEmotion`** (a 1‑row table: the baseline `order==0` emotion
+ratings) and **`bmObj`** and **`heartBeats`** (see 6.6).
+
+### 6.5 `TTL` conventions (samples @500 Hz)
+
+- **O15** — `outDat.TTL` is a **table `[15 × 20]`**: `trialStart, buttonPress, confirmSniff,
+  free1 … free17` (NaN‑padded). Built by `detect_ttls_O15` from the z‑scored `event`
+  channel: pulse widths split `trialMarks` (<`trialSplitSamp`) from `sniffMarks`; expects
+  **30** trialMarks (15 trials × start+button); `ttlRemoveIdx` drops aberrant ones.
+- **thresh** — `outDat.TTL` is a **table `[45 × 3]`**: `start (=sniff−1000)`, `trial`,
+  `sniff` (rebuilt in `_main` before sniff detection).
+- **cue** — `outDat.TTL` is a **table `[nTrial × 3]`**: `trialStart, response, sniff`
+  (one sniff per trial; e.g. `[40 × 3]`).
+- **breathing** — `outDat.TTL` is a **vector** of block‑boundary samples
+  (`round(intermediate.TTL/4)`, or a 5‑min fallback `0:600000:end`; e.g. `[0 1.5e5 … 7.5e5]`).
+
+### 6.6 Breathing‑only structures
+
+- **`bmObj`** `[nBreaths × 14]` per‑breath marker matrix:
+  `1`=onset Y, `2`=onset time (s), `3`=inhale‑peak Y, `4`=peak time (s), `5`=end Y,
+  `6`=end time (s), `7`=length (s), `8`=amplitude, `9`=peak idx, `10`=exhale‑peak Y,
+  `11`=exhale‑peak time (s), `12`=**condition/block**, `14`=index. (col 13 unused.)
+- **`heartBeats`** — ECG beat sample indices (from `detectBeats`/`beatSpec`).
+- **`baseEmotion`** — baseline emotion ratings (1‑row table).
+
+---
+
+## 7. Using the preprocessed files downstream
+
+**Get the respiration trace** (the canonical idiom, used everywhere):
 ```matlab
-heartBeats = detectBeats(ECGz, beatSep, spec)
-%   spec = 'chan,lag,op,thr & chan,lag,op,thr & ...'  (op = gt|lt)
-%   must reproduce the legacy getBeats_* exactly (see taskList.md for the algorithm)
+isRsp  = cellfun(@(x) contains(x,'rsp'), outDat.labels);
+rsp    = outDat.data(isRsp,:);
+rsp    = rsp(outDat.rspIDX,:) .* outDat.rspFlip;     % chosen channel, correct polarity
 ```
-
+**Get analysis channels** (EEG + macro bipolar) and HRV/target (breathing):
 ```matlab
-[outDat, raw, TTL] = assemble_outDat_all(S, P)
-%   S has .id .root .fig (and .figPath for O15); branches on P.task
-%   TTL is the O15 TTL table (from detect_ttls_O15); [] for the other three tasks
+eeg32  = outDat.data(1:32,:);                         % only if hasEEG
+isMac  = cellfun(@(x) contains(x,'macBP'), outDat.labels);
+isRR   = cellfun(@(x) contains(x,'RRint'), outDat.labels);    % breathing
 ```
+**Epoching reference — `splitToSingleChan_allTasks.m`** is the existing consumer: it reads
+each final, splits the analysis channels (`macBP*` + the 32 EEG names) into per‑channel
+`chanDat` files under `…\QuestMirror\CHANDAT\`, lifts the QC channels
+(`spikeCleanVec`/`blinkIndicator`/`badTS`) into a separate `cleaningVecs.mat`, copies
+`behDat`, and (breathing) attaches `RRint`/`targTrace`. The per‑channel `chanDat`
+(`.data .behDat .rsp .fs .task .chi .chanType …`) is what the analysis pipelines
+(`singleChanPipeline_general.m`, `run_gamma_figures_pipeline.m`, the `helperFuncs\` and
+`plotsForBruce\` tooling) consume. **This `chanDat` is a different, derived structure — not
+the preprocessed `outDat`.**
 
-## How to validate (always run after changes)
+---
 
-1. **detectBeats vs legacy.** For each curated breathing session, compare
-   `detectBeats(ECGz, beatSep, spec)` against the matching legacy
-   `getBeats_<name>(ECGz, beatSep)` on the same `ECGz` (real or synthetic) — outputs must
-   be identical index-for-index.
-2. **P parity.** For sessions present in the old switches, build P via `applyParams` and
-   compare every field to `getSessionParams_<task>(S)` (ignoring `raw`). Expect a match.
-3. **assemble parity.** Compare `assemble_outDat_all` output fields to the legacy
-   `assemble_outDat_*` for one session per task; for O15 compare `TTL` to `detect_ttls_O15`.
-4. **End-to-end.** Run one already-processed session per task through the rewritten
-   make+main and confirm no errors and equivalent output where a reference exists.
+## 8. Known quirks & gotchas (read before analysing)
 
-Keep the legacy `getSessionParams_*.m` and `assemble_outDat_*.m` in the repo until all
-validations pass; only then retire them.
+- **Index `behDat` by name, not number.** Current `behDat` is a **table**; some legacy
+  analysis (`singleChanPipeline_general.m`) does `behDat(:,13)==0` assuming a numeric matrix
+  with col 13 = bad‑breath flag. In the current table col 13 is `index`; the quality flag is
+  **`behDat.goodBreath`**. Don't trust positional indices.
+- **`task` value drift:** new files = `breathingTask`; some older finals = `breathing`.
+  Handle both.
+- **Top‑level var name varies:** `outDat` (cue/thresh/O15) vs `chanDat`/`out` (breathing).
+  Load via `fieldnames` (§2).
+- **EEG channels are exactly rows 1–32** and only when `hasEEG`; everything else is
+  label‑addressed and montage‑dependent.
+- **`spikeRemoval` is set to 1 in both `preprocess_macros` branches** — to know whether
+  spikes were *actually* removed, inspect `spikeCleanVec` (all‑ones ⇒ none removed).
+- **`spikeClean` sheet caveat (breathing):** for `KS_1, KS_2, AS(250908)` and the EEG/wave
+  breathing rows the sheet records `false` but the legacy runtime used `true`; impact is nil
+  where `hasMacros=false`. See `REFACTOR_NOTES.md`.
+- **Filename case / naming quirks (left intentionally):** `_breathingPreProc` vs
+  `_breathingPreproc`; the `250904_OBE_NWU_TI` (raw) vs sheet `…_TI_1`; `250811_Dupi_NMH_TPB_1`
+  is remapped to `…_TB_1` in some downstream code and skips target‑trace alignment.
+- **Memory (16 GB):** a single raw/continuous session is multi‑GB; process one session per
+  MATLAB process if you hit OOM (the `_dev\run_*` harnesses isolate one session and clear big
+  vars each iteration). The final `.mat` files are `-v7.3` (HDF5) — use `h5info`/`matfile` to
+  inspect/partial‑load without pulling the whole `data` matrix into RAM.
+
+---
+
+## 9. Editing or extending the pipeline
+
+### Hard constraints (do not violate)
+
+- **`datPrei` index order is load‑bearing.** `*_makeOutDat.m` branches on
+  `datPrei==1/2/3` to set `outDat.type`; order **must** stay `1=Dupi, 2=OBEControl,
+  3=EEGbreathing`. `applyParams` returns `datPre` with those three first, extras appended.
+- **"Unchanged after assemble."** In each `_main.m`, everything from the first
+  `downsample_data(...)` onward is the shared pipeline — keep it byte‑for‑byte across tasks.
+  O15 keeps `outDat.TTL = TTL;` right after assemble (so `assemble_outDat_all` **returns**
+  `TTL`); cue/thresh/O15 use `raw` after assemble (so it **returns** `raw`).
+- **Matching is case‑insensitive, whitespace‑trimmed.** Per‑session root comes from the
+  sheet `datPre`, falling back to the Type→root map.
+- **Prefer strict over flexible:** if the data isn't the expected shape, let it error — a
+  loud failure surfaces a real data problem.
+
+### Shared vs task‑specific (what to touch for a new task)
+
+| Layer | Files | Edit for a new task? |
+|---|---|---|
+| Config / loaders | `labPaths.m`, `applyParams.m`, `writeParams.m`, `writePreProcX.m`, `assemble_outDat_all.m` | only `applyParams` (`taskKey`/`canonTask`/`taskCallerKey` + Mode‑B switch) and a new `case` in `assemble_outDat_all` |
+| Shared pipeline (never edit per task) | `downsample_data`, `preprocess_eeg`, `preprocess_macros`, `preprocess_respiration_wholetrace`, `detect_sniffs_from_TTLs`, `refine_onsets_with_phase`, `behDatFromSniffs`, `paramCheck`, `plot_sniff_epochs`, `parSave` | no |
+| Task‑specific | `<task>_makeOutDat.m`, `build_behavior_table_<task>.m`; O15 `detect_ttls_O15`; breathing `process_respiration_breathing`, `alignTargetBreathingTraceSimplify`, `processECG`/`buildECGz`/`paramCheckECG`, `detectBeats`, `flagBadBreaths`, `plotBreathLengths` | **yes — write new `<task>_*` files** |
+| Deliverable scripts | the 4 `*PreProc_main.m` + the 3 `*_makeOutDat.m`; `preprocessAll.m` (batch driver) | copy one as a template |
+
+**New‑task recipe** (full version in `tutorialPreprocessing.md` §6): teach `applyParams`
+the task + params → write `<task>_makeOutDat.m` (save `<id>_<task>PreProc.mat` with at least
+`.data .labels .fs .behDat .TTL`) → add an `assemble_outDat_all` `case` → write
+`build_behavior_table_<task>.m` (start from `behDatFromSniffs` if sniff‑based) → copy a
+`_main.m` and swap the one task‑specific block → update its TASK‑SHARED/TASK‑SPECIFIC legend.
+
+### Validating pipeline changes
+
+Legacy oracles are kept in‑repo until retired: `getSessionParams_*.m`,
+`assemble_outDat_*.m` (and the per‑task `assembleRaw_*`/`preproc\assemble_outDat_*`), plus
+the `_dev\` test/harness scripts (`test_detectBeats`, `test_beatSpec_map`,
+`test_integration`, `run_*`). Re‑run the relevant parity check after any change and confirm
+numerically identical output where a reference exists.
+
+---
+
+## 10. File map (quick index)
+
+| Kind | Files |
+|---|---|
+| **Config / loaders** | `labPaths.m`, `applyParams.m`, `writeParams.m`, `writePreProcX.m`, `assemble_outDat_all.m`, `preprocessAll.m` |
+| **Shared pipeline** | `assembleOutDat.m`, `loadIntermediateRaw.m`, `downsample_data.m`, `preprocess_eeg.m`, `preprocess_macros.m`, `preprocess_respiration_wholetrace.m`, `detect_sniffs_from_TTLs.m`, `refine_onsets_with_phase.m`, `behDatFromSniffs.m`, `paramCheck.m`, `plot_sniff_epochs.m`, `parSave.m`, `interpolate_perrinX.m`, `laplacian_perrinX.m`, `removeNoiseChansVolt.m`, `blinkRemoveWrapper.m`, `ica_flag_spikes_targeted.m`, `detect_spikes.m` |
+| **Task‑specific** | `<task>_makeOutDat.m` (`preproc\threshPreProc_makeOutDat.m`), `assembleRaw_<task>.m`, `build_behavior_table_<task>.m`; O15: `assembleRaw_O15.m`, `detect_ttls_O15.m`, `assembleOutDat_O15extras.m`; breathing: `assembleRaw_breathingTask.m`, `process_respiration_breathing.m`, `alignTargetBreathingTraceSimplify.m`, `processECG.m`/`buildECGz.m`/`paramCheckECG.m`, `detectBeats.m`, `flagBadBreaths.m`, `plotBreathLengths.m`; cue: `assembleRaw_cueTask.m`, `outMat_to_table.m`; thresh: `assembleRaw_threshTask.m` |
+| **Deliverable scripts** | `breathingTaskPreProc_main.m`, `cueTaskPreProc_main.m`, `threshPreProc_main.m`, `O15PreProc_main.m` + the 3 `_makeOutDat` |
+| **Downstream analysis (consume the finals)** | `splitToSingleChan_allTasks.m` (→ `chanDat`), `singleChanPipeline_general.m`, `run_gamma_figures_pipeline.m`, `helperFuncs\`, `plotsForBruce\`, `ACHEMS2026\` |
+| **Docs** | `preprocessingReadme.md` (reference), `tutorialPreprocessing.md` (how‑to), `REFACTOR_NOTES.md` / `taskList.md` / `SimplifyStandardize*.md` (history) |
+| **Dev / oracles** | `_dev\` (tests, `run_*` harnesses, `subfunction_catalogue.json`), `getSessionParams_*.m`, `assemble_outDat_*.m` (legacy, kept as oracles) |
+
+Adding a participant is a **sheet edit** (a row + its parameter columns), no code change.

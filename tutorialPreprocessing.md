@@ -181,8 +181,13 @@ existing task as a template (cue is the simplest end-to-end).
    `.data .labels .fs .behDat .TTL`. The whole file is task-specific; copy an
    existing makeOutDat's header (labPaths + the `applyParams('<task>','makeOutDat')`
    cfg block) verbatim.
-3. **Assembly** — add a `case '<task>'` to `assemble_outDat_all.m` that loads your
-   intermediate (or raw) into `raw`/`outDat`. Everything after the switch is shared.
+3. **Assembly** — write `assembleRaw_<task>.m` that loads your raw into a `raw`
+   struct (`.sessID .fs_raw .data .labels .beh`, plus `.TTL` if you have one); if it
+   loads a `<task>PreProc.mat` intermediate, call the shared `loadIntermediateRaw`
+   for the load. Then add a one-line `case '<task>'` to the `assemble_outDat_all`
+   dispatcher. The shared `assembleOutDat` (common `outDat`) needs no changes — every
+   assemble function is now either completely task-specific (`assembleRaw_*`) or
+   completely shared (`assembleOutDat`, `loadIntermediateRaw`).
 4. **Behavior table** — write `build_behavior_table_<task>.m`. If your task is
    sniff-based, start from `behDatFromSniffs(sniffs, sniffTypes)` for the shared
    first six columns and add only your task's broadcast loop.
