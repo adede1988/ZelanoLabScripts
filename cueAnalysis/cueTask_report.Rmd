@@ -1,0 +1,338 @@
+---
+title: "Cue-task macBP gamma & event-locked spectrograms"
+author: "Zelano Lab — cueTask analysis"
+date: "`r format(Sys.Date())`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    df_print: paged
+params:
+  groupDir: 'R:/Neurology/Zelano_Lab/Lab_Common/Adam/Dupi_processing/groupStatFigs'
+  figRoot:  'R:/Neurology/Zelano_Lab/Lab_Common/Adam/Dupi_processing'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+library(knitr)
+gd  <- params$groupDir
+fr  <- params$figRoot
+fooofCsv <- file.path(gd, 'cueTask_fooof_summary.csv')
+manCsv   <- file.path(gd, 'cueTask_data_manifest.csv')
+fooof <- if (file.exists(fooofCsv)) read.csv(fooofCsv, stringsAsFactors = FALSE) else NULL
+man   <- if (file.exists(manCsv))   read.csv(manCsv,   stringsAsFactors = FALSE) else NULL
+groups <- c('DupiS1','DupiS2','DupiS3','Control')
+
+mdimg <- function(p) {
+  if (!is.null(p) && file.exists(p)) sprintf('![](%s)\n\n', p)
+  else sprintf('*[missing figure: %s]*\n\n', p)
+}
+subFig <- function(sid, bestMac, locking) {
+  file.path(fr, sid, 'cueTask', sprintf('%s_%s_TFR_%s.png', sid, bestMac, locking))
+}
+groupFig <- function(g, locking) file.path(gd, sprintf('group_%s_TFR_%s.png', g, locking))
+```
+
+## 1. Methods
+
+**Data.** Cue-task intracranial/scalp recordings, preprocessed to 500 Hz (high-pass
+0.03 Hz, low-pass ~Nyquist, notch 60/120/180 Hz). Analysis channels are the bipolar
+macro pairs `macBP1..5` (count varies; sessions without any `macBP` are excluded).
+Sessions are grouped as **DupiS1 / DupiS2 / DupiS3** (Dupi study, recording session 1/2/3)
+and **Control** (all non-Dupi cue sessions).
+
+**FOOOF (Task 1).** Per session, each `macBP` PSD (FieldTrip `ft_freqanalysis`, `mtmfft`,
+2 s segments, 50% overlap, piped in via EEGLAB `eeglab2fieldtrip`) was parameterized with
+FOOOF (`cfg.output = fooof_aperiodic / fooof_peaks`; brainstorm `process_fooof`,
+aperiodic_mode = fixed). The **gamma** band is 30–58 Hz. `bestMac` = the channel with the
+largest **periodic** (oscillatory) gamma peak; if no `macBP` channel in a session has a
+fitted gamma peak, we fall back to the channel with the largest **flattened** (PSD ÷
+aperiodic) power in band. The `selectionMethod` column records which rule fired.
+
+**Spectrograms (Tasks 1–4, z-score method).** For each session's `bestMac`, per-trial
+time-frequency power was obtained from EEGLAB `newtimef` (Morlet, 100 log-spaced freqs
+2–120 Hz; single-trial `alltfX` → |·|²), locked to **trialStart** and to **finalOnset**
+(finalOnset is ~6 s after trialStart). Power was normalized with a **bootstrap permutation
+z-score** (`myChanZscore`): per frequency, a 1000-sample bootstrap distribution of the
+**−700…−200 ms trialStart baseline** mean defines the z reference. The finalOnset epoch is
+z-scored against the **same trialStart baseline** (its baseline frames are appended before
+z-scoring), so the two lockings share one scale (heat = *z vs baseline*).
+
+*Noise rejection (sharp-deflection rule).* A trial is flagged **noisy** if its trialStart-
+locked raw `bestMac` epoch (−1.75…+5.75 s) contains any 10 ms window with a max-to-min range
+**> 80 µV**. Noisy trials are drawn in **red** on `singleTrialRawMac.png` and **excluded from
+all spectrograms** (this replaces the earlier z-score-based QC). The **mean respiration trace**
+(chosen `rsp` channel, flipped) is overlaid on every spectrogram (black line, right axis).
+Display window −1000…+3000 ms. Group means (Task 4) average the per-subject z maps (and
+respiration) within each group on one shared color scale.
+
+## 2. Data available
+
+```{r data-table}
+if (!is.null(man)) {
+  knitr::kable(man, caption = 'Cue sessions analysed (one row per session).')
+} else cat('*manifest not found*')
+```
+
+## 3. FOOOF findings
+
+```{r fooof-best}
+if (!is.null(fooof)) {
+  best <- fooof[fooof$isBestMac == 1, c('sessID','group','channel','gammaPeakDetected',
+            'peakGammaFreq','peakGammaPower','flattenedGammaMax','selectionMethod')]
+  knitr::kable(best, digits = 3, caption = 'Selected bestMac channel per session.')
+} else cat('*fooof summary not found*')
+```
+
+```{r fooof-all}
+if (!is.null(fooof)) {
+  knitr::kable(fooof[, c('sessID','group','channel','gammaPeakDetected','peakGammaFreq',
+            'peakGammaPower','flattenedGammaMax','aperiodicExponent','fooofR2','isBestMac')],
+            digits = 3, caption = 'All macBP channels.')
+}
+```
+
+## 3b. Trial noise rejection (sharp-deflection rule)
+
+`nTrials` = trialStart events; `nNoiseTrials` = trials flagged by the >80 µV / 10 ms rule
+(drawn red on `singleTrialRawMac.png` and excluded); `nFinal_*` = clean trials entering each
+locking's average (`nFinal_finalOnset` is further limited by epochs running off the recording
+end, `nOOB_finalOnset`).
+
+```{r qc-table}
+qcCols <- c('sessID','group','nTrials','nNoiseTrials','nOOB_finalOnset',
+            'nFinal_trialStart','nFinal_finalOnset')
+if (!is.null(fooof) && 'nNoiseTrials' %in% names(fooof)) {
+  qc <- fooof[fooof$isBestMac == 1, intersect(qcCols, names(fooof))]
+  knitr::kable(qc, caption = 'Per-session noise rejection for the bestMac spectrograms.')
+} else cat('*noise columns not present in the summary CSV*')
+```
+
+### Example single-trial noise plots
+
+Two sessions with the **most** flagged-noise trials and two with the **fewest**, showing the
+red-flagged single-trial raw `bestMac` traces.
+
+```{r noise-examples, results='asis'}
+stFig <- function(sid) file.path(fr, sid, 'cueTask', 'singleTrialRawMac.png')
+if (!is.null(fooof) && 'nNoiseTrials' %in% names(fooof)) {
+  nz <- fooof[fooof$isBestMac == 1 & !is.na(fooof$nNoiseTrials), c('sessID','group','nNoiseTrials')]
+  nz <- nz[order(-nz$nNoiseTrials), ]   # descending by noise count
+  hi <- head(nz, 2); lo <- tail(nz, 2)  # 2 most / 2 fewest noise trials
+  cat('\n**Highest-noise sessions:**\n\n')
+  for (k in seq_len(nrow(hi))) {
+    cat(sprintf('*%s (%s) — %d noise trials*\n\n', hi$sessID[k], hi$group[k], hi$nNoiseTrials[k]))
+    cat(mdimg(stFig(hi$sessID[k])))
+  }
+  cat('\n**Lowest-noise sessions:**\n\n')
+  for (k in seq_len(nrow(lo))) {
+    cat(sprintf('*%s (%s) — %d noise trials*\n\n', lo$sessID[k], lo$group[k], lo$nNoiseTrials[k]))
+    cat(mdimg(stFig(lo$sessID[k])))
+  }
+} else cat('*noise counts unavailable*')
+```
+
+## 4. Single-subject example spectrograms
+
+For each group, up to two example sessions, both lockings (trialStart, finalOnset).
+
+```{r examples, results='asis'}
+pick <- list()
+if (!is.null(man)) {
+  for (g in groups) {
+    rows <- man[man$group == g & !is.na(man$bestMac) & nzchar(as.character(man$bestMac)), ]
+    pick[[g]] <- head(rows, 2)
+  }
+}
+for (g in groups) {
+  cat(sprintf('\n\n### %s\n', g))
+  rr <- pick[[g]]
+  if (is.null(rr) || nrow(rr) == 0) { cat('\n*no sessions*\n'); next }
+  for (k in seq_len(nrow(rr))) {
+    sid <- rr$sessID[k]; bm <- rr$bestMac[k]
+    cat(sprintf('\n**%s** (bestMac = %s)\n\n', sid, bm))
+    cat('*trialStart-locked:*\n\n'); cat(mdimg(subFig(sid, bm, 'trialStart')))
+    cat('*finalOnset-locked:*\n\n'); cat(mdimg(subFig(sid, bm, 'finalOnset')))
+  }
+}
+```
+
+## 5. Group-average spectrograms
+
+```{r group-means, results='asis'}
+for (g in groups) {
+  cat(sprintf('\n\n### %s\n\n', g))
+  cat('*trialStart-locked:*\n\n'); cat(mdimg(groupFig(g, 'trialStart')))
+  cat('*finalOnset-locked:*\n\n'); cat(mdimg(groupFig(g, 'finalOnset')))
+}
+```
+
+## 6. Time-resolved gamma (FOOOF over epochs)
+
+**Methods.** For each session's `bestMac`, Morlet power (5–58 Hz, 100 linear freqs) was
+computed on the noise-clean finalOnset-locked trials, then averaged over trials and into
+ten sequential **250 ms windows** spanning −500…+2000 ms. FOOOF (same settings as the overall
+channel fit) was applied to each window's power spectrum; the largest 30–58 Hz periodic peak
+per window is recorded in `cueTask_gammaEpochs.csv`. "Channel-centered" = each window's gamma
+peak frequency minus that channel's overall gamma peak (from §3).
+
+```{r gamma-setup, include=FALSE}
+geCsv <- file.path(gd, 'cueTask_gammaEpochs.csv')
+ge <- if (file.exists(geCsv)) read.csv(geCsv, stringsAsFactors = FALSE) else NULL
+suppressMessages({library(dplyr); library(ggplot2)})
+if (!is.null(ge)) {
+  ovl <- fooof[fooof$isBestMac == 1, c('sessID','peakGammaFreq','peakGammaPower')]
+  names(ovl)[2:3] <- c('overallPeakFreq','overallPeakPower')
+  ge <- merge(ge, ovl, by = 'sessID', all.x = TRUE)
+  ge$centeredFreq  <- ge$gammaPeakFreq  - ge$overallPeakFreq    # Hz, vs whole-recording peak
+  ge$centeredPower <- ge$gammaPeakPower - ge$overallPeakPower   # log10 power (FOOOF height) ~ dB/10
+  ge$group <- factor(ge$group, levels = groups)
+}
+gtFig <- function(sid) file.path(fr, sid, 'cueTask', 'gammaTimeProgression.png')
+```
+
+### 6.1 Example gamma time-progression (one per group)
+
+```{r gamma-examples, results='asis'}
+if (!is.null(ge)) {
+  for (g in groups) {
+    ex <- unique(ge$sessID[ge$group == g & !is.na(ge$group)])
+    if (length(ex) == 0) { cat(sprintf('\n*%s: none*\n', g)); next }
+    cat(sprintf('\n**%s (%s)**\n\n', ex[1], g)); cat(mdimg(gtFig(ex[1])))
+  }
+} else cat('*gamma-epoch CSV not found*')
+```
+
+### 6.2 Participants with a detectable gamma peak, per epoch
+
+```{r gamma-count, fig.width=9, fig.height=6}
+if (!is.null(ge)) {
+  cnt <- ge %>% group_by(group, centerMs) %>%
+    summarise(nDet = sum(gammaDetected == 1, na.rm = TRUE), nTot = n_distinct(sessID), .groups = 'drop')
+  ggplot(cnt, aes(centerMs, nDet)) +
+    geom_line(color = 'steelblue') + geom_point(color = 'steelblue') +
+    geom_hline(aes(yintercept = nTot), linetype = 'dashed', color = 'grey60') +
+    facet_wrap(~group) +
+    labs(x = 'epoch center (ms, rel. finalOnset)', y = '# participants with gamma peak',
+         title = 'Detectable gamma oscillation per epoch (dashed = group n)') + theme_bw()
+}
+```
+
+### 6.3 Channel-centered gamma peak frequency across epochs
+
+Group average (red) with each participant shown as lighter connected dots.
+
+```{r gamma-centered, fig.width=9, fig.height=6}
+if (!is.null(ge)) {
+  d <- ge[!is.na(ge$centeredFreq), ]
+  ggplot(d, aes(centerMs, centeredFreq)) +
+    geom_hline(yintercept = 0, color = 'grey80') +
+    geom_line(aes(group = sessID), color = 'grey70', alpha = 0.5) +
+    geom_point(aes(group = sessID), color = 'grey60', alpha = 0.4, size = 1) +
+    stat_summary(fun = mean, geom = 'line', color = 'firebrick', linewidth = 1.2) +
+    stat_summary(fun = mean, geom = 'point', color = 'firebrick', size = 2) +
+    facet_wrap(~group) +
+    labs(x = 'epoch center (ms, rel. finalOnset)',
+         y = 'epoch gamma peak − channel overall peak (Hz)',
+         title = 'Channel-centered gamma peak frequency over epochs') + theme_bw()
+}
+```
+
+### 6.4 Does gamma peak frequency change over epochs? (LME per group)
+
+Linear mixed-effects model `gammaPeakFreq ~ epoch + (1|subject)`, fit within each group;
+epochs with no FOOOF-detected gamma peak are treated as missing.
+
+```{r gamma-lme}
+if (!is.null(ge)) {
+  suppressMessages({library(lme4); library(lmerTest)})
+  res <- lapply(levels(ge$group), function(g) {
+    sub <- ge[ge$group == g & !is.na(ge$gammaPeakFreq), ]
+    nsub <- length(unique(sub$sessID))
+    out <- data.frame(group = g, n_obs = nrow(sub), n_subj = nsub,
+                      slope_Hz_per_epoch = NA, SE = NA, t = NA, p = NA)
+    if (nrow(sub) >= 5 && nsub >= 3) {
+      m <- tryCatch(lmer(gammaPeakFreq ~ epoch + (1 | sessID), data = sub), error = function(e) NULL)
+      if (!is.null(m)) {
+        co <- summary(m)$coefficients
+        out$slope_Hz_per_epoch <- co['epoch','Estimate']; out$SE <- co['epoch','Std. Error']
+        out$t <- co['epoch','t value']; out$p <- co['epoch','Pr(>|t|)']
+      }
+    }
+    out
+  })
+  knitr::kable(do.call(rbind, res), digits = 4,
+    caption = 'LME: gamma peak frequency ~ epoch + (1|subject), per group (slope = Hz per 250 ms epoch).')
+} else cat('*gamma-epoch CSV not found*')
+```
+
+### 6.5 Does gamma frequency track gamma power across epochs?
+
+Each epoch's gamma peak is expressed **relative to the channel's whole-recording (overall)
+FOOOF peak** (§3), by **subtraction** — the appropriate operation given the metrics:
+
+* **Δ frequency** = epoch peak − overall peak (Hz). Subtraction (not a ratio) because
+  frequency is interval-scaled; this also removes each individual's characteristic gamma
+  frequency.
+* **Δ power** = epoch peak height − overall peak height. `gammaPeakPower` is the FOOOF peak
+  **height above the 1/f aperiodic** (log10 power), so it is already aperiodic-/SNR-corrected
+  and its differences are ≈ dB changes; subtracting log-heights is the natural "change."
+
+Using the **overall** peak as the reference (rather than the first epoch) is more stable and
+keeps every epoch informative. (Δpower is mostly negative because a single 250 ms Morlet
+window has a lower FOOOF peak height than the whole-recording reference fit — a per-session
+offset that does not affect the within-session slope.) Dots are session×epoch, colored by
+epoch (ochre→purple), faceted by group. The grey line is a simple *pooled* linear fit (shown
+for orientation only); the table below is the proper **within-session** test — note these can
+disagree, since a pooled fit mixes within- and between-session variance.
+
+```{r gamma-scatter, fig.width=9, fig.height=6}
+if (!is.null(ge)) {
+  d <- ge[is.finite(ge$centeredPower) & is.finite(ge$centeredFreq), ]
+  ggplot(d, aes(centeredPower, centeredFreq, color = epoch)) +
+    geom_hline(yintercept = 0, color = 'grey85') +
+    geom_vline(xintercept = 0, color = 'grey85') +
+    geom_point(alpha = 0.8, size = 1.8) +
+    geom_smooth(method = 'lm', se = FALSE, color = 'grey30', linewidth = 0.6) +
+    scale_color_gradient(low = '#D9991A', high = '#66008C', name = 'epoch') +
+    facet_wrap(~group) +
+    labs(x = 'Δ gamma power  (epoch − overall peak; log10 power ≈ dB/10)',
+         y = 'Δ gamma frequency  (epoch − overall peak; Hz)',
+         title = 'Gamma frequency vs power across epochs (centered on whole-recording peak)') +
+    theme_bw()
+}
+```
+
+Within-session coupling via a linear mixed-effects model `Δfreq ~ Δpower + (Δpower|session)`,
+fit per group (random slope; falls back to random intercept if the slope variance is
+singular). The slope is the within-session change in gamma frequency (Hz) per unit change in
+gamma power (log10).
+
+```{r gamma-scatter-lme}
+if (!is.null(ge)) {
+  suppressMessages({library(lme4); library(lmerTest)})
+  d <- ge[is.finite(ge$centeredPower) & is.finite(ge$centeredFreq), ]
+  res <- lapply(levels(ge$group), function(g) {
+    sub <- d[d$group == g, ]; nsub <- length(unique(sub$sessID))
+    out <- data.frame(group = g, n_obs = nrow(sub), n_subj = nsub,
+                      model = 'NA', slope_Hz_per_logPow = NA, SE = NA, t = NA, p = NA)
+    if (nrow(sub) >= 8 && nsub >= 3) {
+      m <- tryCatch(lmer(centeredFreq ~ centeredPower + (centeredPower | sessID), data = sub),
+                    error = function(e) NULL)
+      out$model <- 'rand.slope'
+      if (is.null(m) || lme4::isSingular(m)) {
+        m <- tryCatch(lmer(centeredFreq ~ centeredPower + (1 | sessID), data = sub), error = function(e) NULL)
+        out$model <- 'rand.intercept'
+      }
+      if (!is.null(m)) {
+        co <- summary(m)$coefficients
+        out$slope_Hz_per_logPow <- co['centeredPower','Estimate']; out$SE <- co['centeredPower','Std. Error']
+        out$t <- co['centeredPower','t value']; out$p <- co['centeredPower','Pr(>|t|)']
+      }
+    }
+    out
+  })
+  knitr::kable(do.call(rbind, res), digits = 4,
+    caption = 'Within-session LME: Δfreq ~ Δpower + (Δpower|session), per group.')
+} else cat('*gamma-epoch CSV not found*')
+```

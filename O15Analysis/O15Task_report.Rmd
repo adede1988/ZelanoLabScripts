@@ -1,0 +1,345 @@
+---
+title: "O15-task macBP gamma & sniff-locked spectrograms"
+author: "Zelano Lab — O15 analysis"
+date: "`r format(Sys.Date())`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    df_print: paged
+params:
+  groupDir: 'R:/Neurology/Zelano_Lab/Lab_Common/Adam/Dupi_processing/groupStatFigs'
+  figRoot:  'R:/Neurology/Zelano_Lab/Lab_Common/Adam/Dupi_processing'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+library(knitr)
+gd  <- params$groupDir
+fr  <- params$figRoot
+fooofCsv <- file.path(gd, 'O15Task_fooof_summary.csv')
+manCsv   <- file.path(gd, 'O15Task_data_manifest.csv')
+fooof <- if (file.exists(fooofCsv)) read.csv(fooofCsv, stringsAsFactors = FALSE) else NULL
+man   <- if (file.exists(manCsv))   read.csv(manCsv,   stringsAsFactors = FALSE) else NULL
+groups   <- c('DupiS1','DupiS2','DupiS3','Control')
+lockings <- c('start','free','confirm')
+
+mdimg <- function(p) {
+  if (!is.null(p) && file.exists(p)) sprintf('![](%s)\n\n', p)
+  else sprintf('*[missing figure: %s]*\n\n', p)
+}
+subFig <- function(sid, bestMac, locking) {
+  file.path(fr, sid, 'O15', sprintf('%s_%s_O15TFR_%s.png', sid, bestMac, locking))
+}
+groupFig <- function(g, locking) file.path(gd, sprintf('group_%s_O15TFR_%s.png', g, locking))
+```
+
+## 1. Methods
+
+**Task.** O15 odor-identification. Each of the 15 trials begins with a **start** sniff (first
+sample of the odor), followed by several **free** sniffs while the participant explores/identifies
+the odor, and ends with a **confirm** sniff at the button press. Sniffs are split by
+`behDat.sniffLabel` (`start` / `free` / `confirm`; counts per session ≈ 15 / ~120 / 15) and locked
+on `behDat.finalOnset` (the respiration-phase-refined onset).
+
+**Data.** O15 intracranial/scalp recordings, preprocessed to 500 Hz (high-pass 0.03 Hz, low-pass
+~Nyquist, notch 60/120/180 Hz). Analysis channels are the bipolar macro pairs `macBP1..5` (count
+varies; sessions without any `macBP` are excluded — O15 EEG/macros are sometimes absent). Only
+finals from the current preprocessing run (modified on/after 2026-06-24) are analysed. Sessions are
+grouped **DupiS1 / DupiS2 / DupiS3** (Dupi study, recording 1/2/3) and **Control** (all non-Dupi).
+
+**FOOOF.** Per session, each `macBP` PSD (FieldTrip `ft_freqanalysis`, `mtmfft`, 2 s / 50%-overlap
+segments, piped via EEGLAB `eeglab2fieldtrip`) was parameterized with FOOOF (brainstorm
+`process_fooof`, aperiodic_mode = fixed). The **gamma** band is 30–58 Hz. `bestMac` = the channel
+with the largest **periodic** gamma peak; if no `macBP` has a fitted gamma peak, we fall back to the
+largest **flattened** (PSD ÷ aperiodic) power in band (`selectionMethod`). *(Identical machinery to
+the cue analysis — `cue_fooof_macBP` is reused unchanged.)*
+
+**Spectrograms (single shared baseline).** For each session's `bestMac`, per-trial time-frequency
+power was obtained from EEGLAB `newtimef` (Morlet [3 0.8], 100 log-spaced freqs 2–120 Hz; single-
+trial `alltfX` → |·|²), separately for the three sniff lockings. Power was normalized to **one
+shared baseline** taken from a window **before the first trial-start sniff** (`firstStart − guard −
+≤30 s … firstStart − 1 s`; wavelet edge frames trimmed). The baseline-z is computed via the lab's
+bootstrap routine `myChanZscore`: per frequency, the trial-mean power is expressed as
+**z = (power − baselineMean) / baselineSD** (baseline-SD units). Using *one* baseline for all three
+sniff types puts them on a single comparable scale despite very different trial counts (a SEM-style
+z would make the high-count *free* maps spuriously hotter). Heat = *z vs the single pre-task
+baseline*; the **mean respiration trace** is overlaid (black, right axis). Display −1000…+3000 ms.
+
+*Noise rejection (sharp-deflection rule).* A sniff is flagged **noisy** if its raw `bestMac` epoch
+(−1.75…+5.75 s) contains any 10 ms window with a max-to-min range **> 80 µV** (`cue_noise_trials`,
+reused). Noisy sniffs are excluded from the averages; `singleTrialRawMac_start.png` shows the start
+sniffs with noisy ones in **red**. Group means average the per-subject z maps within each group on
+one shared (data-driven) color scale.
+
+## 2. Data available
+
+```{r data-table}
+if (!is.null(man)) {
+  knitr::kable(man, caption = 'O15 sessions analysed (one row per fresh session).')
+} else cat('*manifest not found*')
+```
+
+## 3. FOOOF findings
+
+```{r fooof-best}
+if (!is.null(fooof)) {
+  best <- fooof[fooof$isBestMac == 1, c('sessID','group','channel','gammaPeakDetected',
+            'peakGammaFreq','peakGammaPower','flattenedGammaMax','selectionMethod')]
+  knitr::kable(best, digits = 3, caption = 'Selected bestMac channel per session.')
+} else cat('*fooof summary not found*')
+```
+
+```{r fooof-all}
+if (!is.null(fooof)) {
+  knitr::kable(fooof[, c('sessID','group','channel','gammaPeakDetected','peakGammaFreq',
+            'peakGammaPower','flattenedGammaMax','aperiodicExponent','fooofR2','isBestMac')],
+            digits = 3, caption = 'All macBP channels.')
+}
+```
+
+## 3b. Sniff noise rejection (sharp-deflection rule)
+
+`n*` = sniffs of each type; `nNoise*` = sniffs flagged by the >80 µV / 10 ms rule (excluded);
+`nFinal_*` = clean sniffs entering each locking's average; `baseFrames` = time-frames in the single
+pre-task baseline window.
+
+```{r qc-table}
+qcCols <- c('sessID','group','nStart','nFree','nConfirm','nNoiseStart','nNoiseFree','nNoiseConfirm',
+            'nFinal_start','nFinal_free','nFinal_confirm','baseFrames')
+if (!is.null(fooof) && 'nNoiseStart' %in% names(fooof)) {
+  qc <- fooof[fooof$isBestMac == 1, intersect(qcCols, names(fooof))]
+  knitr::kable(qc, caption = 'Per-session sniff noise rejection for the bestMac spectrograms.')
+} else cat('*noise columns not present in the summary CSV*')
+```
+
+### Example single-trial noise plots (start sniffs)
+
+Two sessions with the **most** flagged-noise sniffs and two with the **fewest** (total across types),
+showing the red-flagged start-sniff raw `bestMac` traces.
+
+```{r noise-examples, results='asis'}
+stFig <- function(sid) file.path(fr, sid, 'O15', 'singleTrialRawMac_start.png')
+if (!is.null(fooof) && 'nNoiseStart' %in% names(fooof)) {
+  b <- fooof[fooof$isBestMac == 1, ]
+  b$nNoiseTot <- rowSums(b[, c('nNoiseStart','nNoiseFree','nNoiseConfirm')], na.rm = TRUE)
+  nz <- b[!is.na(b$nNoiseTot), c('sessID','group','nNoiseTot')]
+  nz <- nz[order(-nz$nNoiseTot), ]
+  hi <- head(nz, 2); lo <- tail(nz, 2)
+  cat('\n**Highest-noise sessions:**\n\n')
+  for (k in seq_len(nrow(hi))) {
+    cat(sprintf('*%s (%s) — %d noise sniffs*\n\n', hi$sessID[k], hi$group[k], hi$nNoiseTot[k]))
+    cat(mdimg(stFig(hi$sessID[k])))
+  }
+  cat('\n**Lowest-noise sessions:**\n\n')
+  for (k in seq_len(nrow(lo))) {
+    cat(sprintf('*%s (%s) — %d noise sniffs*\n\n', lo$sessID[k], lo$group[k], lo$nNoiseTot[k]))
+    cat(mdimg(stFig(lo$sessID[k])))
+  }
+} else cat('*noise counts unavailable*')
+```
+
+## 4. Single-subject example spectrograms
+
+For each group, up to two example sessions, all three sniff lockings (start, free, confirm).
+
+```{r examples, results='asis'}
+pick <- list()
+if (!is.null(man)) {
+  for (g in groups) {
+    rows <- man[man$group == g & man$status == 'ok' & nzchar(as.character(man$bestMac)), ]
+    pick[[g]] <- head(rows, 2)
+  }
+}
+for (g in groups) {
+  cat(sprintf('\n\n### %s\n', g))
+  rr <- pick[[g]]
+  if (is.null(rr) || nrow(rr) == 0) { cat('\n*no sessions*\n'); next }
+  for (k in seq_len(nrow(rr))) {
+    sid <- rr$sessID[k]; bm <- rr$bestMac[k]
+    cat(sprintf('\n**%s** (bestMac = %s)\n\n', sid, bm))
+    for (lk in lockings) {
+      cat(sprintf('*%s-sniff:*\n\n', lk)); cat(mdimg(subFig(sid, bm, lk)))
+    }
+  }
+}
+```
+
+## 5. Group-average spectrograms
+
+```{r group-means, results='asis'}
+for (g in groups) {
+  cat(sprintf('\n\n### %s\n\n', g))
+  for (lk in lockings) {
+    cat(sprintf('*%s-sniff:*\n\n', lk)); cat(mdimg(groupFig(g, lk)))
+  }
+}
+```
+
+## 6. Time-resolved gamma (FOOOF over epochs, by sniff type)
+
+**Methods.** For each session's `bestMac` and **each sniff category (start / free / confirm)**,
+Morlet power (5–58 Hz, 100 linear freqs) was computed on the noise-clean sniffs of that type, then
+averaged over trials and into ten sequential **250 ms windows** spanning −500…+2000 ms. FOOOF (same
+settings as the overall channel fit) was applied to each window; the largest 30–58 Hz periodic peak
+per window is recorded in `O15Task_gammaEpochs.csv` (column `locking`). There are many more *free*
+sniffs than *start*/*confirm* sniffs — that is expected and fine. "Channel-centered" = each window's
+gamma peak frequency minus that channel's overall gamma peak (§3).
+
+```{r gamma-setup, include=FALSE}
+geCsv <- file.path(gd, 'O15Task_gammaEpochs.csv')
+ge <- if (file.exists(geCsv)) read.csv(geCsv, stringsAsFactors = FALSE) else NULL
+suppressMessages({library(dplyr); library(ggplot2)})
+if (!is.null(ge)) {
+  ovl <- fooof[fooof$isBestMac == 1, c('sessID','peakGammaFreq','peakGammaPower')]
+  names(ovl)[2:3] <- c('overallPeakFreq','overallPeakPower')
+  ge <- merge(ge, ovl, by = 'sessID', all.x = TRUE)
+  ge$centeredFreq  <- ge$gammaPeakFreq  - ge$overallPeakFreq
+  ge$centeredPower <- ge$gammaPeakPower - ge$overallPeakPower
+  ge$group   <- factor(ge$group,   levels = groups)
+  ge$locking <- factor(ge$locking, levels = lockings)
+}
+gtFig <- function(sid, lk) file.path(fr, sid, 'O15', sprintf('gammaTimeProgression_%s.png', lk))
+```
+
+### 6.1 Example gamma time-progression (one session per group, all three sniff types)
+
+```{r gamma-examples, results='asis'}
+if (!is.null(ge)) {
+  for (g in groups) {
+    ex <- unique(ge$sessID[ge$group == g & !is.na(ge$group)])
+    if (length(ex) == 0) { cat(sprintf('\n*%s: none*\n', g)); next }
+    cat(sprintf('\n**%s (%s)**\n\n', ex[1], g))
+    for (lk in lockings) { cat(sprintf('*%s-sniff:*\n\n', lk)); cat(mdimg(gtFig(ex[1], lk))) }
+  }
+} else cat('*gamma-epoch CSV not found*')
+```
+
+### 6.2 Participants with a detectable gamma peak, per epoch and sniff type
+
+```{r gamma-count, fig.width=10, fig.height=6}
+if (!is.null(ge)) {
+  cnt <- ge %>% group_by(group, locking, centerMs) %>%
+    summarise(nDet = sum(gammaDetected == 1, na.rm = TRUE), .groups = 'drop')
+  ggplot(cnt, aes(centerMs, nDet, color = locking)) +
+    geom_line() + geom_point(size = 1) +
+    facet_wrap(~group) +
+    labs(x = 'epoch center (ms, rel. sniff onset)', y = '# participants with gamma peak',
+         color = 'sniff type',
+         title = 'Detectable gamma oscillation per epoch, by sniff type') + theme_bw()
+}
+```
+
+### 6.3 Channel-centered gamma peak frequency across epochs
+
+Group average (red) with each participant shown as lighter connected dots; rows = sniff type,
+columns = group.
+
+```{r gamma-centered, fig.width=10, fig.height=8}
+if (!is.null(ge)) {
+  d <- ge[!is.na(ge$centeredFreq), ]
+  ggplot(d, aes(centerMs, centeredFreq)) +
+    geom_hline(yintercept = 0, color = 'grey80') +
+    geom_line(aes(group = sessID), color = 'grey70', alpha = 0.5) +
+    geom_point(aes(group = sessID), color = 'grey60', alpha = 0.4, size = 1) +
+    stat_summary(fun = mean, geom = 'line', color = 'firebrick', linewidth = 1.1) +
+    stat_summary(fun = mean, geom = 'point', color = 'firebrick', size = 1.6) +
+    facet_grid(locking ~ group) +
+    labs(x = 'epoch center (ms, rel. sniff onset)',
+         y = 'epoch gamma peak − channel overall peak (Hz)',
+         title = 'Channel-centered gamma peak frequency over epochs (rows = sniff type)') + theme_bw()
+}
+```
+
+### 6.4 Does gamma peak frequency change over epochs? (LME per group × sniff type)
+
+Linear mixed-effects model `gammaPeakFreq ~ epoch + (1|subject)`, fit within each group × sniff
+type; epochs with no FOOOF-detected gamma peak are treated as missing.
+
+```{r gamma-lme}
+if (!is.null(ge)) {
+  suppressMessages({library(lme4); library(lmerTest)})
+  combos <- expand.grid(group = levels(ge$group), locking = levels(ge$locking),
+                        stringsAsFactors = FALSE)
+  res <- lapply(seq_len(nrow(combos)), function(k) {
+    g <- combos$group[k]; lk <- combos$locking[k]
+    sub <- ge[ge$group == g & ge$locking == lk & !is.na(ge$gammaPeakFreq), ]
+    nsub <- length(unique(sub$sessID))
+    out <- data.frame(group = g, locking = lk, n_obs = nrow(sub), n_subj = nsub,
+                      slope_Hz_per_epoch = NA, SE = NA, t = NA, p = NA)
+    if (nrow(sub) >= 5 && nsub >= 3) {
+      m <- tryCatch(lmer(gammaPeakFreq ~ epoch + (1 | sessID), data = sub), error = function(e) NULL)
+      if (!is.null(m)) {
+        co <- summary(m)$coefficients
+        out$slope_Hz_per_epoch <- co['epoch','Estimate']; out$SE <- co['epoch','Std. Error']
+        out$t <- co['epoch','t value']; out$p <- co['epoch','Pr(>|t|)']
+      }
+    }
+    out
+  })
+  res <- do.call(rbind, res)
+  res <- res[!is.na(res$n_obs) & res$n_obs > 0, ]
+  knitr::kable(res, digits = 4, row.names = FALSE,
+    caption = 'LME: gamma peak freq ~ epoch + (1|subject), per group × sniff type (slope = Hz / 250 ms epoch).')
+} else cat('*gamma-epoch CSV not found*')
+```
+
+### 6.5 Does gamma frequency track gamma power across epochs?
+
+Each epoch's gamma peak is expressed **relative to the channel's whole-recording (overall) FOOOF
+peak** (§3) by **subtraction**: Δfreq = epoch peak − overall peak (Hz; interval-scaled), and
+Δpower = epoch peak height − overall peak height (`gammaPeakPower` is the FOOOF peak height above the
+1/f aperiodic, log10 power ≈ dB/10, already SNR-corrected). Dots are session×epoch, colored by epoch
+(ochre→purple); rows = sniff type, columns = group; the grey line is a pooled fit (orientation
+only). The table is the proper **within-session** test, per group × sniff type.
+
+```{r gamma-scatter, fig.width=10, fig.height=8}
+if (!is.null(ge)) {
+  d <- ge[is.finite(ge$centeredPower) & is.finite(ge$centeredFreq), ]
+  ggplot(d, aes(centeredPower, centeredFreq, color = epoch)) +
+    geom_hline(yintercept = 0, color = 'grey85') +
+    geom_vline(xintercept = 0, color = 'grey85') +
+    geom_point(alpha = 0.8, size = 1.6) +
+    geom_smooth(method = 'lm', se = FALSE, color = 'grey30', linewidth = 0.6) +
+    scale_color_gradient(low = '#D9991A', high = '#66008C', name = 'epoch') +
+    facet_grid(locking ~ group) +
+    labs(x = 'Δ gamma power  (epoch − overall peak; log10 power ≈ dB/10)',
+         y = 'Δ gamma frequency  (epoch − overall peak; Hz)',
+         title = 'Gamma frequency vs power across epochs (rows = sniff type)') +
+    theme_bw()
+}
+```
+
+```{r gamma-scatter-lme}
+if (!is.null(ge)) {
+  suppressMessages({library(lme4); library(lmerTest)})
+  d <- ge[is.finite(ge$centeredPower) & is.finite(ge$centeredFreq), ]
+  combos <- expand.grid(group = levels(ge$group), locking = levels(ge$locking),
+                        stringsAsFactors = FALSE)
+  res <- lapply(seq_len(nrow(combos)), function(k) {
+    g <- combos$group[k]; lk <- combos$locking[k]
+    sub <- d[d$group == g & d$locking == lk, ]; nsub <- length(unique(sub$sessID))
+    out <- data.frame(group = g, locking = lk, n_obs = nrow(sub), n_subj = nsub,
+                      model = 'NA', slope_Hz_per_logPow = NA, SE = NA, t = NA, p = NA)
+    if (nrow(sub) >= 8 && nsub >= 3) {
+      m <- tryCatch(lmer(centeredFreq ~ centeredPower + (centeredPower | sessID), data = sub),
+                    error = function(e) NULL)
+      out$model <- 'rand.slope'
+      if (is.null(m) || lme4::isSingular(m)) {
+        m <- tryCatch(lmer(centeredFreq ~ centeredPower + (1 | sessID), data = sub), error = function(e) NULL)
+        out$model <- 'rand.intercept'
+      }
+      if (!is.null(m)) {
+        co <- summary(m)$coefficients
+        out$slope_Hz_per_logPow <- co['centeredPower','Estimate']; out$SE <- co['centeredPower','Std. Error']
+        out$t <- co['centeredPower','t value']; out$p <- co['centeredPower','Pr(>|t|)']
+      }
+    }
+    out
+  })
+  res <- do.call(rbind, res)
+  res <- res[!is.na(res$n_obs) & res$n_obs > 0, ]
+  knitr::kable(res, digits = 4, row.names = FALSE,
+    caption = 'Within-session LME: Δfreq ~ Δpower + (Δpower|session), per group × sniff type.')
+} else cat('*gamma-epoch CSV not found*')
+```

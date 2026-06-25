@@ -1,0 +1,118 @@
+function R = cue_fooof_macBP(od, gammaBand)
+% CUE_FOOOF_MACBP  FOOOF the macBP channels of a cue outDat (EEGLAB -> FieldTrip).
+%
+%   R = cue_fooof_macBP(od, gammaBand)
+%
+%   Pipes the macBP channels through EEGLAB (eeg struct -> eeglab2fieldtrip),
+%   segments the continuous data, computes a Welch-style PSD via FieldTrip
+%   (ft_freqanalysis mtmfft), and fits FOOOF (cfg.output fooof_aperiodic /
+%   fooof_peaks; brainstorm process_fooof under the hood). Picks bestMac:
+%     - if >=1 macBP has a FOOOF peak in gammaBand -> highest periodic peak power
+%     - else fall back to highest flattened (PSD/aperiodic) power in gammaBand.
+%
+%   Fields: .labels .chanIdx .freq .psd .aperiodic .peaksSpec .flattened
+%     .gammaDetected .peakGammaFreq .peakGammaPower .flatGammaMax
+%     .apExponent .apOffset .r2 .bestIdx .bestMac .bestChanIdx .selectionMethod
+
+    if nargin < 2 || isempty(gammaBand), gammaBand = [30 58]; end
+
+    isMac  = cellfun(@(x) contains(char(string(x)),'macBP'), od.labels);
+    macIdx = find(isMac);
+    macLabs = cellfun(@(x) char(string(x)), od.labels(macIdx), 'uni', 0);
+
+    R = struct();
+    R.labels = macLabs; R.chanIdx = macIdx(:)'; R.gammaBand = gammaBand;
+    R.empty = isempty(macIdx);
+    if R.empty, return; end
+
+    data = double(od.data(macIdx, :));
+    if any(~isfinite(data(:)))
+        data = fillmissing(data, 'linear', 2);
+        data = fillmissing(data, 'nearest', 2);
+    end
+    fs = od.fs;
+    nMac = numel(macIdx);
+
+    % ---- EEGLAB EEG struct (continuous) -> FieldTrip ----
+    EEG = eeg_emptyset();
+    EEG.srate  = fs;
+    EEG.nbchan = nMac;
+    EEG.pnts   = size(data,2);
+    EEG.trials = 1;
+    EEG.xmin   = 0;
+    EEG.xmax   = (EEG.pnts-1)/fs;
+    EEG.data   = single(data);
+    for c = 1:nMac, EEG.chanlocs(c).labels = macLabs{c}; end
+    EEG = eeg_checkset(EEG);
+    ft = eeglab2fieldtrip(EEG, 'preprocessing', 'none');
+
+    % ---- segment + PSD (FieldTrip) ----
+    rcfg = []; rcfg.length = 2; rcfg.overlap = 0.5;
+    seg = ft_redefinetrial(rcfg, ft);
+
+    base = []; base.method='mtmfft'; base.taper='hanning';
+    base.foilim=[2 120]; base.pad='nextpow2'; base.keeptrials='no';
+
+    cfgP = base; cfgP.output = 'pow';
+    Fpow = ft_freqanalysis(cfgP, seg);
+
+    foof = struct('aperiodic_mode','fixed','max_peaks',6, ...
+                  'peak_width_limits',[1 12],'peak_threshold',2, ...
+                  'min_peak_height',0,'power_line','60');
+    cfgA = base; cfgA.output = 'fooof_aperiodic'; cfgA.fooof = foof;
+    Fap = ft_freqanalysis(cfgA, seg);
+    cfgK = base; cfgK.output = 'fooof_peaks'; cfgK.fooof = foof;
+    Fpk = ft_freqanalysis(cfgK, seg);
+
+    R.freq      = Fpow.freq(:)';
+    R.psd       = reshapeChan(Fpow.powspctrm, nMac);
+    R.aperiodic = reshapeChan(Fap.powspctrm,  nMac);
+    R.peaksSpec = reshapeChan(Fpk.powspctrm,  nMac);
+    R.flattened = R.psd ./ R.aperiodic;            % linear ratio (>1 = above 1/f)
+    fp = Fap.fooofparams;                          % per-channel struct array
+
+    inB = R.freq >= gammaBand(1) & R.freq <= gammaBand(2);
+    R.gammaDetected = false(nMac,1);
+    R.peakGammaFreq = nan(nMac,1);
+    R.peakGammaPower= nan(nMac,1);
+    R.flatGammaMax  = nan(nMac,1);
+    R.apExponent    = nan(nMac,1);
+    R.apOffset      = nan(nMac,1);
+    R.r2            = nan(nMac,1);
+
+    for m = 1:nMac
+        R.flatGammaMax(m) = max(10*log10(R.flattened(m, inB)));   % dB over aperiodic
+        ap = fp(m).aperiodic_params;
+        if ~isempty(ap), R.apOffset(m) = ap(1); R.apExponent(m) = ap(end); end
+        if isfield(fp,'r_squared') && ~isempty(fp(m).r_squared), R.r2(m) = fp(m).r_squared; end
+        pp = fp(m).peak_params;            % [center height bw] per peak
+        if ~isempty(pp)
+            ing = pp(:,1) >= gammaBand(1) & pp(:,1) <= gammaBand(2);
+            if any(ing)
+                R.gammaDetected(m) = true;
+                sub = pp(ing,:);
+                [~, mx] = max(sub(:,2));
+                R.peakGammaFreq(m)  = sub(mx,1);
+                R.peakGammaPower(m) = sub(mx,2);
+            end
+        end
+    end
+
+    if any(R.gammaDetected)
+        cand = R.peakGammaPower; cand(~R.gammaDetected) = -inf;
+        [~, bi] = max(cand);
+        R.selectionMethod = 'periodicPeak';
+    else
+        [~, bi] = max(R.flatGammaMax);
+        R.selectionMethod = 'flattenedFallback';
+    end
+    R.bestIdx = bi;
+    R.bestMac = macLabs{bi};
+    R.bestChanIdx = macIdx(bi);
+end
+
+function M = reshapeChan(P, nMac)
+% ensure [nMac x nFreq]
+    if size(P,1) ~= nMac && size(P,2) == nMac, P = P'; end
+    M = P;
+end
