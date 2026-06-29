@@ -43,8 +43,10 @@ and **Control** (all non-Dupi cue sessions).
 
 **FOOOF (Task 1).** Per session, each `macBP` PSD (FieldTrip `ft_freqanalysis`, `mtmfft`,
 2 s segments, 50% overlap, piped in via EEGLAB `eeglab2fieldtrip`) was parameterized with
-FOOOF (`cfg.output = fooof_aperiodic / fooof_peaks`; brainstorm `process_fooof`,
-aperiodic_mode = fixed). The **gamma** band is 30–58 Hz. `bestMac` = the channel with the
+FOOOF over **2–58 Hz** with a **knee** aperiodic term (`cfg.output = fooof_aperiodic /
+fooof_peaks`; brainstorm `process_fooof`). *(The knee + restricted 2–58 Hz range follows the
+low-frequency 1/f bend; an earlier 2–120 Hz fixed-aperiodic fit mis-modeled the 1/f and
+inflated apparent gamma-peak heights.)* The **gamma** band is 30–58 Hz. `bestMac` = the channel with the
 largest **periodic** (oscillatory) gamma peak; if no `macBP` channel in a session has a
 fitted gamma peak, we fall back to the channel with the largest **flattened** (PSD ÷
 aperiodic) power in band. The `selectionMethod` column records which rule fired.
@@ -181,7 +183,7 @@ for (g in groups) {
 
 ## 6. Time-resolved gamma (FOOOF over epochs)
 
-**Methods.** For each session's `bestMac`, Morlet power (5–58 Hz, 100 linear freqs) was
+**Methods.** For each session's `bestMac`, Morlet power (2–58 Hz, 100 linear freqs) was
 computed on the noise-clean finalOnset-locked trials, then averaged over trials and into
 ten sequential **250 ms windows** spanning −500…+2000 ms. FOOOF (same settings as the overall
 channel fit) was applied to each window's power spectrum; the largest 30–58 Hz periodic peak
