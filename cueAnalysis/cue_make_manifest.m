@@ -9,7 +9,9 @@ function cue_make_manifest()
 
     repo = fileparts(fileparts(mfilename('fullpath')));
     addpath(repo); addpath(fullfile(repo, 'cueAnalysis'));
-    groupDir = 'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\groupStatFigs';
+    L = labPaths();
+    groupDir = getenv('CUE_GROUPDIR');
+    if isempty(groupDir), groupDir = fullfile(L.figPath, 'groupStatFigs'); end
     csvPath  = fullfile(groupDir, 'cueTask_fooof_summary.csv');
     manPath  = fullfile(groupDir, 'cueTask_data_manifest.csv');
 

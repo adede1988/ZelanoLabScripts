@@ -8,7 +8,8 @@ function run_cue_task4_group(groupDir)
     addpath(repo); addpath(fullfile(repo,'cueAnalysis'));
     L = labPaths();
     if nargin < 1 || isempty(groupDir)
-        groupDir = 'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\groupStatFigs';
+        groupDir = getenv('CUE_GROUPDIR');
+        if isempty(groupDir), groupDir = fullfile(L.figPath, 'groupStatFigs'); end
     end
     if ~isfolder(groupDir), mkdir(groupDir); end
 

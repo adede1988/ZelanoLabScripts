@@ -21,7 +21,8 @@ function run_cue_tasks123(sessFilter, doSaveBack, csvPath)
 
     cue_init_paths();
     L = labPaths();
-    groupDir = 'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\groupStatFigs';
+    groupDir = getenv('CUE_GROUPDIR');                       % per-job override (parallel runs)
+    if isempty(groupDir), groupDir = fullfile(L.figPath, 'groupStatFigs'); end
     if ~isfolder(groupDir), mkdir(groupDir); end
     if nargin < 3 || isempty(csvPath)
         csvPath = fullfile(groupDir, 'cueTask_fooof_summary.csv');

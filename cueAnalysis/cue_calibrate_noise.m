@@ -8,7 +8,8 @@ function cue_calibrate_noise()
     repo = fileparts(fileparts(mfilename('fullpath')));
     addpath(repo); addpath(fullfile(repo,'cueAnalysis'));
     L = labPaths();
-    groupDir = 'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\groupStatFigs';
+    groupDir = getenv('CUE_GROUPDIR');
+    if isempty(groupDir), groupDir = fullfile(L.figPath, 'groupStatFigs'); end
 
     epWin = [-1.75 5.75]; win = 5;   % 10ms window @500Hz
     T = cue_session_table(false); T = T(T.onDisk, :);

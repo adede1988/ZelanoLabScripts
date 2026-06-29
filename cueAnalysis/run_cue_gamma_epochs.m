@@ -8,7 +8,8 @@ function run_cue_gamma_epochs(sessFilter)
 
     if nargin < 1, sessFilter = []; end
     cue_init_paths(); L = labPaths();
-    groupDir = 'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\groupStatFigs';
+    groupDir = getenv('CUE_GROUPDIR');                       % per-job override (parallel runs)
+    if isempty(groupDir), groupDir = fullfile(L.figPath, 'groupStatFigs'); end
     epoCsv   = fullfile(groupDir, 'cueTask_gammaEpochs.csv');
 
     epWin   = [-1.75 5.75];                 % s, finalOnset-locked (per the plan)

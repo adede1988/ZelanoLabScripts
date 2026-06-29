@@ -7,7 +7,8 @@ function run_cue_ztfr(sessFilter)
 
     if nargin < 1, sessFilter = []; end
     cue_init_paths(); L = labPaths();
-    groupDir = 'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\groupStatFigs';
+    groupDir = getenv('CUE_GROUPDIR');                       % per-job override (parallel runs)
+    if isempty(groupDir), groupDir = fullfile(L.figPath, 'groupStatFigs'); end
     csvPath  = fullfile(groupDir, 'cueTask_fooof_summary.csv');
     dispWin  = [-1000 3000]; sep = 50;
 
