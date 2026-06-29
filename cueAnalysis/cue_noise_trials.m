@@ -1,43 +1,53 @@
-function out = cue_noise_trials(sig, fs, events, epWin, threshUV, winMs)
-% CUE_NOISE_TRIALS  Per-trial sharp-deflection noise detection (analysis3).
+function out = cue_noise_trials(sig, fs, events, epWin, K, winMs)
+% CUE_NOISE_TRIALS  Per-trial sharp-deflection noise detection (RELATIVE rule).
 %
-%   out = cue_noise_trials(sig, fs, events [,epWin,threshUV,winMs])
+%   out = cue_noise_trials(sig, fs, events [,epWin,K,winMs])
 %
-%   Epochs the channel around each event (default [-1.75 +5.75] s, the
-%   single-trial-plot window) and flags a trial as NOISY if anywhere in the
-%   epoch the max-to-min range within a sliding ~winMs window exceeds threshUV
-%   uV (default: >80 uV in a 10 ms window). This is the noise rule used for both
-%   the red flagging on singleTrialRawMac.png AND trial rejection in the
-%   spectrograms (it replaces the old z-score QC).
+%   Detects sharp deflections RELATIVE to the channel's own variability, so that
+%   a uniformly high-amplitude channel is not penalized for being high-amplitude
+%   (the earlier absolute >80 uV/10 ms rule rejected such channels wholesale).
 %
-%   out fields: .D [pnts x N] (NaN cols = out of bounds) .ok [Nx1] .noisy [Nx1]
-%     .times (ms) .epWin .threshUV .winMs .win
+%   Method: d = max-min within a sliding ~winMs window (default 10 ms). Over the
+%   WHOLE recording, robust-z each window: zd = (d - median(d)) / (1.4826*MAD(d)).
+%   A window is an "event" if zd > K (it is K robust-SDs above this channel's
+%   TYPICAL 10 ms swing). A trial is NOISY if its epoch contains any event.
+%   K is calibrated once (cue_calibrate_noise) to drop >0% and <=20% of trials
+%   dataset-wide; the SAME K applies to every session.
+%
+%   out fields: .D [pnts x N] (NaN cols = OOB) .ok .noisy .flagMask [pnts x N]
+%     (zd>K per sample, for plotting) .Z (zd per sample) .times(ms) .K .win .med .sigma
 
-    if nargin < 4 || isempty(epWin),    epWin = [-1.75 5.75]; end
-    if nargin < 5 || isempty(threshUV), threshUV = 80; end
-    if nargin < 6 || isempty(winMs),    winMs = 10; end
+    if nargin < 4 || isempty(epWin), epWin = [-1.75 5.75]; end
+    if nargin < 5 || isempty(K),     K = 10; end   % CALIBRATED (cue_calibrate_noise):
+    %   K=10 -> 8.1% of trials dropped dataset-wide, worst single session 75%
+    %   (no session fully excluded), HRM fully recovered. See Rmd methods.
+    if nargin < 6 || isempty(winMs), winMs = 10; end
+
+    win = max(2, round(winMs/1000*fs));            % samples spanning ~winMs (10 ms = 5 @500Hz)
+    d = movmax(sig, win) - movmin(sig, win);       % 10 ms max-min over the whole recording
+    med = median(d, 'omitnan');
+    sigma = 1.4826 * median(abs(d - med), 'omitnan');
+    if ~(sigma > 0), sigma = eps; end
+    zd = (d - med) ./ sigma;                       % robust z of each window
 
     s0 = round(epWin(1)*fs); s1 = round(epWin(2)*fs); nF = s1 - s0 + 1;
     T = numel(sig); N = numel(events);
-    D = nan(nF, N); ok = false(N,1);
+    D = nan(nF, N); Z = nan(nF, N); ok = false(N,1);
     for i = 1:N
         e = events(i);
         if ~isfinite(e) || e <= 0, continue; end
-        a = round(e) + s0; b = round(e) + s1;
+        a = round(e)+s0; b = round(e)+s1;
         if a < 1 || b > T, continue; end
         seg = sig(a:b);
         if any(~isfinite(seg)), continue; end
-        D(:,i) = seg(:); ok(i) = true;
+        D(:,i) = seg(:); Z(:,i) = zd(a:b)'; ok(i) = true;
     end
 
-    win = max(2, round(winMs/1000*fs));          % samples spanning ~winMs (10 ms = 5 @500Hz)
+    flagMask = Z > K;                              % per-sample relative-extreme flag
     noisy = false(N,1);
-    for i = find(ok)'
-        x = D(:,i);
-        rng = movmax(x, win) - movmin(x, win);   % local max-min over a winMs window
-        noisy(i) = any(rng > threshUV);
-    end
+    for i = find(ok)', noisy(i) = any(flagMask(:,i)); end
 
-    out = struct('D', D, 'ok', ok, 'noisy', noisy, 'times', ((s0:s1)/fs*1000), ...
-                 'epWin', epWin, 'threshUV', threshUV, 'winMs', winMs, 'win', win);
+    out = struct('D', D, 'ok', ok, 'noisy', noisy, 'flagMask', flagMask, 'Z', Z, ...
+                 'times', ((s0:s1)/fs*1000), 'epWin', epWin, 'K', K, 'win', win, ...
+                 'med', med, 'sigma', sigma);
 end

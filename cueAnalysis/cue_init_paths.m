@@ -14,10 +14,11 @@ function cue_init_paths()
     end
     eeglab nogui;
 
-    % --- FieldTrip (this machine; add AFTER eeglab so it wins shared names) ---
-    ftDir = 'C:\Users\Adam\Documents\fieldtrip-20260518';
-    if ~isfolder(ftDir)
-        error('cue_init_paths:noFieldTrip', 'FieldTrip not found at %s', ftDir);
+    % --- FieldTrip (machine-aware via labPaths; add AFTER eeglab so it wins shared names) ---
+    ftDir = L.fieldtrip;
+    if isempty(ftDir) || ~isfolder(ftDir)
+        error('cue_init_paths:noFieldTrip', ...
+            'FieldTrip not found at "%s" (set L.fieldtrip for this machine in labPaths.m)', ftDir);
     end
     addpath(ftDir);
     ft_defaults;

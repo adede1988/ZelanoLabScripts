@@ -1,7 +1,7 @@
 function run_cue_gamma_epochs(sessFilter)
 % RUN_CUE_GAMMA_EPOCHS  (analysis4 Task 1) Time-resolved gamma via FOOOF.
 %   Per session (bestMac, finalOnset-locked, noise-clean trials): Morlet power
-%   5-58 Hz (100 linear freqs), averaged over trials & 250 ms windows into 10
+%   2-58 Hz (100 linear freqs), averaged over trials & 250 ms windows into 10
 %   sequential power spectra (-500..+2000 ms); FOOOF each; the periodic spectra
 %   are plotted (ochre->purple) to <figs>/gammaTimeProgression.png and the
 %   largest 30-58 Hz peak per epoch is written to cueTask_gammaEpochs.csv.
@@ -12,12 +12,12 @@ function run_cue_gamma_epochs(sessFilter)
     epoCsv   = fullfile(groupDir, 'cueTask_gammaEpochs.csv');
 
     epWin   = [-1.75 5.75];                 % s, finalOnset-locked (per the plan)
-    freqs   = linspace(5, 58, 100);         % 100 linearly-spaced Hz
+    freqs   = linspace(2, 58, 100);         % 100 linearly-spaced Hz (2-58 to match FOOOF range)
     cycles  = [3 0.8];
     winEdges = -500:250:2000;               % ms -> 10 windows
     nWin    = numel(winEdges) - 1;
     gammaBand = [30 58];
-    opt = build_fooof_opt([5 58]);
+    opt = build_fooof_opt([2 58]);          % fit 2-58 Hz with a knee (matches cue_fooof_macBP)
     hasOpt = exist('fmincon','file') > 0;
 
     T = cue_session_table(false); T = T(T.onDisk, :);
@@ -62,7 +62,7 @@ function run_cue_gamma_epochs(sessFilter)
             if kept < 3, fprintf('  too few clean trials -> excluded\n'); clear od; continue; end
 
             [~,~,~,times,fout,~,~,atf] = newtimef(ep, nF, epWin*1000, fs, cycles, ...
-                'freqs', [5 58], 'nfreqs', 100, 'freqscale', 'linear', ...
+                'freqs', [2 58], 'nfreqs', 100, 'freqscale', 'linear', ...
                 'baseline', NaN, 'plotersp','off','plotitc','off','verbose','off');
             P = abs(atf).^2;                 % [F x time x trial]
             meanP = mean(P, 3, 'omitnan');   % [F x time]
@@ -142,7 +142,7 @@ function opt = build_fooof_opt(freqRange)
     opt.peak_width_limits   = [1 12];
     opt.max_peaks           = 6;
     opt.min_peak_height     = 0;
-    opt.aperiodic_mode      = 'fixed';
+    opt.aperiodic_mode      = 'knee';
     opt.peak_threshold      = 2;
     opt.return_spectrum     = 1;
     opt.border_threshold    = 1;

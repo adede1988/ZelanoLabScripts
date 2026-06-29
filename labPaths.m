@@ -19,6 +19,9 @@ function L = labPaths()
 %     .labCommon  R:\...\Lab_Common base for shared lab data  (TRAILING filesep)
 %     .gdrive     Google-Drive "My Drive" base (TRAILING filesep), used only for
 %                 the breathing target-trace files; '' if not present here.
+%     .fieldtrip  FieldTrip root to addpath (must contain external/brainstorm for
+%                 the FOOOF analyses); optional ('' / unset) on machines that don't
+%                 run the cue/O15 FOOOF analyses. Used by cue_init_paths/o15_init_paths.
 %
 %   ---- Derived fields (built from the bases; never set these per machine) -----
 %     .repo .eegLocCsv .slowBreathing .closedLoopResp .procBehavior .figPath
@@ -47,12 +50,14 @@ function L = labPaths()
             L.eeglab    = 'C:\Users\Adam\Documents\eeglab2026.0.0';
             L.labCommon = 'R:\Neurology\Zelano_Lab\Lab_Common\';
             L.gdrive    = 'G:\My Drive\';
+            L.fieldtrip = 'C:\Users\Adam\Documents\fieldtrip-20260518';
 
-        case 'dtf8829'         % Northwestern lab workstation
+        case 'dtf8829'         % Northwestern lab workstation / remote lab desktop (ssh labdesktop)
             L.codePre   = 'G:\My Drive\GitHub\';
             L.eeglab    = 'C:\Users\dtf8829\Documents\eeglab2025.0.0';
             L.labCommon = 'R:\Neurology\Zelano_Lab\Lab_Common\';
             L.gdrive    = 'G:\My Drive\';
+            L.fieldtrip = 'E:\fieldtrip-20260518';   % downloaded to E: (C: is space-constrained)
 
         otherwise
             error('labPaths:unknownMachine', ...
@@ -62,7 +67,8 @@ function L = labPaths()
                  '        L.codePre   = ''<...>\\GitHub\\'';     %% holds ZelanoLabScripts, slowBreathing, closed-loop-respiration\n' ...
                  '        L.eeglab    = ''<...>\\eeglab2026.0.0'';\n' ...
                  '        L.labCommon = ''R:\\Neurology\\Zelano_Lab\\Lab_Common\\'';\n' ...
-                 '        L.gdrive    = ''G:\\My Drive\\'';        %% '''''''' if Google Drive is not mapped here\n'], ...
+                 '        L.gdrive    = ''G:\\My Drive\\'';        %% '''''''' if Google Drive is not mapped here\n' ...
+                 '        L.fieldtrip = ''<...>\\fieldtrip-20260518'';  %% optional; needed only for the FOOOF analyses\n'], ...
                  user, host, user);
     end
 
@@ -82,6 +88,7 @@ function L = deriveLabPaths(L)
                 'Base field "%s" is missing (check your labPaths case or labPaths_local).', reqd{i});
         end
     end
+    if ~isfield(L, 'fieldtrip'), L.fieldtrip = ''; end   % optional; cue_init_paths/o15_init_paths validate
 
     cp = L.codePre;
     lc = L.labCommon;

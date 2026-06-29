@@ -51,14 +51,14 @@ function R = cue_fooof_macBP(od, gammaBand)
     seg = ft_redefinetrial(rcfg, ft);
 
     base = []; base.method='mtmfft'; base.taper='hanning';
-    base.foilim=[2 120]; base.pad='nextpow2'; base.keeptrials='no';
+    base.foilim=[2 58]; base.pad='nextpow2'; base.keeptrials='no';   % fit 2-58 Hz (below line noise)
 
     cfgP = base; cfgP.output = 'pow';
     Fpow = ft_freqanalysis(cfgP, seg);
 
-    foof = struct('aperiodic_mode','fixed','max_peaks',6, ...
+    foof = struct('aperiodic_mode','knee','max_peaks',6, ...        % knee: capture the low-freq 1/f bend
                   'peak_width_limits',[1 12],'peak_threshold',2, ...
-                  'min_peak_height',0,'power_line','60');
+                  'min_peak_height',0,'power_line','inf');           % 2-58 Hz excludes 60 -> no line notch
     cfgA = base; cfgA.output = 'fooof_aperiodic'; cfgA.fooof = foof;
     Fap = ft_freqanalysis(cfgA, seg);
     cfgK = base; cfgK.output = 'fooof_peaks'; cfgK.fooof = foof;

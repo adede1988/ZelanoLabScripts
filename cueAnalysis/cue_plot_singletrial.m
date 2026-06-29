@@ -17,7 +17,7 @@ function cue_plot_singletrial(NT, sessID, bestMac, sep, outPng)
     nNoise = sum(NT.noisy(okIdx));
     xlabel('Time from trialStart (ms)');
     ylabel(sprintf('trial   (offset %d uV apart; red = noise)', sep));
-    title(sprintf('%s   %s   single-trial raw macBP (n=%d, %d noise: >%d uV / %d ms)', ...
-        sessID, bestMac, nT, nNoise, NT.threshUV, NT.winMs), 'interpreter','none');
+    title(sprintf('%s   %s   single-trial raw macBP (n=%d, %d noise: relative zd>%.1f)', ...
+        sessID, bestMac, nT, nNoise, NT.K), 'interpreter','none');
     saveas(f, outPng); close(f);
 end

@@ -58,10 +58,21 @@ z-score** (`myChanZscore`): per frequency, a 1000-sample bootstrap distribution 
 z-scored against the **same trialStart baseline** (its baseline frames are appended before
 z-scoring), so the two lockings share one scale (heat = *z vs baseline*).
 
-*Noise rejection (sharp-deflection rule).* A trial is flagged **noisy** if its trialStart-
-locked raw `bestMac` epoch (−1.75…+5.75 s) contains any 10 ms window with a max-to-min range
-**> 80 µV**. Noisy trials are drawn in **red** on `singleTrialRawMac.png` and **excluded from
-all spectrograms** (this replaces the earlier z-score-based QC). The **mean respiration trace**
+*Noise rejection (relative sharp-deflection rule).* Sharp deflections are detected **relative
+to each channel's own variability**, so that a uniformly high-amplitude channel is not rejected
+merely for being high-amplitude. For the `bestMac` trace we compute the sliding 10 ms
+max-to-min range `d` and robust-z it over the **whole recording**:
+`zd = (d − median(d)) / (1.4826·MAD(d))` — i.e. how many robust-SDs a given 10 ms swing sits
+above that channel's *typical* 10 ms swing. A 10 ms window is an **event** if `zd > K`, and a
+trial (trialStart-locked epoch −1.75…+5.75 s) is flagged **noisy** if it contains any event.
+The threshold **K = 10** was calibrated once across the whole dataset (`cue_calibrate_noise`):
+it drops **8.1 %** of trials overall (>0 % and well under the 20 % budget), with the worst
+single session losing 75 % and **no session fully excluded**. The same K applies to every
+session. *(This replaces the earlier absolute >80 µV / 10 ms rule, which scaled with raw
+amplitude and so rejected high-amplitude-but-clean channels wholesale — e.g. it excluded all
+40 trials of `240923_OBE_NMH_HRM`, whose `bestMac` is simply ~3× normal amplitude; under the
+relative rule HRM is fully retained.)* Noisy trials are drawn in **red** on
+`singleTrialRawMac.png` and **excluded from all spectrograms**. The **mean respiration trace**
 (chosen `rsp` channel, flipped) is overlaid on every spectrogram (black line, right axis).
 Display window −1000…+3000 ms. Group means (Task 4) average the per-subject z maps (and
 respiration) within each group on one shared color scale.
@@ -92,12 +103,13 @@ if (!is.null(fooof)) {
 }
 ```
 
-## 3b. Trial noise rejection (sharp-deflection rule)
+## 3b. Trial noise rejection (relative sharp-deflection rule)
 
-`nTrials` = trialStart events; `nNoiseTrials` = trials flagged by the >80 µV / 10 ms rule
-(drawn red on `singleTrialRawMac.png` and excluded); `nFinal_*` = clean trials entering each
-locking's average (`nFinal_finalOnset` is further limited by epochs running off the recording
-end, `nOOB_finalOnset`).
+`nTrials` = trialStart events; `nNoiseTrials` = trials flagged by the **relative** sharp-
+deflection rule (any 10 ms window with `zd > 10`, i.e. >10 robust-SDs above that channel's
+typical 10 ms swing; drawn red on `singleTrialRawMac.png` and excluded); `nFinal_*` = clean
+trials entering each locking's average (`nFinal_finalOnset` is further limited by epochs
+running off the recording end, `nOOB_finalOnset`).
 
 ```{r qc-table}
 qcCols <- c('sessID','group','nTrials','nNoiseTrials','nOOB_finalOnset',
