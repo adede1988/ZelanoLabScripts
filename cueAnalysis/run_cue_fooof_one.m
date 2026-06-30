@@ -17,7 +17,7 @@ function run_cue_fooof_one(sessIDs, doSaveBack)
 
     hdr = {'subID','sessID','sessNum','type','group','channel', ...
            'gammaPeakDetected','peakGammaFreq','peakGammaPower','flattenedGammaMax', ...
-           'aperiodicExponent','aperiodicOffset','fooofR2','isBestMac','selectionMethod'};
+           'aperiodicExponent','aperiodicOffset','fooofR2','isBestMac','selectionMethod','rejRate'};
 
     F = readtable(csvPath);   % text cols -> cellstr, numeric -> double
 
@@ -44,7 +44,7 @@ function run_cue_fooof_one(sessIDs, doSaveBack)
             rows(m,:) = {char(T.subID(i)), id, T.sessNum(i), char(T.type(i)), char(T.group(i)), ...
                 R.labels{m}, double(R.gammaDetected(m)), R.peakGammaFreq(m), R.peakGammaPower(m), ...
                 R.flatGammaMax(m), R.apExponent(m), R.apOffset(m), R.r2(m), double(m==R.bestIdx), ...
-                R.selectionMethod};
+                R.selectionMethod, R.rejRate(m)};
         end
         nr = cell2table(rows, 'VariableNames', hdr);
 

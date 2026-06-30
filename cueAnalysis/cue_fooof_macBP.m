@@ -6,13 +6,17 @@ function R = cue_fooof_macBP(od, gammaBand)
 %   Pipes the macBP channels through EEGLAB (eeg struct -> eeglab2fieldtrip),
 %   segments the continuous data, computes a Welch-style PSD via FieldTrip
 %   (ft_freqanalysis mtmfft), and fits FOOOF (cfg.output fooof_aperiodic /
-%   fooof_peaks; brainstorm process_fooof under the hood). Picks bestMac:
-%     - if >=1 macBP has a FOOOF peak in gammaBand -> highest periodic peak power
-%     - else fall back to highest flattened (PSD/aperiodic) power in gammaBand.
+%   fooof_peaks; brainstorm process_fooof under the hood). Picks bestMac AFTER a
+%   noise screen that drops channels rejecting > noiseThresh (0.30) of trials by the
+%   relative sharp-deflection rule (cue_noise_trials), so a noisy channel whose
+%   broadband noise mimics a gamma peak can't win. Among the surviving (clean)
+%   channels: highest periodic gamma peak; else highest flattened power; if ALL
+%   channels are too noisy, the least-noisy one (selectionMethod 'allNoisy_leastBad').
 %
 %   Fields: .labels .chanIdx .freq .psd .aperiodic .peaksSpec .flattened
 %     .gammaDetected .peakGammaFreq .peakGammaPower .flatGammaMax
-%     .apExponent .apOffset .r2 .bestIdx .bestMac .bestChanIdx .selectionMethod
+%     .apExponent .apOffset .r2 .rejRate .noiseThresh
+%     .bestIdx .bestMac .bestChanIdx .selectionMethod
 
     if nargin < 2 || isempty(gammaBand), gammaBand = [30 58]; end
 
@@ -98,13 +102,31 @@ function R = cue_fooof_macBP(od, gammaBand)
         end
     end
 
-    if any(R.gammaDetected)
-        cand = R.peakGammaPower; cand(~R.gammaDetected) = -inf;
-        [~, bi] = max(cand);
-        R.selectionMethod = 'periodicPeak';
-    else
-        [~, bi] = max(R.flatGammaMax);
-        R.selectionMethod = 'flattenedFallback';
+    % --- noise screen: per-channel trial-rejection rate (relative sharp-deflection
+    %     rule), so bestMac avoids channels whose "gamma" is actually broadband noise
+    %     (e.g. HRM macBP5: a noisy channel with the largest, artifact-driven peak) ---
+    NOISE_THRESH = 0.30;                          % drop channels rejecting > this fraction
+    R.noiseThresh = NOISE_THRESH;
+    R.rejRate = nan(nMac, 1);
+    ev = [];
+    try, ev = od.TTL.trialStart; catch, end       % cue/O15 finals; skip screen if absent
+    if ~isempty(ev)
+        for m = 1:nMac
+            NTm = cue_noise_trials(data(m, :), fs, ev);
+            if any(NTm.ok), R.rejRate(m) = mean(NTm.noisy(NTm.ok)); end
+        end
+    end
+    elig = ~(R.rejRate > NOISE_THRESH);           % rejRate<=thresh OR NaN(no events) => eligible
+    gd   = R.gammaDetected(:);
+
+    if any(gd & elig)                             % best periodic gamma among clean channels
+        cand = R.peakGammaPower; cand(~(gd & elig)) = -inf;
+        [~, bi] = max(cand); R.selectionMethod = 'periodicPeak';
+    elseif any(elig)                              % no clean gamma peak -> flattened among clean
+        cand = R.flatGammaMax; cand(~elig) = -inf;
+        [~, bi] = max(cand); R.selectionMethod = 'flattenedFallback';
+    else                                          % every channel too noisy -> least-bad
+        [~, bi] = min(R.rejRate); R.selectionMethod = 'allNoisy_leastBad';
     end
     R.bestIdx = bi;
     R.bestMac = macLabs{bi};

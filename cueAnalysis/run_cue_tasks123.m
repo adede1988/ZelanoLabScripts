@@ -37,7 +37,7 @@ function run_cue_tasks123(sessFilter, doSaveBack, csvPath)
 
     hdr = {'subID','sessID','sessNum','type','group','channel', ...
            'gammaPeakDetected','peakGammaFreq','peakGammaPower','flattenedGammaMax', ...
-           'aperiodicExponent','aperiodicOffset','fooofR2','isBestMac','selectionMethod'};
+           'aperiodicExponent','aperiodicOffset','fooofR2','isBestMac','selectionMethod','rejRate'};
     rows = {};
 
     for i = 1:height(T)
@@ -60,7 +60,7 @@ function run_cue_tasks123(sessFilter, doSaveBack, csvPath)
                     char(T.group(i)), R.labels{m}, double(R.gammaDetected(m)), ...
                     R.peakGammaFreq(m), R.peakGammaPower(m), R.flatGammaMax(m), ...
                     R.apExponent(m), R.apOffset(m), R.r2(m), double(m==R.bestIdx), ...
-                    R.selectionMethod}; %#ok<AGROW>
+                    R.selectionMethod, R.rejRate(m)}; %#ok<AGROW>
             end
 
             od.bestMac = R.bestMac; od.bestMacMethod = R.selectionMethod;
