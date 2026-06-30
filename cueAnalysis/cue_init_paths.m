@@ -9,9 +9,9 @@ function cue_init_paths()
     addpath(fullfile(L.repo, 'cueAnalysis'));
 
     % --- EEGLAB (headless) ---
-    if exist('eeglab','file') ~= 2
-        addpath(L.eeglab);
-    end
+    addpath(L.eeglab);   % unconditional: a stale/saved eeglab path entry in a detached
+                         % (WMI) MATLAB makes an exist() guard skip this, then `eeglab`
+                         % resolves to a broken reference and errors. Prepending always wins.
     eeglab nogui;
 
     % --- FieldTrip (machine-aware via labPaths; add AFTER eeglab so it wins shared names) ---
