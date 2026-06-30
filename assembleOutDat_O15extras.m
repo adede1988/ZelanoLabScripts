@@ -12,7 +12,12 @@ function outDat = assembleOutDat_O15extras(outDat, S, raw)
     if size(tmp, 1) == 1
         outDat.loadFile = tmp.name;
     else
-        error('assembleOutDat_O15extras:loadFile', 'load file not identified uniquely');
+        tmp = tmp(cellfun(@(x) contains(x, 'AD'), {tmp.name}));
+         if size(tmp, 1) == 1
+            outDat.loadFile = tmp.name;
+        else
+            error('assembleOutDat_O15extras:loadFile', 'load file not identified uniquely');
+        end
     end
     outDat.preProcScript = 'O15PreProc.m';
 end

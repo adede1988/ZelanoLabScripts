@@ -28,7 +28,7 @@ EEGLOC  = readtable(L.eegLocCsv);   % load once, reuse
 cfg        = applyParams('O15','main');
 sessionIDs = cfg.sessionIDs;
 
-for s = 1:numel(sessionIDs)
+for s = 34:numel(sessionIDs)
 
   
 

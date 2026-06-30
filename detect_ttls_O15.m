@@ -51,7 +51,11 @@ function [outTTLs, raw] = detect_ttls_O15(raw, P)
     for di = 5:length(downs)
         if downs(di) - downs(di-4) < 3500
             starti = di; 
-            % break
+            if strcmp(raw.sessID, '250929_Dupi_NMH_GH_2') || ...
+                strcmp(raw.sessID, '260105_OBE_NWU_ZF_1') || ... 
+                strcmp(raw.sessID, '251120_Dupi_NMH_JL_2')
+                break
+            end
         end
     end
     downs(1:starti) = []; 
@@ -68,10 +72,7 @@ function [outTTLs, raw] = detect_ttls_O15(raw, P)
         trialMarks(P.ttl.removeTrialMarksIdx) = []; %aberant extra TTL  
     end
     
-    confirmMarks = sniffMarks(diff(sniffMarks)<raw.fs_raw);
-    idx = find(diff(sniffMarks)<raw.fs_raw);
-    sniffMarks([idx, idx+1]) = []; 
-
+    
  
 
     if length(trialMarks) ~= P.ttl.expectedTrialCount
@@ -79,7 +80,30 @@ function [outTTLs, raw] = detect_ttls_O15(raw, P)
         
     end
 
-    figure('visible', false, 'position', [0,0,1000,500])
+    confirmMarks = []; 
+    for tt = 1:length(trialMarks)
+        if tt < length(trialMarks)
+            idx = find(sniffMarks>trialMarks(tt) & ...
+                sniffMarks<trialMarks(tt+1));
+        else
+            idx = find(sniffMarks>trialMarks(tt));
+        end
+        if length(idx) == 2
+            if sniffMarks(idx(2))- sniffMarks(idx(1)) < raw.fs_raw
+                confirmMarks = [confirmMarks sniffMarks(idx(1))];
+                sniffMarks(idx) = []; 
+            end
+        end
+    end
+    
+    % confirmMarks = sniffMarks(diff(sniffMarks)<raw.fs_raw);
+    % idx = find(diff(sniffMarks)<raw.fs_raw);
+    % sniffMarks([idx, idx+1]) = []; 
+
+
+
+
+    figure  %('visible', false, 'position', [0,0,1000,500])
     plot(photoDiode)
     xline(trialMarks)
     xline(confirmMarks, 'color', 'red')
