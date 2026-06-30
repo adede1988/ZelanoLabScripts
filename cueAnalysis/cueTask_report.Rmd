@@ -46,10 +46,16 @@ and **Control** (all non-Dupi cue sessions).
 FOOOF over **2–58 Hz** with a **knee** aperiodic term (`cfg.output = fooof_aperiodic /
 fooof_peaks`; brainstorm `process_fooof`). *(The knee + restricted 2–58 Hz range follows the
 low-frequency 1/f bend; an earlier 2–120 Hz fixed-aperiodic fit mis-modeled the 1/f and
-inflated apparent gamma-peak heights.)* The **gamma** band is 30–58 Hz. `bestMac` = the channel with the
-largest **periodic** (oscillatory) gamma peak; if no `macBP` channel in a session has a
-fitted gamma peak, we fall back to the channel with the largest **flattened** (PSD ÷
-aperiodic) power in band. The `selectionMethod` column records which rule fired.
+inflated apparent gamma-peak heights.)* The **gamma** band is 30–58 Hz. Before selecting `bestMac`, each channel's
+**trial-rejection rate** is estimated (fraction of trialStart epochs flagged as noisy by
+the relative sharp-deflection rule, below); channels where this rate exceeds **30%** are
+excluded from bestMac consideration, preventing a high-noise channel whose broadband artifact
+mimics a gamma peak from being selected. Among the remaining (clean) channels: `bestMac` is
+the channel with the largest **periodic** (oscillatory) gamma peak; if no clean `macBP`
+channel has a fitted gamma peak we fall back to the largest **flattened** (PSD ÷ aperiodic)
+power; if all channels exceed the 30% threshold we select the least-noisy one
+(`selectionMethod = 'allNoisy_leastBad'`). The `selectionMethod` and per-channel `rejRate`
+columns record the outcome.
 
 **Spectrograms (Tasks 1–4, z-score method).** For each session's `bestMac`, per-trial
 time-frequency power was obtained from EEGLAB `newtimef` (Morlet, 100 log-spaced freqs
@@ -71,9 +77,10 @@ The threshold **K = 10** was calibrated once across the whole dataset (`cue_cali
 it drops **8.1 %** of trials overall (>0 % and well under the 20 % budget), with the worst
 single session losing 75 % and **no session fully excluded**. The same K applies to every
 session. *(This replaces the earlier absolute >80 µV / 10 ms rule, which scaled with raw
-amplitude and so rejected high-amplitude-but-clean channels wholesale — e.g. it excluded all
-40 trials of `240923_OBE_NMH_HRM`, whose `bestMac` is simply ~3× normal amplitude; under the
-relative rule HRM is fully retained.)* Noisy trials are drawn in **red** on
+amplitude and rejected high-amplitude-but-clean channels wholesale. The noise-aware
+**channel selection** (§1) further ensures that a noisy channel cannot be chosen as
+`bestMac` — e.g. `240923_OBE_NMH_HRM` macBP5 (>80 % trial rejection) is excluded from
+eligibility and macBP2, which is clean, is selected instead.)* Noisy trials are drawn in **red** on
 `singleTrialRawMac.png` and **excluded from all spectrograms**. The **mean respiration trace**
 (chosen `rsp` channel, flipped) is overlaid on every spectrogram (black line, right axis).
 Display window −1000…+3000 ms. Group means (Task 4) average the per-subject z maps (and
@@ -99,9 +106,10 @@ if (!is.null(fooof)) {
 
 ```{r fooof-all}
 if (!is.null(fooof)) {
-  knitr::kable(fooof[, c('sessID','group','channel','gammaPeakDetected','peakGammaFreq',
-            'peakGammaPower','flattenedGammaMax','aperiodicExponent','fooofR2','isBestMac')],
-            digits = 3, caption = 'All macBP channels.')
+  cols <- intersect(c('sessID','group','channel','gammaPeakDetected','peakGammaFreq',
+            'peakGammaPower','flattenedGammaMax','aperiodicExponent','fooofR2',
+            'rejRate','isBestMac'), names(fooof))
+  knitr::kable(fooof[, cols], digits = 3, caption = 'All macBP channels.')
 }
 ```
 

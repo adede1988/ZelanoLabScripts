@@ -154,7 +154,8 @@ end
 
 function cmd = knit_command(rmd)
 % Build the Rscript render command (or '' if Rscript can't be located).
-    cands = {'C:\Program Files\R\R-4.4.1\bin\Rscript.exe', ...
+    cands = {'C:\Program Files\R\R-4.5.2\bin\Rscript.exe', ...
+             'C:\Program Files\R\R-4.4.1\bin\Rscript.exe', ...
              'C:\Program Files\R\R-4.4.0\bin\Rscript.exe', 'Rscript'};
     rscript = '';
     for k = 1:numel(cands)
