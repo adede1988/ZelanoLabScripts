@@ -1,6 +1,8 @@
-function T = v2_tfr(sig, fs, onsets, good, C)
+function T = v2_tfr(sig, fs, onsets, good, C, endLimit)
 % V2_TFR  Epoch bestMac -> broadband analytic + FASLT TFR -> baseline z-score (spec 4).
-%   T = v2_tfr(sig, fs, onsets, good, C)
+%   T = v2_tfr(sig, fs, onsets, good, C [,endLimit])
+%   endLimit (optional, Nx1 absolute sample): O15 long-window guard -- blank each epoch beyond
+%   the next finalOnset (post-truncation TFR/padData -> NaN; burstTruncated flag set).
 %   sig    : 1 x nSamp bestMac channel (continuous)
 %   onsets : behDat.finalOnset samples
 %   good   : N x 1 logical (valid & not-noisy) trials to process; others -> NaN
@@ -47,7 +49,19 @@ function T = v2_tfr(sig, fs, onsets, good, C)
         end
     end
 
+    % O15 long-window guard: blank each epoch beyond the next finalOnset
+    burstTruncated = false(N,1);
+    if nargin>=6 && ~isempty(endLimit)
+        for i = find(good)'
+            if ~isfinite(endLimit(i)), continue; end
+            cutMs = (endLimit(i)-onsets(i))/fs*1000;
+            zc = tMs >= cutMs;         if any(zc), zTFR(:, zc, i) = NaN; end
+            pc = E.tPadMs >= cutMs;    if any(pc), padData(i, pc) = NaN; end
+            burstTruncated(i) = cutMs <= C.epochWin(2)*1000;
+        end
+    end
+
     T = struct('padData',padData,'coreIdx',coreIdx,'tMs',tMs,'tPadMs',E.tPadMs, ...
         'freqs',bank.F(:)','zTFR',zTFR,'good',good,'valid',E.valid,'nCore',nCore, ...
-        'N',N,'fs',fs);
+        'N',N,'fs',fs,'burstTruncated',burstTruncated);
 end

@@ -21,7 +21,7 @@ try
     setenv('CHIRP_V2OUT','E:\chirpV2out');
 
     maxNumCompThreads(6);
-    chirpAnalysisV2([], struct('saveFig',true,'saveMat',true));
+    chirpAnalysisV2('all', [], struct('saveFig',true,'saveMat',true));   % cueTask + O15 (thresh deferred)
 
     fprintf('=== chirpV2 job DONE %s ===\n', datestr(now));
     fid=fopen('E:\_CHIRPV2_DONE.txt','w'); fprintf(fid,'done\n'); fclose(fid);

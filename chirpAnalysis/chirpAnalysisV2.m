@@ -1,188 +1,175 @@
-function chirpAnalysisV2(sessFilter, opts)
-% CHIRPANALYSISV2  Driver for the V2 OB sniff-locked gamma ridge + phase-continuity analysis.
-%   chirpAnalysisV2()                       % all fresh cue finals under C.dataRoot
-%   chirpAnalysisV2({'<sessID>'})           % one/few sessions (profiling)
-%   chirpAnalysisV2([], struct('saveFig',true,'saveMat',true,'maxSessions',1))
+function chirpAnalysisV2(task, sessFilter, opts)
+% CHIRPANALYSISV2  Driver for the OB sniff-locked gamma ridge + phase/power continuity analysis,
+%   generalized across tasks and split by trial-type category (spec chirpAnalysis_4.md).
+%   chirpAnalysisV2()                    % all ready tasks (cueTask, O15) all sessions
+%   chirpAnalysisV2('O15')               % one task
+%   chirpAnalysisV2('cueTask', {'<id>'}) % one/few sessions (profiling)
+%   chirpAnalysisV2('cueTask', [], struct('saveFig',true,'saveMat',false,'maxSessions',1))
 %
-%   Per session (cueTask, spec chirpAnalysis_2.md):
-%     load final -> bestMac + behDat.finalOnset -> cue_noise_trials QC (>=80% retained) ->
-%     v2_tfr (epoch [-1,+3]s pad 1.5s, FASLT 20-70, baseline z-score) ->
-%     v2_ridges (tfridge primary + Gaussian-FWHM peel -> secondary) -> ridgeInfo ->
-%     v2_powerphase -> powerPhaseContinuity -> figures -> write both fields into outDat and
-%     re-save the final (E:). Copyback E:->R: (finals + figs) is a separate step from home.
-%
-%   ALL helper functions are called from here (spec 2.6). Outputs on E:; figures under
-%   C.figRootE\<sessID>\<figSub>. Everything task-agnostic except sniff selection (cue = cued).
+%   Per session: load final -> bestMac + behDat.finalOnset -> cue_noise_trials QC -> v2_tfr
+%   (FASLT + baseline z; O15 long-window guard) -> v2_ridges (primary + peel -> secondary) ->
+%   v2_powerphase (gammaPeak, peak/ridge burst, phase continuity, burstTruncated) ->
+%   v2_peaklocked (peakLockedRidge + per-trial peak-aligned TFR). Writes ridgeInfo +
+%   powerPhaseContinuity into outDat (all trials) and re-saves the final. Then, PER TRIAL-TYPE
+%   CATEGORY (cue: hit/cr; O15: start/free/confirm; thresh: air/low/med), computes subject means
+%   and figures (filenames tagged <task>_<cat>) and a per-subject aggregate for the group step.
+%   ALL helpers called from here (spec 2.6). Groups = outDat.type (Dupi vs OBE).
 
-    if nargin<1, sessFilter = []; end
-    if nargin<2, opts = struct(); end
+    if nargin<1 || isempty(task), task = 'all'; end
+    if nargin<2, sessFilter = []; end
+    if nargin<3, opts = struct(); end
     setup_chirpAnalysis_paths(false);
     here = fileparts(mfilename('fullpath')); repo = fileparts(here);
-    addpath(fullfile(repo,'cueAnalysis'));   % cue_noise_trials.m (spec 2.4 QC)
+    addpath(fullfile(repo,'cueAnalysis'));            % cue_noise_trials.m
     C = v2_config();
-    saveFig = getf(opts,'saveFig',true);
-    saveMat = getf(opts,'saveMat',true);
+    saveFig = getf(opts,'saveFig',true); saveMat = getf(opts,'saveMat',true);
 
-    T0 = tic;
-    files = listCueFinals(C);
-    if isempty(files), fprintf('No cue finals under %s\n', C.dataRoot); return; end
-    if ~isempty(sessFilter)
-        keep = ismember({files.sessID}, cellstr(string(sessFilter)));
-        files = files(keep);
-    end
-    if isfield(opts,'maxSessions') && numel(files) > opts.maxSessions
-        files = files(1:opts.maxSessions);
-    end
-    fprintf('chirpAnalysisV2: %d session(s); figRootE=%s\n', numel(files), C.figRootE);
-
+    tasks = cellstr(task);
+    if strcmpi(task,'all'), tasks = {'cueTask','O15'}; end   % threshTask deferred (no bestMac yet)
     outDir = getenvOr('CHIRP_V2OUT','E:\chirpV2out'); if ~isfolder(outDir), mkdir(outDir); end
-    rows = {};
 
-    for si = 1:numel(files)
-        id = files(si).sessID; fp = files(si).path; t0 = tic;
-        fprintf('\n==== %d/%d  %s ====\n', si, numel(files), id);
-        try
-            % ---- load full final (preserve top-level var name for save-back) ----
-            s = load(fp); fn = fieldnames(s); vname = fn{1}; od = s.(vname); clear s;
-            [bestSig, bestLab, onsets, behDat, fs, figR] = extractSubstrate(od, id);
-            N = numel(onsets);
+    for ti = 1:numel(tasks)
+        tk = tasks{ti}; tc = v2_taskconfig(tk);
+        files = listFinals(C, tc.suffix);
+        if ~isempty(sessFilter), files = files(ismember({files.sessID}, cellstr(string(sessFilter)))); end
+        if isfield(opts,'maxSessions') && numel(files) > opts.maxSessions, files = files(1:opts.maxSessions); end
+        aggDir = fullfile(outDir, ['agg_' tk]); if ~isfolder(aggDir), mkdir(aggDir); end
+        fprintf('\n#### TASK %s : %d session(s) ####\n', tk, numel(files));
 
-            % ---- noise QC on bestMac (spec 2.4) ----
-            nq = cue_noise_trials(bestSig, fs, onsets, C.noise.epWin, C.noise.K, C.noise.winMs);
-            good = nq.ok & ~nq.noisy;
-            retention = mean(good);
-            fprintf('  bestMac=%s  N=%d  retained=%.0f%% (K=%g)\n', bestLab, N, 100*retention, C.noise.K);
+        for si = 1:numel(files)
+            id = files(si).sessID; fp = files(si).path; t0 = tic;
+            fprintf('\n==== [%s] %d/%d  %s ====\n', tk, si, numel(files), id);
+            try
+                s = load(fp); fn = fieldnames(s); vname = fn{1}; od = s.(vname); clear s;
+                [ok,bestSig,bestLab,onsets,catLab,fs,grp,endLimit,msg] = extractSubstrate(od, tc);
+                if ~ok, fprintf('  SKIP: %s\n', msg); continue; end
+                grp = v2_grouplabel(grp, id);           % Dupi -> DupiS1/S2/S3; OBE stays OBE
+                N = numel(onsets);
 
-            % ---- TFR (epoch, FASLT, baseline z) ----
-            T = v2_tfr(bestSig, fs, onsets, good, C);
-            fprintf('  TFR done: %d freqs x %d samp x %d good trials\n', numel(T.freqs), T.nCore, nnz(T.good));
+                nq = cue_noise_trials(bestSig, fs, onsets, C.noise.epWin, C.noise.K, C.noise.winMs);
+                good = nq.ok & ~nq.noisy;
+                fprintf('  bestMac=%s N=%d retained=%.0f%% grp=%s cats:', bestLab, N, 100*mean(good), grp);
 
-            % ---- ridges (primary + peel + secondary) ----
-            ridgeInfo = v2_ridges(T, C);
-            ridgeInfo.bestMac = bestLab; ridgeInfo.retention = retention; ridgeInfo.noiseK = C.noise.K;
-            ridgeInfo.noisyMask = nq.noisy(:); ridgeInfo.okMask = nq.ok(:);
+                T   = v2_tfr(bestSig, fs, onsets, good, C, endLimit);
+                ridgeInfo = v2_ridges(T, C);
+                ridgeInfo.bestMac = bestLab; ridgeInfo.task = tk; ridgeInfo.noiseK = C.noise.K;
+                ridgeInfo.noisyMask = nq.noisy(:); ridgeInfo.okMask = nq.ok(:);
+                pp  = v2_powerphase(T, ridgeInfo, C);
+                [plr, ~, relFreq, relTimeMs, centStack] = v2_peaklocked(T, pp, C);
+                ridgeInfo.peakLockedRidge = plr;
 
-            % ---- power / phase continuity (+ ridgeBurst) ----
-            pp = v2_powerphase(T, ridgeInfo, C);
+                od.ridgeInfo = ridgeInfo; od.powerPhaseContinuity = pp;
+                if saveMat, tmp = struct(); tmp.(vname) = od; save(fp,'-struct','tmp','-v7.3'); end
 
-            % ---- peak-aligned analysis (peakLockedRidge + freq/time-centered mean TFR) ----
-            [plr, meanPeakTFR, relFreq, relTimeMs] = v2_peaklocked(T, pp, C);
-            ridgeInfo.peakLockedRidge = plr;
+                % peak-centered phase-consistency matrices (once per session)
+                [Mpk, phaseRelT] = v2_peakcenter(pp.peakPhaseConsistency,  pp.tMs, pp.gammaPeakTime, 1000, fs);
+                [Mrg, ~        ] = v2_peakcenter(pp.ridgePhaseConsistency, pp.tMs, pp.gammaPeakTime, 1000, fs);
 
-            % ---- write new fields into outDat ----
-            od.ridgeInfo = ridgeInfo;
-            od.powerPhaseContinuity = pp;
-
-            % ---- group + subject mean matrices for the group step ----
-            grp = 'Dupi'; if isfield(od,'type')&&~isempty(od.type), grp = char(string(od.type)); end
-            gidx = find(T.good);
-            meanTFR = mean(T.zTFR(:,:,gidx), 3, 'omitnan');           % onset-locked subject mean
-            [Mpk, phaseRelT] = v2_peakcenter(pp.peakPhaseConsistency,  pp.tMs, pp.gammaPeakTime, 1000, fs);
-            [Mrg, ~        ] = v2_peakcenter(pp.ridgePhaseConsistency, pp.tMs, pp.gammaPeakTime, 1000, fs);
-            peakConsMean  = mean(abs(Mpk(gidx,:)),1,'omitnan');
-            ridgeConsMean = mean(abs(Mrg(gidx,:)),1,'omitnan');
-
-            % ---- figures (E: mirror of the subject figs path) ----
-            figDirE = fullfile(C.figRootE, id, C.figSub);
-            if saveFig
-                v2_figs_ridge(T, ridgeInfo, figDirE, id, bestLab, C);
-                v2_figs_phase(pp, figDirE, id, C);
-                v2_fig_peaktfr(meanPeakTFR, relFreq, relTimeMs, ...
-                    fullfile(figDirE, sprintf('peakAlignedTFR_%s.png', id)), ...
-                    sprintf('%s  peak-aligned mean TFR', strrep(id,'_','\_')));
+                figDirE = fullfile(C.figRootE, id, C.figSub);
+                agg = struct('sessID',id,'group',grp,'task',tk,'bestMac',bestLab, ...
+                    'freqs',T.freqs,'tMs',T.tMs,'relFreq',relFreq,'relTimeMs',relTimeMs,'phaseRelT',phaseRelT);
+                byCat = struct('cat',{},'meanTFR',{},'meanPeakTFR',{},'peakConsMean',{},'ridgeConsMean',{}, ...
+                    'peakBurst',{},'ridgeBurst',{},'medPeakBurst',{},'medRidgeBurst',{},'nTrials',{});
+                catStr = "";
+                for ci = 1:numel(tc.cats)
+                    cat = tc.cats{ci};
+                    gc = find(good & (catLab==string(cat)));
+                    if isempty(gc), continue; end
+                    catStr = catStr + sprintf(' %s=%d', cat, numel(gc));
+                    tag = sprintf('%s_%s', tk, cat); tagT = strrep(tag,'_','\_');
+                    meanTFR     = mean(T.zTFR(:,:,gc), 3, 'omitnan');
+                    meanPeakTFR = mean(centStack(:,:,gc), 3, 'omitnan');
+                    if saveFig
+                        % single-trial examples (spread across the category's trials)
+                        pick = gc(unique(round(linspace(1, numel(gc), min(6,numel(gc))))));
+                        for j = pick(:)'
+                            v2_fig_singletrial(T.zTFR(:,:,j), T.freqs, T.tMs, ...
+                                ridgeInfo.primaryRidge.f(j,:), ridgeInfo.secondaryRidge.f(j,:), ...
+                                fullfile(figDirE, sprintf('sub-%s_%s_ch-%s_trial-%03d.png', id, tag, bestLab, j)), ...
+                                sprintf('%s  %s  trial %d', strrep(id,'_','\_'), tagT, j), C);
+                        end
+                        v2_fig_meantfr(meanTFR, T.freqs, T.tMs, ...
+                            fullfile(figDirE, sprintf('meanTFR_%s_%s.png', tag, id)), ...
+                            sprintf('%s  %s  mean TFR (n=%d)', strrep(id,'_','\_'), tagT, numel(gc)), C);
+                        v2_fig_phasecons(Mpk, Mrg, gc, phaseRelT, ...
+                            fullfile(figDirE, sprintf('phaseConsistency_%s_%s.png', tag, id)), ...
+                            sprintf('%s  %s  phase continuity (n=%d)', strrep(id,'_','\_'), tagT, numel(gc)), C);
+                        v2_fig_bursthist(pp.peakBurstLength(gc), pp.ridgeBurstLength(gc), ...
+                            fullfile(figDirE, sprintf('burstLength_%s_%s.png', tag, id)), ...
+                            sprintf('%s  %s  burst length', strrep(id,'_','\_'), tagT));
+                        v2_fig_peaktfr(meanPeakTFR, relFreq, relTimeMs, ...
+                            fullfile(figDirE, sprintf('peakAlignedTFR_%s_%s.png', tag, id)), ...
+                            sprintf('%s  %s  peak-aligned mean TFR', strrep(id,'_','\_'), tagT));
+                    end
+                    byCat(end+1) = struct('cat',cat,'meanTFR',meanTFR,'meanPeakTFR',meanPeakTFR, ...
+                        'peakConsMean',mean(abs(Mpk(gc,:)),1,'omitnan'),'ridgeConsMean',mean(abs(Mrg(gc,:)),1,'omitnan'), ...
+                        'peakBurst',pp.peakBurstLength(gc(~isnan(pp.peakBurstLength(gc)))), ...
+                        'ridgeBurst',pp.ridgeBurstLength(gc(~isnan(pp.ridgeBurstLength(gc)))), ...
+                        'medPeakBurst',nanmed(pp.peakBurstLength(gc)),'medRidgeBurst',nanmed(pp.ridgeBurstLength(gc)), ...
+                        'nTrials',numel(gc)); %#ok<AGROW>
+                end
+                agg.byCat = byCat;
+                save(fullfile(aggDir,[id '_agg.mat']),'agg','-v7.3');
+                fprintf('%s | done %.1fs\n', catStr, toc(t0));
+                clear T ridgeInfo pp od centStack Mpk Mrg;
+            catch ME
+                fprintf('  *** SESSION FAILED (%s): %s\n', id, ME.message);
+                fprintf('      %s\n', getReport(ME,'basic','hyperlinks','off'));
             end
+        end
 
-            % ---- per-subject aggregation (.mat) for the group step ----
-            agg = struct('sessID',id,'group',grp,'bestMac',bestLab,'retention',retention, ...
-                'meanTFR',meanTFR,'freqs',T.freqs,'tMs',T.tMs, ...
-                'meanPeakTFR',meanPeakTFR,'relFreq',relFreq,'relTimeMs',relTimeMs, ...
-                'phaseRelT',phaseRelT,'peakConsMean',peakConsMean,'ridgeConsMean',ridgeConsMean, ...
-                'peakBurst',pp.peakBurstLength(~isnan(pp.peakBurstLength)), ...
-                'ridgeBurst',pp.ridgeBurstLength(~isnan(pp.ridgeBurstLength)), ...
-                'medPeakBurst',nanmed(pp.peakBurstLength),'medRidgeBurst',nanmed(pp.ridgeBurstLength));
-            aggDir = fullfile(outDir,'agg'); if ~isfolder(aggDir), mkdir(aggDir); end
-            save(fullfile(aggDir,[id '_agg.mat']),'agg','-v7.3');
-
-            % ---- re-save the final on E: (overwrite; same top-level var) ----
-            if saveMat
-                tmp = struct(); tmp.(vname) = od; save(fp, '-struct', 'tmp', '-v7.3');
+        if getf(opts,'doGroup', numel(files)>1)
+            try
+                v2_group(aggDir, fullfile(C.figRootE,'groupStatFigs'), outDir, C, tk, tc.cats);
+            catch GE
+                fprintf('group step failed (%s): %s\n', tk, GE.message);
             end
-
-            rows(end+1,:) = summaryRow(id, bestLab, N, retention, pp); %#ok<AGROW>
-            fprintf('  done in %.1f s | medPeakBurst=%.0f medRidgeBurst=%.0f medPeakF=%.1fHz hasPeak=%.0f%%\n', ...
-                toc(t0), nanmed(pp.peakBurstLength), nanmed(pp.ridgeBurstLength), nanmed(pp.gammaPeakFrequency), 100*nanmean(pp.hasPeak));
-            clear T ridgeInfo pp od meanTFR meanPeakTFR Mpk Mrg;
-        catch ME
-            fprintf('  *** SESSION FAILED (%s): %s\n', id, ME.message);
-            fprintf('      %s\n', getReport(ME,'basic','hyperlinks','off'));
         end
     end
-
-    if ~isempty(rows)
-        Sm = cell2table(rows, 'VariableNames', summaryVars());
-        writetable(Sm, fullfile(outDir,'v2_subject_summary.csv'));
-        fprintf('\nWrote v2_subject_summary.csv (%d sessions) -> %s\n', height(Sm), outDir);
-    end
-
-    % ---- group-level figures + R-stats CSVs (spec 4/5) ----
-    if getf(opts,'doGroup', numel(files)>1)
-        try
-            v2_group(fullfile(outDir,'agg'), fullfile(C.figRootE,'groupStatFigs'), outDir, C);
-        catch GE
-            fprintf('group step failed: %s\n%s\n', GE.message, getReport(GE,'basic','hyperlinks','off'));
-        end
-    end
-    fprintf('chirpAnalysisV2 total %.1f min\n', toc(T0)/60);
+    fprintf('\nchirpAnalysisV2 complete.\n');
 end
 
-% =================== helpers (all local, called only from here) ===================
-function files = listCueFinals(C)
-    d = dir(fullfile(C.dataRoot,'**','*_cueTaskpreproc.mat'));   % case-insensitive on Windows
+% =================== session listing / substrate ===================
+function files = listFinals(C, suffix)
+    d = dir(fullfile(C.dataRoot,'**',['*_' suffix '.mat']));   % case-insensitive on Windows
     files = struct('sessID',{},'path',{});
     for k = 1:numel(d)
-        fp = fullfile(d(k).folder, d(k).name);
         if datetime(d(k).datenum,'ConvertFrom','datenum') < C.freshCutoff, continue; end
         [~,nm] = fileparts(d(k).name);
-        id = regexprep(nm, '_cuetaskpreproc$', '', 'ignorecase');
-        files(end+1) = struct('sessID',id,'path',fp); %#ok<AGROW>
+        id = regexprep(nm, ['_' suffix '$'], '', 'ignorecase');
+        files(end+1) = struct('sessID',id,'path',fullfile(d(k).folder,d(k).name)); %#ok<AGROW>
     end
 end
 
-function [bestSig, bestLab, onsets, behDat, fs, figR] = extractSubstrate(od, id)
-    assert(isfield(od,'data')&&isfield(od,'labels')&&isfield(od,'fs'), 'missing data/labels/fs');
+function [ok,bestSig,bestLab,onsets,catLab,fs,grp,endLimit,msg] = extractSubstrate(od, tc)
+    ok=false; bestSig=[]; bestLab=''; onsets=[]; catLab=strings(0); fs=[]; grp='Dupi'; endLimit=[]; msg='';
+    if ~(isfield(od,'data')&&isfield(od,'labels')&&isfield(od,'fs')), msg='missing data/labels/fs'; return; end
     fs = od.fs;
     labs = cellfun(@(x) char(string(x)), od.labels, 'uni', 0);
-    % bestMac (OB) by label; never by index
-    assert(isfield(od,'bestMac')&&~isempty(od.bestMac), 'bestMac field missing');
+    if ~(isfield(od,'bestMac')&&~isempty(od.bestMac)), msg='no bestMac (skip)'; return; end
     bestLab = char(string(od.bestMac));
     bi = find(strcmp(bestLab, labs), 1);
-    assert(~isempty(bi), 'bestMac label "%s" not found in labels', bestLab);
+    if isempty(bi), msg=sprintf('bestMac "%s" not in labels', bestLab); return; end
     bestSig = double(od.data(bi,:));
-    % onsets: cue = one cued sniff/trial (behDat.finalOnset)
-    assert(isfield(od,'behDat')&&istable(od.behDat)&&ismember('finalOnset',od.behDat.Properties.VariableNames), ...
-        'behDat.finalOnset missing');
-    bd = od.behDat; keep = true(height(bd),1);
-    if ismember('sniffLabel', bd.Properties.VariableNames)
-        sl = string(bd.sniffLabel); if any(sl=="cued"), keep = keep & (sl=="cued"); end
+    if ~(isfield(od,'behDat')&&istable(od.behDat)&&ismember('finalOnset',od.behDat.Properties.VariableNames)), msg='no behDat.finalOnset'; return; end
+    bd = od.behDat;
+    if ~ismember(tc.catCol, bd.Properties.VariableNames), msg=sprintf('behDat missing %s', tc.catCol); return; end
+    onsets = double(bd.finalOnset);          % keep ALL rows (aligned to behDat); invalid -> NaN downstream
+    catLab = string(bd.(tc.catCol));
+    if isfield(od,'type')&&~isempty(od.type), grp = char(string(od.type)); end
+    if tc.guard, endLimit = nextOnsetLimit(onsets); end
+    ok = true;
+end
+
+function el = nextOnsetLimit(onsets)
+    el = inf(numel(onsets),1);
+    for i = 1:numel(onsets)
+        nxt = onsets(onsets > onsets(i));
+        if ~isempty(nxt), el(i) = min(nxt); end
     end
-    behDat = bd(keep,:); onsets = double(bd.finalOnset(keep));
-    figR = ''; if isfield(od,'figs'), figR = char(string(od.figs)); end
 end
 
-function r = summaryRow(id, bestLab, N, retention, pp)
-    r = {string(id), string(bestLab), N, retention, nanmean(pp.hasPeak), ...
-         nanmed(pp.gammaPeakFrequency), nanmed(pp.gammaPeakTime), ...
-         nanmed(pp.peakBurstLength), nanmed(pp.ridgeBurstLength), ...
-         nanmed(pp.peakPhaseOffsetWide - pp.peakPhaseOnsetWide), ...
-         nanmed(pp.ridgePhaseOffsetWide - pp.ridgePhaseOnsetWide)};
-end
-function v = summaryVars()
-    v = {'session','bestMac','nTrials','retention','fracHasPeak', ...
-         'medGammaPeakFreq','medGammaPeakTime','medPeakBurstLen','medRidgeBurstLen', ...
-         'medPeakPhaseWideWin','medRidgePhaseWideWin'};
-end
-
+% =================== small helpers ===================
 function v = getf(s,f,d), if isfield(s,f)&&~isempty(s.(f)), v=s.(f); else, v=d; end, end
 function v = nanmed(x),  x=x(~isnan(x)); if isempty(x), v=NaN; else, v=median(x); end, end
-function v = nanmean(x), x=x(~isnan(x)); if isempty(x), v=NaN; else, v=mean(x);   end, end
 function v = getenvOr(n,d), v=getenv(n); if isempty(v), v=d; end, v=strtrim(v); end

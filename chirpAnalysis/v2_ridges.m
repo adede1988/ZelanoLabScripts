@@ -25,17 +25,20 @@ function ridgeInfo = v2_ridges(T, C)
         Z  = T.zTFR(:,:,i);              % [Nf x nCore] full freq (signed z)
         if all(~isfinite(Z(:))), continue; end
         Zb = Z(bandIdx,:);
+        fcol = find(all(isfinite(Zb),1));           % finite columns (O15 guard NaNs a tail)
+        if numel(fcol) < 3, continue; end
         % --- primary ridge (search on nonneg energy; record true z along ridge) ---
-        [fr, ir] = tfridge(max(Zb,0), fBand, pen, 'NumRidges', 1);
+        [fr, ir] = tfridge(max(Zb(:,fcol),0), fBand, pen, 'NumRidges', 1);
         fr = fr(:)'; ir = ir(:)';
-        pr = Zb(sub2ind(size(Zb), ir, 1:nCore));
-        pf(i,:) = fr; pp(i,:) = pr;
+        pr = Zb(sub2ind(size(Zb), ir, fcol));
+        pf(i,fcol) = fr; pp(i,fcol) = pr;
+        irFull = nan(1,nCore); irFull(fcol) = ir;   % map ridge index back to full time axis
 
-        % --- Gaussian FWHM peel of the primary, per time point ---
+        % --- Gaussian FWHM peel of the primary, per (finite) time point ---
         R = Z;
         if C.ridge.fwhmPeel
-            for t = 1:nCore
-                fullc = bandIdx(ir(t));           % full-freq index of the ridge at time t
+            for t = fcol
+                fullc = bandIdx(irFull(t));       % full-freq index of the ridge at time t
                 pk = Z(fullc, t);
                 if ~(pk > minPk), continue; end   % skip noise-floor times
                 s = fwhmSigma(Z(:,t), fullc, pk, freqs);
@@ -43,12 +46,14 @@ function ridgeInfo = v2_ridges(T, C)
                 R(:,t) = Z(:,t) - G(:);
             end
         end
-        % --- secondary ridge from the residual ---
+        % --- secondary ridge from the residual (finite columns only) ---
         Rb = R(bandIdx,:);
-        [fr2, ir2] = tfridge(max(Rb,0), fBand, pen, 'NumRidges', 1);
-        fr2 = fr2(:)'; ir2 = ir2(:)';
-        pr2 = Rb(sub2ind(size(Rb), ir2, 1:nCore));
-        sf(i,:) = fr2; sp(i,:) = pr2;
+        fcol2 = find(all(isfinite(Rb),1));
+        if numel(fcol2) >= 3
+            [fr2, ir2] = tfridge(max(Rb(:,fcol2),0), fBand, pen, 'NumRidges', 1);
+            sf(i,fcol2) = fr2(:)';
+            sp(i,fcol2) = Rb(sub2ind(size(Rb), ir2(:)', fcol2));
+        end
     end
 
     ridgeInfo = struct();

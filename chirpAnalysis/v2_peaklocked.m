@@ -1,4 +1,4 @@
-function [plr, meanPeakTFR, relFreq, relTimeMs] = v2_peaklocked(T, pp, C)
+function [plr, meanPeakTFR, relFreq, relTimeMs, centStack] = v2_peaklocked(T, pp, C)
 % V2_PEAKLOCKED  Peak-aligned re-analysis (spec chirpAnalysis_3.md sec 4).
 %   [plr, meanPeakTFR, relFreq, relTimeMs] = v2_peaklocked(T, pp, C)
 %

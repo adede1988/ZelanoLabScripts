@@ -21,7 +21,7 @@ function pp = v2_powerphase(T, ridgeInfo, C)
     nan1 = nan(N,1); nanM = nan(N,nCore);
     pp = struct('gammaPeakTime',nan1,'gammaPeakFrequency',nan1,'gammaPeakPower',nan1, ...
         'peakBurstOnset',nan1,'peakBurstOffset',nan1,'peakBurstLength',nan1,'hasPeak',nan1, ...
-        'ridgeBurstOnset',nan1,'ridgeBurstOffset',nan1,'ridgeBurstLength',nan1, ...
+        'ridgeBurstOnset',nan1,'ridgeBurstOffset',nan1,'ridgeBurstLength',nan1,'burstTruncated',nan1, ...
         'peakPhaseOnsetNarrow',nan1,'peakPhaseOffsetNarrow',nan1,'peakPhaseOnsetWide',nan1,'peakPhaseOffsetWide',nan1, ...
         'ridgePhaseOnsetNarrow',nan1,'ridgePhaseOffsetNarrow',nan1,'ridgePhaseOnsetWide',nan1,'ridgePhaseOffsetWide',nan1, ...
         'peakPhaseConsistency',nanM,'ridgePhaseConsistency',nanM,'tMs',tMs, ...
@@ -38,6 +38,7 @@ function pp = v2_powerphase(T, ridgeInfo, C)
 
         % (1) gamma peak (smoothed ridge power, max in window) -----------------------------
         pS = smoothdata(p_r, 'gaussian', sm);
+        if all(~isfinite(pS(idxWin))), continue; end   % peak window fully truncated (O15 guard)
         [~, mrel] = max(pS(idxWin)); kpk = idxWin(mrel);
         gFreq = f_r(kpk);
         pp.gammaPeakTime(i)      = tMs(kpk);
@@ -106,6 +107,7 @@ function pp = v2_powerphase(T, ridgeInfo, C)
         [pp.ridgePhaseOnsetNarrow(i), pp.ridgePhaseOffsetNarrow(i)] = crossings(adR, kpk, thN, tMs);
         [pp.ridgePhaseOnsetWide(i),   pp.ridgePhaseOffsetWide(i)]   = crossings(adR, kpk, thW, tMs);
     end
+    if isfield(T,'burstTruncated'), pp.burstTruncated = double(T.burstTruncated); end
 end
 
 % ---- circular running-mean magnitude of a wrapped phase-difference series ----

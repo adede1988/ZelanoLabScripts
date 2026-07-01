@@ -1,215 +1,148 @@
 ---
 title: "OB sniff-locked gamma — ridge & phase-continuity analysis (V2)"
-subtitle: "cueTask; bestMac (OB) channel"
+subtitle: "cueTask (hit/cr), threshTask (air/low/med), O15 (start/free/confirm); bestMac (OB); Dupi split by session (S1/S2/S3) vs OBE"
 date: "`r format(Sys.time(), '%Y-%m-%d')`"
 output:
   html_document:
     toc: true
     toc_float: true
+    toc_depth: 3
     code_folding: hide
 params:
   outDir: "."
   figRoot: "R:/Neurology/Zelano_Lab/Lab_Common/Adam/Dupi_processing"
   figSub: "singleTrialSpectrograms"
   groupFig: "R:/Neurology/Zelano_Lab/Lab_Common/Adam/Dupi_processing/groupStatFigs"
-  bw: "260514_OBE_NWU_BW_1"
-  ad: "260326_OBE_NWU_AD_2"
-  dupi1: "250623_Dupi_NMH_KS_1"
-  dupi2: "250929_Dupi_NMH_GH_1"
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.width = 9)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 set.seed(20260701)
 outDir <- params$outDir; figRoot <- params$figRoot; figSub <- params$figSub; groupFig <- params$groupFig
-emb <- function(p) if (length(p) && !is.na(p) && file.exists(p)) knitr::include_graphics(normalizePath(p, winslash="/")) else invisible(NULL)
-subFig <- function(sess, name) file.path(figRoot, sess, figSub, name)
-trialPngs <- function(sess) {
-  d <- file.path(figRoot, sess, figSub)
-  if (!dir.exists(d)) return(character(0))
-  list.files(d, pattern="_trial-.*\\.png$", full.names=TRUE)
+TASKS <- list(cueTask = c("hit","cr"), threshTask = c("air","low","med"), O15 = c("start","free","confirm"))
+GROUPS <- c("DupiS1","DupiS2","DupiS3","OBE")
+np <- function(p) normalizePath(p, winslash="/", mustWork=FALSE)
+img <- function(p, cap="") if (file.exists(p)) cat(sprintf("![%s](%s)\n\n", cap, np(p))) else invisible(NULL)
+gfig <- function(kind, task, cat, grp) file.path(groupFig, sprintf("%s_%s_%s_%s.png", kind, task, cat, grp))
+subsWith <- function(task, cat, kind) {
+  ds <- list.dirs(figRoot, recursive=FALSE, full.names=TRUE)
+  out <- character(0)
+  for (d in ds) { f <- file.path(d, figSub, sprintf("%s_%s_%s_%s.png", kind, task, cat, basename(d)))
+    if (file.exists(f)) out <- c(out, basename(d)) }
+  out
 }
+subFig <- function(sess, kind, task, cat) file.path(figRoot, sess, figSub, sprintf("%s_%s_%s_%s.png", kind, task, cat, sess))
 rd <- function(f) { p <- file.path(outDir, f); if (file.exists(p)) utils::read.csv(p, stringsAsFactors=FALSE) else NULL }
+PREF <- c("260514_OBE_NWU_BW_1","260326_OBE_NWU_AD_2")   # BW, AD preferred OBE examples
+
+perm_maxstat <- function(d, nperm=5000) {     # d [nSubj x nTime] paired diffs (peak - ridge)
+  nS <- nrow(d)
+  tstat <- function(x){ m<-colMeans(x,na.rm=TRUE); s<-apply(x,2,sd,na.rm=TRUE); t<-m/(s/sqrt(nS)); t[!is.finite(t)]<-0; t }
+  obs <- tstat(d); mx <- numeric(nperm)
+  for (p in 1:nperm){ sg<-sample(c(-1,1),nS,replace=TRUE); mx[p]<-max(abs(tstat(d*sg))) }
+  list(t=obs, pcorr=sapply(abs(obs), function(x) mean(mx>=x)), crit=quantile(mx,0.95))
+}
 ```
 
 # Question & data
 
 In OB sniff-locked single-trial gamma, the sniff drives a power increase whose instantaneous
 frequency **descends** (a downchirp). Is this **one oscillator sweeping down**, or **two fixed
-oscillators** (higher early, lower late) whose sum only *looks* like a chirp? We answer the
-decidable form: during the transition, is there one moving spectral component or two
-simultaneously-present ones?
+oscillators** whose sum only *looks* like a chirp? We test the decidable form: during the
+transition, is there one moving spectral component or two simultaneously-present ones?
 
-**Data:** cueTask preprocessed finals (`fs = 500 Hz`), OB channel = `outDat.bestMac`, epoched on
-`behDat.finalOnset` (−1 to +3 s, padded ±1.5 s). Per-trial noise rejection on bestMac via
-`cue_noise_trials` (K=10; ≥80% retained dataset-wide, noisier sessions less). Groups: **Dupi**
-(patients) vs **OBE** (controls) by `outDat.type`.
+**Data:** preprocessed finals (`fs = 500 Hz`), OB channel `outDat.bestMac`, epoched on
+`behDat.finalOnset` (−1 to +3 s, padded ±1.5 s), noise-rejected on bestMac (`cue_noise_trials`,
+K=10). **Tasks & trial types this round:** **cueTask** split into `type=='hit'` vs `type=='cr'`;
+**O15** split into `sniffLabel ∈ {start, free, confirm}` (each epoch truncated at the next sniff —
+`burstTruncated` flag); **threshTask** split into `type ∈ {air, low, med}` (added once bestMac was
+selected). Groups: **Dupi split by session — DupiS1 / DupiS2 / DupiS3** (the trailing visit number)
+— vs **OBE** (controls, one group).
 
-**Pipeline (V2):** FASLT TFR (20–70 Hz, base cycles 3, order 3–30) → per-frequency bootstrap
-baseline z-score (−1000..−500 ms) → primary ridge (`tfridge`, DP, 25–58 Hz) → Gaussian-FWHM peel
-→ secondary ridge. Phase/power continuity: `gammaPeak{Time,Frequency,Power}`; burst extent at the
-peak frequency (`peakBurst*`, z=2) and along the ridge (`ridgeBurst*`, z=2); phase divergence of
-the observed narrowband phase from (a) a constant-frequency reference locked at the peak
-(`peakPhaseConsistency`) and (b) an estimated phase accumulated from the ridge-frequency trajectory
-(`ridgePhaseConsistency`). Peak-aligned re-analysis (`peakLockedRidge`) centers each trial on its
-own gammaPeakTime/Frequency.
+**Pipeline:** FASLT TFR (20–70 Hz) → per-frequency baseline z-score (−1000..−500 ms) → primary
+ridge (`tfridge`) + Gaussian-FWHM peel → secondary ridge. Continuity measures: `gammaPeak*`;
+`peakBurst*` (z-power at the peak frequency ≥2) vs `ridgeBurst*` (smoothed ridge power ≥2);
+`peakPhaseConsistency` (vs constant-freq reference) vs `ridgePhaseConsistency` (vs accumulated
+ridge-frequency, i.e. the single-oscillator hypothesis); peak-aligned mean TFR. All measures are
+averaged **separately per trial-type category**. Statistics (below) are computed in R from the same
+per-subject CSVs that feed the figures, so numeric values and figures are consistent.
 
-```{r summary}
+```{r subject-summary}
 SS <- rd("v2_subject_summary.csv")
-if (!is.null(SS)) {
-  cat(sprintf("%d sessions. Median retention %.0f%%. Median gamma peak %.1f Hz.\n",
-      nrow(SS), 100*median(SS$retention,na.rm=TRUE), median(SS$medGammaPeakFreq,na.rm=TRUE)))
-  knitr::kable(SS, digits=2)
-}
+if (!is.null(SS)) knitr::kable(SS, digits=2, caption="Per-session summary (cueTask; note: pre-category)")
 ```
 
-# Single-trial TFR + ridge overlays
+```{r results, results='asis', fig.width=8}
+for (task in names(TASKS)) {
+  cat(sprintf("\n\n# Task: %s\n", task))
+  for (cat in TASKS[[task]]) {
+    cat(sprintf("\n\n## %s — %s\n", task, cat))
 
-White = primary ridge, magenta dashed = secondary ridge (from the Gaussian-FWHM peel). z-power
-color scale clipped to [−10, 20].
+    ## group mean TFR + peak-aligned TFR
+    cat("\n\n### Group mean TFR & peak-aligned TFR\n\n")
+    for (g in GROUPS) { img(gfig("groupMeanTFR", task, cat, g), sprintf("%s %s mean TFR",g,cat))
+                        img(gfig("groupPeakTFR", task, cat, g), sprintf("%s %s peak-aligned",g,cat)) }
 
-## OBE control BW (`r params$bw`)
-```{r bw-trials, results='asis'}
-p <- head(trialPngs(params$bw), 5); for (f in p) { cat(sprintf("![](%s)\n\n", normalizePath(f, winslash="/"))) }
-if (!length(p)) cat("_no trial figures found_\n")
-```
+    ## single-trial examples (up to 4, prefer BW/AD then others)
+    cat("\n\n### Single-trial examples (TFR + primary/secondary ridge)\n\n")
+    ex <- subsWith(task, cat, "phaseConsistency")
+    exsel <- unique(c(intersect(PREF, ex), head(setdiff(ex, PREF), 4)))
+    exsel <- head(exsel, 4)
+    ntShown <- 0
+    for (s in exsel) {
+      d <- file.path(figRoot, s, figSub)
+      st <- list.files(d, pattern=sprintf("^sub-%s_%s_%s_.*\\.png$", s, task, cat), full.names=TRUE)
+      for (f in head(st,2)) { img(f); ntShown <- ntShown+1 }
+    }
+    if (ntShown==0) cat("_no single-trial figures found_\n\n")
 
-## OBE control AD (`r params$ad`)
-```{r ad-trials, results='asis'}
-p <- head(trialPngs(params$ad), 5); for (f in p) { cat(sprintf("![](%s)\n\n", normalizePath(f, winslash="/"))) }
-if (!length(p)) cat("_no trial figures found_\n")
-```
+    ## phase continuity: examples + group + stats
+    cat("\n\n### Phase continuity (peak vs ridge)\n\n")
+    for (g in GROUPS) img(gfig("groupPhaseConsistency", task, cat, g), sprintf("%s group",g))
+    for (s in head(exsel,4)) img(subFig(s,"phaseConsistency",task,cat), s)
+    PH <- rd(sprintf("phaseConsistency_forR_%s.csv", task))
+    if (!is.null(PH)) {
+      sub <- PH[PH$category==cat,]
+      for (g in GROUPS) {
+        sg <- sub[sub$group==g,]; if (!nrow(sg)) next
+        tv <- sort(unique(sg$timeMs)); subj <- unique(sg$subject)
+        pk <- matrix(NA,length(subj),length(tv)); rg <- pk
+        for (i in seq_along(subj)){ r<-sg[sg$subject==subj[i],]; r<-r[match(tv,r$timeMs),]; pk[i,]<-r$peakCons; rg[i,]<-r$ridgeCons }
+        d <- pk-rg; keep <- colSums(is.finite(d)) >= max(3,0.8*length(subj))
+        if (sum(keep) < 5 || length(subj) < 3) { cat(sprintf("- **%s** (n=%d): too few subjects for stats.\n", g, length(subj))); next }
+        res <- perm_maxstat(d[,keep,drop=FALSE]); tvk <- tv[keep]; sig <- tvk[res$pcorr<0.05]
+        if (length(sig)) cat(sprintf("- **%s** (n=%d subj): peak vs ridge |phase diff| differ (max-stat perm, corrected p<0.05) at %d timepoints, %.0f to %.0f ms.\n", g, length(subj), length(sig), min(sig), max(sig)))
+        else cat(sprintf("- **%s** (n=%d subj): no timepoints survive correction.\n", g, length(subj)))
+      }
+      cat("\n")
+    }
 
-## 20 examples across other subjects
-```{r other-trials, results='asis'}
-subs <- list.dirs(figRoot, recursive=FALSE, full.names=FALSE)
-subs <- setdiff(subs, c(params$bw, params$ad, "groupStatFigs"))
-pool <- unlist(lapply(subs, function(s){ t<-trialPngs(s); if(length(t)) sample(t, min(1,length(t))) else NULL }))
-pool <- unique(pool); if (length(pool) > 20) pool <- sample(pool, 20)
-for (f in pool) { cat(sprintf("![](%s)\n\n", normalizePath(f, winslash="/"))) }
-if (!length(pool)) cat("_no trial figures found_\n")
-```
-
-# Group-level mean TFR
-```{r group-tfr, results='asis'}
-for (g in c("Dupi","OBE")) {
-  p <- file.path(groupFig, sprintf("groupMeanTFR_%s.png", g))
-  if (file.exists(p)) cat(sprintf("**%s**\n\n![](%s)\n\n", g, normalizePath(p, winslash="/")))
-}
-```
-
-# Phase continuity: peak vs ridge
-
-Per trial, `|phase diff|` grows from ~0 at the gamma peak. `peakPhaseConsistency` (blue) tests a
-constant-frequency oscillator; `ridgePhaseConsistency` (red) tests a single oscillator whose
-frequency follows the ridge. If the gamma is one sweeping oscillator, the ridge-based estimate
-should stay coherent (low `|diff|`) **longer/further** than the constant-frequency one.
-
-## Subject examples
-```{r phase-examples, results='asis'}
-for (s in c(params$dupi1, params$dupi2, params$bw, params$ad)) {
-  p <- subFig(s, sprintf("phaseConsistency_%s.png", s))
-  if (file.exists(p)) cat(sprintf("**%s**\n\n![](%s)\n\n", s, normalizePath(p, winslash="/")))
-}
-```
-
-## Group level
-```{r phase-group, results='asis'}
-for (g in c("Dupi","OBE")) {
-  p <- file.path(groupFig, sprintf("groupPhaseConsistency_%s.png", g))
-  if (file.exists(p)) cat(sprintf("**%s**\n\n![](%s)\n\n", g, normalizePath(p, winslash="/")))
-}
-```
-
-## Statistics — peak vs ridge across time (paired sign-flip permutation, max-stat corrected)
-```{r phase-stats, fig.height=4}
-PH <- rd("phaseConsistency_forR.csv")
-perm_maxstat <- function(d, nperm=5000) {           # d: [nSubj x nTime] paired diffs
-  nS <- nrow(d)
-  tstat <- function(x){ m<-colMeans(x,na.rm=TRUE); s<-apply(x,2,sd,na.rm=TRUE); t<-m/(s/sqrt(nS)); t[!is.finite(t)]<-0; t }
-  obs <- tstat(d)
-  mx <- numeric(nperm)
-  for (p in 1:nperm){ sg<-sample(c(-1,1),nS,replace=TRUE); mx[p]<-max(abs(tstat(d*sg))) }
-  list(t=obs, pcorr=sapply(abs(obs), function(x) mean(mx>=x)), crit=quantile(mx,0.95))
-}
-if (!is.null(PH)) {
-  for (g in c("Dupi","OBE")) {
-    sub <- PH[PH$group==g,]
-    if (!nrow(sub)) next
-    tvec <- sort(unique(sub$timeMs))
-    subj <- unique(sub$subject)
-    pk <- matrix(NA, length(subj), length(tvec)); rg <- pk
-    for (i in seq_along(subj)) { r <- sub[sub$subject==subj[i],]; r <- r[match(tvec, r$timeMs),]
-      pk[i,] <- r$peakCons; rg[i,] <- r$ridgeCons }
-    d <- pk - rg
-    keep <- colSums(is.finite(d)) >= max(3, 0.8*length(subj))   # times with enough subjects
-    res <- perm_maxstat(d[, keep, drop=FALSE])
-    tv <- tvec[keep]; sig <- tv[res$pcorr < 0.05]
-    plot(tv, res$t, type="l", lwd=2, col="purple", xlab="time from gammaPeakTime (ms)",
-         ylab="paired t (peak - ridge)", main=sprintf("%s: peak vs ridge |phase diff| (n=%d subj)", g, length(subj)))
-    abline(h=c(-1,1)*res$crit, lty=2, col="grey50"); abline(h=0, col="black")
-    if (length(sig)) points(sig, res$t[match(sig,tv)], col="red", pch=20)
-    if (length(sig)) cat(sprintf("**%s**: peak vs ridge differ (corrected p<0.05) at %d time points, %.0f to %.0f ms.\n\n",
-        g, length(sig), min(sig), max(sig))) else cat(sprintf("**%s**: no time points survive correction.\n\n", g))
+    ## burst: examples + group + stats
+    cat("\n\n### Burst length (peak vs ridge)\n\n")
+    for (g in GROUPS) img(gfig("groupBurst", task, cat, g), sprintf("%s group",g))
+    for (s in head(exsel,4)) img(subFig(s,"burstLength",task,cat), s)
+    BU <- rd(sprintf("burst_forR_%s.csv", task))
+    if (!is.null(BU)) {
+      sub <- BU[BU$category==cat,]
+      for (g in GROUPS) {
+        sg <- sub[sub$group==g,]; sg <- sg[is.finite(sg$medPeakBurst)&is.finite(sg$medRidgeBurst),]
+        if (nrow(sg) < 3) { cat(sprintf("- **%s**: too few subjects.\n", g)); next }
+        wt <- suppressWarnings(wilcox.test(sg$medRidgeBurst, sg$medPeakBurst, paired=TRUE))
+        cat(sprintf("- **%s** (n=%d): median peak %.0f ms vs ridge %.0f ms; paired Wilcoxon p=%.4g (ridge−peak median diff %.0f ms).\n",
+            g, nrow(sg), median(sg$medPeakBurst), median(sg$medRidgeBurst), wt$p.value, median(sg$medRidgeBurst-sg$medPeakBurst)))
+      }
+      cat("\n")
+    }
   }
-} else cat("phaseConsistency_forR.csv not found.\n")
-```
-
-# Burst length: peak vs ridge
-
-`peakBurstLength` = time the z-power at the peak frequency stays ≥2; `ridgeBurstLength` = time the
-smoothed primary-ridge power stays ≥2 (the ridge tracks power across frequency, so it typically
-stays elevated longer).
-
-## Subject examples
-```{r burst-examples, results='asis'}
-for (s in c(params$dupi1, params$dupi2, params$bw, params$ad)) {
-  p <- subFig(s, sprintf("burstLength_%s.png", s))
-  if (file.exists(p)) cat(sprintf("**%s**\n\n![](%s)\n\n", s, normalizePath(p, winslash="/")))
 }
 ```
 
-## Group level + statistics (paired peak vs ridge, per group)
-```{r burst-group, results='asis'}
-for (g in c("Dupi","OBE")) {
-  p <- file.path(groupFig, sprintf("groupBurst_%s.png", g))
-  if (file.exists(p)) cat(sprintf("**%s**\n\n![](%s)\n\n", g, normalizePath(p, winslash="/")))
-}
-```
-```{r burst-stats}
-BU <- rd("burst_forR.csv")
-if (!is.null(BU)) {
-  for (g in c("Dupi","OBE")) {
-    sub <- BU[BU$group==g,]; sub <- sub[is.finite(sub$medPeakBurst) & is.finite(sub$medRidgeBurst),]
-    if (nrow(sub) < 2) next
-    d <- sub$medRidgeBurst - sub$medPeakBurst
-    wt <- suppressWarnings(wilcox.test(sub$medRidgeBurst, sub$medPeakBurst, paired=TRUE))
-    cat(sprintf("**%s** (n=%d): median peak %.0f ms vs ridge %.0f ms; paired Wilcoxon p=%.4g (ridge−peak median diff %.0f ms).\n\n",
-        g, nrow(sub), median(sub$medPeakBurst), median(sub$medRidgeBurst), wt$p.value, median(d)))
-  }
-} else cat("burst_forR.csv not found.\n")
-```
+# Notes on consistency
 
-# Peak-aligned mean TFR
+Every statistic above is computed in R from `phaseConsistency_forR_<task>.csv` and
+`burst_forR_<task>.csv` (per-subject values exported by MATLAB) — the same values plotted in the
+group figures. Burst medians in the text are the medians of the per-subject median burst lengths
+shown in the histograms; the phase-difference significance windows correspond to where the
+peak (blue) and ridge (red) group-mean curves separate.
 
-Each trial re-centered on its own gammaPeakTime (x) and gammaPeakFrequency (y, ±10 Hz), then
-averaged. A single descending component appears as a blob trailing to lower relative frequency
-after the peak.
-
-## Subject examples
-```{r peaktfr-examples, results='asis'}
-for (s in c(params$dupi1, params$dupi2, params$bw, params$ad)) {
-  p <- subFig(s, sprintf("peakAlignedTFR_%s.png", s))
-  if (file.exists(p)) cat(sprintf("**%s**\n\n![](%s)\n\n", s, normalizePath(p, winslash="/")))
-}
-```
-
-## Group level
-```{r peaktfr-group, results='asis'}
-for (g in c("Dupi","OBE")) {
-  p <- file.path(groupFig, sprintf("groupPeakTFR_%s.png", g))
-  if (file.exists(p)) cat(sprintf("**%s**\n\n![](%s)\n\n", g, normalizePath(p, winslash="/")))
-}
-```
-
-*Generated by chirpAnalysisV2. Spec: chirpAnalysis/chirpAnalysis_3.md.*
+*Generated by chirpAnalysisV2. Spec: chirpAnalysis/chirpAnalysis_4.md.*
