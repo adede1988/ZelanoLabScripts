@@ -53,7 +53,7 @@ function L = labPaths()
             L.fieldtrip = 'C:\Users\Adam\Documents\fieldtrip-20260518';
 
         case 'dtf8829'         % Northwestern lab workstation / remote lab desktop (ssh labdesktop)
-            L.codePre   = 'G:\My Drive\GitHub\';
+            L.codePre   = 'E:\GitHub\';               % code migrated from G:\My Drive\GitHub -> E:\GitHub (2026-07)
             L.eeglab    = 'C:\Users\dtf8829\Documents\eeglab2025.0.0';
             L.labCommon = 'R:\Neurology\Zelano_Lab\Lab_Common\';
             L.gdrive    = 'G:\My Drive\';
