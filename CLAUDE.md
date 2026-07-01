@@ -30,7 +30,7 @@ shared.
 | `breathingTask` | `breathingTasks`, `waveBreathing` | `breathingTask` (legacy files: `breathing`) | paced‑breathing blocks; **ECG/HRV**, **per‑breath metrics (`bmObj`)**, **paced target‑trace alignment**, **emotion ratings**. The richest task. |
 | `cueTask` | `odorCueTask` | `cueTask` | odor cue / sniff / response TTLs; hit/miss/cr/fa behavior |
 | `threshTask` | `Threshold` | `threshTask` | PEA intensity/pleasantness threshold; 45 single‑sniff trials |
-| `O15` | `O15` | `O15` | loads genuinely raw data directly; photodiode TTLs parsed by `detect_ttls_O15`; EEG/macros usually absent |
+| `O15` | `O15` | `O15` | loads genuinely raw data directly; photodiode TTLs parsed by `detect_ttls_O15` |
 
 ---
 
@@ -75,8 +75,7 @@ fn = fieldnames(s);                 % {'outDat'} or {'chanDat'} or {'out'}
 outDat = s.(fn{1});
 ```
 A file is **fully processed** iff it has `outDat.moreThan1` (and, for breathing,
-`outDat.bmObj` / `outDat.baseEmotion`). `splitToSingleChan_allTasks.m` errors on files
-lacking `moreThan1`.
+`outDat.bmObj` / `outDat.baseEmotion`). 
 
 ---
 
@@ -222,8 +221,7 @@ The 32 EEG montage order (validated, rows 1–32): `Fp1 Fz F3 F7 FT9 FC5 FC1 C3 
 CP1 Pz P3 P7 O1 Oz O2 P4 P8 TP10 CP6 CP2 Cz C4 T8 FT10 FC6 FC2 F4 F8 Fp2`.
 
 > The non‑EEG raw channel set (intracranial contacts, etc.) **varies by session/montage** —
-> always locate channels by `cellfun(@(x) contains(x,'…'), outDat.labels)`, exactly as the
-> pipeline and `splitToSingleChan_allTasks.m` do.
+> always locate channels by `cellfun(@(x) contains(x,'…'), outDat.labels)`
 
 ### 6.3 EEG‑derived fields (only if `hasEEG`)
 
@@ -271,7 +269,7 @@ sample offset) and **`finalOnset`** (phase‑refined onset sample — *use this 
 
 | Column | Meaning |
 |---|---|
-| `sniffOnset`, `finalOnset` | inhale‑onset sample (equal for breathing) |
+| `sniffOnset`, `finalOnset` | inhale‑onset sample (equal for breathing), `finalOnset` is more accurate and should be used for alignment |
 | `condition` | block/condition id (from `bmObj` col 12, tagged by `TaskBreaks`) |
 | `Yonset`, `inhaleMax`, `Yend`, `exhaleMin` | respiration amplitudes (a.u.) at onset / inhale peak / breath end / exhale trough |
 | `inMaxTim`, `endTim`, `exMinTim` | corresponding sample indices |
@@ -327,22 +325,14 @@ eeg32  = outDat.data(1:32,:);                         % only if hasEEG
 isMac  = cellfun(@(x) contains(x,'macBP'), outDat.labels);
 isRR   = cellfun(@(x) contains(x,'RRint'), outDat.labels);    % breathing
 ```
-**Epoching reference — `splitToSingleChan_allTasks.m`** is the existing consumer: it reads
-each final, splits the analysis channels (`macBP*` + the 32 EEG names) into per‑channel
-`chanDat` files under `…\QuestMirror\CHANDAT\`, lifts the QC channels
-(`spikeCleanVec`/`blinkIndicator`/`badTS`) into a separate `cleaningVecs.mat`, copies
-`behDat`, and (breathing) attaches `RRint`/`targTrace`. The per‑channel `chanDat`
-(`.data .behDat .rsp .fs .task .chi .chanType …`) is what the analysis pipelines
-(`singleChanPipeline_general.m`, `run_gamma_figures_pipeline.m`, the `helperFuncs\` and
-`plotsForBruce\` tooling) consume. **This `chanDat` is a different, derived structure — not
-the preprocessed `outDat`.**
+
 
 ---
 
 ## 8. Known quirks & gotchas (read before analysing)
 
 - **Index `behDat` by name, not number.** Current `behDat` is a **table**; some legacy
-  analysis (`singleChanPipeline_general.m`) does `behDat(:,13)==0` assuming a numeric matrix
+  analysis does `behDat(:,13)==0` assuming a numeric matrix
   with col 13 = bad‑breath flag. In the current table col 13 is `index`; the quality flag is
   **`behDat.goodBreath`**. Don't trust positional indices.
 - **`task` value drift:** new files = `breathingTask`; some older finals = `breathing`.
@@ -382,20 +372,6 @@ the preprocessed `outDat`.**
 - **Prefer strict over flexible:** if the data isn't the expected shape, let it error — a
   loud failure surfaces a real data problem.
 
-### Shared vs task‑specific (what to touch for a new task)
-
-| Layer | Files | Edit for a new task? |
-|---|---|---|
-| Config / loaders | `labPaths.m`, `applyParams.m`, `writeParams.m`, `writePreProcX.m`, `assemble_outDat_all.m` | only `applyParams` (`taskKey`/`canonTask`/`taskCallerKey` + Mode‑B switch) and a new `case` in `assemble_outDat_all` |
-| Shared pipeline (never edit per task) | `downsample_data`, `preprocess_eeg`, `preprocess_macros`, `preprocess_respiration_wholetrace`, `detect_sniffs_from_TTLs`, `refine_onsets_with_phase`, `behDatFromSniffs`, `paramCheck`, `plot_sniff_epochs`, `parSave` | no |
-| Task‑specific | `<task>_makeOutDat.m`, `build_behavior_table_<task>.m`; O15 `detect_ttls_O15`; breathing `process_respiration_breathing`, `alignTargetBreathingTraceSimplify`, `processECG`/`buildECGz`/`paramCheckECG`, `detectBeats`, `flagBadBreaths`, `plotBreathLengths` | **yes — write new `<task>_*` files** |
-| Deliverable scripts | the 4 `*PreProc_main.m` + the 3 `*_makeOutDat.m`; `preprocessAll.m` (batch driver) | copy one as a template |
-
-**New‑task recipe** (full version in `tutorialPreprocessing.md` §6): teach `applyParams`
-the task + params → write `<task>_makeOutDat.m` (save `<id>_<task>PreProc.mat` with at least
-`.data .labels .fs .behDat .TTL`) → add an `assemble_outDat_all` `case` → write
-`build_behavior_table_<task>.m` (start from `behDatFromSniffs` if sniff‑based) → copy a
-`_main.m` and swap the one task‑specific block → update its TASK‑SHARED/TASK‑SPECIFIC legend.
 
 ### Validating pipeline changes
 
@@ -415,7 +391,6 @@ numerically identical output where a reference exists.
 | **Shared pipeline** | `assembleOutDat.m`, `loadIntermediateRaw.m`, `downsample_data.m`, `preprocess_eeg.m`, `preprocess_macros.m`, `preprocess_respiration_wholetrace.m`, `detect_sniffs_from_TTLs.m`, `refine_onsets_with_phase.m`, `behDatFromSniffs.m`, `paramCheck.m`, `plot_sniff_epochs.m`, `parSave.m`, `interpolate_perrinX.m`, `laplacian_perrinX.m`, `removeNoiseChansVolt.m`, `blinkRemoveWrapper.m`, `ica_flag_spikes_targeted.m`, `detect_spikes.m` |
 | **Task‑specific** | `<task>_makeOutDat.m` (`preproc\threshPreProc_makeOutDat.m`), `assembleRaw_<task>.m`, `build_behavior_table_<task>.m`; O15: `assembleRaw_O15.m`, `detect_ttls_O15.m`, `assembleOutDat_O15extras.m`; breathing: `assembleRaw_breathingTask.m`, `process_respiration_breathing.m`, `alignTargetBreathingTraceSimplify.m`, `processECG.m`/`buildECGz.m`/`paramCheckECG.m`, `detectBeats.m`, `flagBadBreaths.m`, `plotBreathLengths.m`; cue: `assembleRaw_cueTask.m`, `outMat_to_table.m`; thresh: `assembleRaw_threshTask.m` |
 | **Deliverable scripts** | `breathingTaskPreProc_main.m`, `cueTaskPreProc_main.m`, `threshPreProc_main.m`, `O15PreProc_main.m` + the 3 `_makeOutDat` |
-| **Downstream analysis (consume the finals)** | `splitToSingleChan_allTasks.m` (→ `chanDat`), `singleChanPipeline_general.m`, `run_gamma_figures_pipeline.m`, `helperFuncs\`, `plotsForBruce\`, `ACHEMS2026\` |
 | **Docs** | `preprocessingReadme.md` (reference), `tutorialPreprocessing.md` (how‑to), `REFACTOR_NOTES.md` / `taskList.md` / `SimplifyStandardize*.md` (history) |
 | **Dev / oracles** | `_dev\` (tests, `run_*` harnesses, `subfunction_catalogue.json`), `getSessionParams_*.m`, `assemble_outDat_*.m` (legacy, kept as oracles) |
 
@@ -455,13 +430,16 @@ All remote access requires Northwestern **GlobalProtect VPN** connected (`vpn-co
   - **Heavy/repeated I/O:** robocopy a working set to local `E:` first, crunch there, write back — same single-invocation rule.
   - **Credential** = `fsm\dtf8829` + **NetID/SSO password** (sensitive, rotates). Never type it in chat or write it here. Stash it **once** as a DPAPI blob on the client (`Read-Host -AsSecureString | ConvertFrom-SecureString | Set-Content $env:USERPROFILE\.fsmcreds\netid.sec`); at runtime decrypt it **locally** and interpolate via base64 `-EncodedCommand` so the literal never appears in chat or a tracked file.
 - `E:` is BitLocker-encrypted but normally already unlocked. If a check shows it **Locked**, ask the user for the E: BitLocker password (a local secret — never write it here) and unlock with `Unlock-BitLocker`.
+- Clean temporary files from `E:` at the end of all jobs. Transfer updated preproc files back to `R:` and overwrite the old versions in place. 
+- Keep data files and overall mirrored file structure on `E:` for future jobs. That is, keep preproc data files on `E:`
+
 
 ### Monitoring long jobs
 Redirect output to a file on `E:` and poll it, or check process state with `ssh labdesktop "..."`. The SSH session is a separate logon from any RDP session, so mapped drives and some profile state differ.
 
 ### Code: 
 - On the home local machine, code is in C:\Users\Adam\Documents\GitHub\
-- On the labdesktop, code is in G:\My Drive\GitHub
+- On the labdesktop, code is in G:\My Drive\GitHub, but migration is currently ongoing to E:\GitHub\. For any repo in both G: and E:, prefer the copy in E:, edit in E:, utilize git pointing at E:. Only utilize G: code if no copy of the repo exists on E:. 
 - Utilize git to move code between machines
 
 ### Related (separate channels) Quest is not ready for Claude use yet. This functionality is coming soon.
