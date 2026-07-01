@@ -11,7 +11,8 @@ function run_o15_gamma_epochs(sessFilter)
 
     if nargin < 1, sessFilter = []; end
     o15_init_paths(); L = labPaths();
-    groupDir = 'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\groupStatFigs';
+    groupDir = getenv('O15_GROUPDIR');
+    if isempty(groupDir), groupDir = fullfile(labPaths().figPath, 'groupStatFigs'); end
     epoCsv   = fullfile(groupDir, 'O15Task_gammaEpochs.csv');
 
     epWin   = [-1.75 5.75];
@@ -22,6 +23,7 @@ function run_o15_gamma_epochs(sessFilter)
     opt = build_fooof_opt([5 58]);
     hasOpt = exist('fmincon','file') > 0;
     types = {'start','free','confirm'};
+    Knoise = o15_noise_K();   % relative sharp-deflection threshold (robust-SDs), single source
 
     T = o15_session_table(false); T = T(T.onDisk & T.fresh, :);
     if ~isempty(sessFilter), T = T(ismember(T.sessID, string(sessFilter)), :); end
@@ -49,7 +51,7 @@ function run_o15_gamma_epochs(sessFilter)
             for tj = 1:numel(types)
                 tp = types{tj};
                 onsAll = fo(sl == tp);
-                NT = cue_noise_trials(sig, fs, onsAll);
+                NT = cue_noise_trials(sig, fs, onsAll, [], Knoise);   % RELATIVE rule (zd>K)
                 ons = onsAll(NT.ok & ~NT.noisy);
 
                 s0 = round(epWin(1)*fs); s1 = round(epWin(2)*fs); nF = s1 - s0 + 1;

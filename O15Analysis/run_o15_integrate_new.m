@@ -18,7 +18,8 @@ function nNew = run_o15_integrate_new(doKnit)
     % run_O15Analysis_all only when there is actually a new session to process.
     here = fileparts(mfilename('fullpath')); repo = fileparts(here);
     addpath(repo); addpath(fullfile(repo,'cueAnalysis')); addpath(here);
-    groupDir = 'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\groupStatFigs';
+    groupDir = getenv('O15_GROUPDIR');
+    if isempty(groupDir), groupDir = fullfile(labPaths().figPath, 'groupStatFigs'); end
     manPath  = fullfile(groupDir, 'O15Task_data_manifest.csv');
 
     T = o15_session_table(false); T = T(T.onDisk & T.fresh, :);

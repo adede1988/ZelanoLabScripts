@@ -10,7 +10,8 @@ function o15_make_manifest()
 
     repo = fileparts(fileparts(mfilename('fullpath')));
     addpath(repo); addpath(fullfile(repo, 'O15Analysis'));
-    groupDir = 'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\groupStatFigs';
+    groupDir = getenv('O15_GROUPDIR');
+    if isempty(groupDir), groupDir = fullfile(labPaths().figPath, 'groupStatFigs'); end
     csvPath  = fullfile(groupDir, 'O15Task_fooof_summary.csv');
     manPath  = fullfile(groupDir, 'O15Task_data_manifest.csv');
 

@@ -6,7 +6,8 @@ function run_o15_fooof_one(sessIDs, doSaveBack)
 
     if nargin < 2 || isempty(doSaveBack), doSaveBack = true; end
     o15_init_paths(); L = labPaths();
-    groupDir = 'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\groupStatFigs';
+    groupDir = getenv('O15_GROUPDIR');
+    if isempty(groupDir), groupDir = fullfile(labPaths().figPath, 'groupStatFigs'); end
     csvPath  = fullfile(groupDir, 'O15Task_fooof_summary.csv');
     gammaBand = [30 58];
 

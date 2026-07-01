@@ -19,7 +19,8 @@ function run_o15_fooof_all(sessFilter, doSaveBack, csvPath)
 
     o15_init_paths();
     L = labPaths();
-    groupDir = 'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\groupStatFigs';
+    groupDir = getenv('O15_GROUPDIR');
+    if isempty(groupDir), groupDir = fullfile(labPaths().figPath, 'groupStatFigs'); end
     if ~isfolder(groupDir), mkdir(groupDir); end
     if nargin < 3 || isempty(csvPath)
         csvPath = fullfile(groupDir, 'O15Task_fooof_summary.csv');

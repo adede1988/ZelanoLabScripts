@@ -1,7 +1,8 @@
 function run_o15_ztfr(sessFilter)
 % RUN_O15_ZTFR  Per O15 session: split sniffs into start/free/confirm, flag
-%   sharp-deflection noise (cue_noise_trials, >80 uV / 10 ms), draw the red-
-%   flagged single-trial raw plot for the START sniffs, then compute the bestMac
+%   RELATIVE sharp-deflection noise (cue_noise_trials, robust-z zd>K with K from
+%   o15_noise_K), draw the red-flagged single-trial raw plot for the START
+%   sniffs, then compute the bestMac
 %   baseline-z spectrograms for ALL THREE sniff types (o15_ztfr_multi) against
 %   ONE shared baseline taken before the first start sniff. Saves the per-subject
 %   PNGs + numeric .mat and writes the noise/QC columns to O15Task_fooof_summary.csv.
@@ -11,7 +12,8 @@ function run_o15_ztfr(sessFilter)
 
     if nargin < 1, sessFilter = []; end
     o15_init_paths(); L = labPaths();
-    groupDir = 'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\groupStatFigs';
+    groupDir = getenv('O15_GROUPDIR');
+    if isempty(groupDir), groupDir = fullfile(labPaths().figPath, 'groupStatFigs'); end
     csvPath  = fullfile(groupDir, 'O15Task_fooof_summary.csv');
     dispWin  = [-1000 3000]; sep = 50;
     types = {'start','free','confirm'};
@@ -48,7 +50,8 @@ function run_o15_ztfr(sessFilter)
             % ---- split sniffs by label + one noise pass over all sniff onsets ----
             bd = od.behDat;
             sl = string(bd.sniffLabel); fo = bd.finalOnset;
-            NTall = cue_noise_trials(sig, fs, fo);   % per-sniff noise flag (row-aligned)
+            Knoise = o15_noise_K();                  % relative threshold (robust-SDs), single source
+            NTall = cue_noise_trials(sig, fs, fo, [], Knoise);   % per-sniff RELATIVE noise flag (row-aligned)
 
             onsets = struct(); nNoise = struct();
             for ti = 1:numel(types)
@@ -63,7 +66,7 @@ function run_o15_ztfr(sessFilter)
             writetable(F, csvPath);   % counts survive even if spectrograms skipped
 
             % ---- single-trial raw QC plot for START sniffs (red = noise) ----
-            NTstart = cue_noise_trials(sig, fs, fo(sl=="start"));
+            NTstart = cue_noise_trials(sig, fs, fo(sl=="start"), [], Knoise);
             cue_plot_singletrial(NTstart, id, od.bestMac, sep, fullfile(figDir, 'singleTrialRawMac_start.png'));
 
             matFile = fullfile(figDir, [id '_O15_bestMac_TFR.mat']);

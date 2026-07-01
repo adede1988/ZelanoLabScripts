@@ -9,7 +9,8 @@ function run_o15_task_group(groupDir)
     addpath(repo); addpath(fullfile(repo,'cueAnalysis')); addpath(fullfile(repo,'O15Analysis'));
     L = labPaths();
     if nargin < 1 || isempty(groupDir)
-        groupDir = 'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\groupStatFigs';
+        groupDir = getenv('O15_GROUPDIR');
+        if isempty(groupDir), groupDir = fullfile(L.figPath, 'groupStatFigs'); end
     end
     if ~isfolder(groupDir), mkdir(groupDir); end
 

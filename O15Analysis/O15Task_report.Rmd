@@ -66,10 +66,18 @@ sniff types puts them on a single comparable scale despite very different trial 
 z would make the high-count *free* maps spuriously hotter). Heat = *z vs the single pre-task
 baseline*; the **mean respiration trace** is overlaid (black, right axis). Display −1000…+3000 ms.
 
-*Noise rejection (sharp-deflection rule).* A sniff is flagged **noisy** if its raw `bestMac` epoch
-(−1.75…+5.75 s) contains any 10 ms window with a max-to-min range **> 80 µV** (`cue_noise_trials`,
-reused). Noisy sniffs are excluded from the averages; `singleTrialRawMac_start.png` shows the start
-sniffs with noisy ones in **red**. Group means average the per-subject z maps within each group on
+*Noise rejection (relative sharp-deflection rule).* Sharp deflections are detected **relative to
+each channel's own variability**, so a uniformly high-amplitude channel is not rejected merely for
+being high-amplitude. For the `bestMac` trace we compute the sliding 10 ms max-to-min range `d` and
+robust-z it over the **whole recording**: `zd = (d − median(d)) / (1.4826·MAD(d))` — how many
+robust-SDs a given 10 ms swing sits above that channel's *typical* 10 ms swing. A 10 ms window is an
+**event** if `zd > K`, and a sniff (epoch −1.75…+5.75 s) is flagged **noisy** if it contains any
+event. **K** is set in `o15_noise_K` (default 10, the cue-calibrated value) and can be tuned for the
+O15 dataset with `o15_calibrate_noise`. *(This is the cue analysis's relative rule, reused via
+`cue_noise_trials`; it replaces the earlier absolute >80 µV / 10 ms rule, which scaled with raw
+amplitude and so rejected high-amplitude-but-clean channels wholesale.)* Noisy sniffs are excluded
+from their sniff type's average; `singleTrialRawMac_start.png` shows the start sniffs with noisy ones
+in **red** (title shows the K used). Group means average the per-subject z maps within each group on
 one shared (data-driven) color scale.
 
 ## 2. Data available
@@ -98,9 +106,10 @@ if (!is.null(fooof)) {
 }
 ```
 
-## 3b. Sniff noise rejection (sharp-deflection rule)
+## 3b. Sniff noise rejection (relative sharp-deflection rule)
 
-`n*` = sniffs of each type; `nNoise*` = sniffs flagged by the >80 µV / 10 ms rule (excluded);
+`n*` = sniffs of each type; `nNoise*` = sniffs flagged by the **relative** rule (any 10 ms window
+with `zd > K`, i.e. >K robust-SDs above that channel's typical 10 ms swing; excluded);
 `nFinal_*` = clean sniffs entering each locking's average; `baseFrames` = time-frames in the single
 pre-task baseline window.
 
@@ -113,47 +122,42 @@ if (!is.null(fooof) && 'nNoiseStart' %in% names(fooof)) {
 } else cat('*noise columns not present in the summary CSV*')
 ```
 
-### Example single-trial noise plots (start sniffs)
+### Single-trial noise plots — every participant
 
-Two sessions with the **most** flagged-noise sniffs and two with the **fewest** (total across types),
-showing the red-flagged start-sniff raw `bestMac` traces.
+Red traces are start sniffs flagged by the **relative** robust-z rule (`zd > K`; see Methods) and
+excluded from the averages; black are kept. Shown for **all participants** so the noise detector can
+be eyeballed across the whole dataset. Caption gives the flagged-noise counts per sniff type
+(start/free/confirm) — note the rule is applied to *all* sniffs but this plot shows the start sniffs.
 
-```{r noise-examples, results='asis'}
+```{r noise-all, results='asis'}
 stFig <- function(sid) file.path(fr, sid, 'O15', 'singleTrialRawMac_start.png')
-if (!is.null(fooof) && 'nNoiseStart' %in% names(fooof)) {
-  b <- fooof[fooof$isBestMac == 1, ]
-  b$nNoiseTot <- rowSums(b[, c('nNoiseStart','nNoiseFree','nNoiseConfirm')], na.rm = TRUE)
-  nz <- b[!is.na(b$nNoiseTot), c('sessID','group','nNoiseTot')]
-  nz <- nz[order(-nz$nNoiseTot), ]
-  hi <- head(nz, 2); lo <- tail(nz, 2)
-  cat('\n**Highest-noise sessions:**\n\n')
-  for (k in seq_len(nrow(hi))) {
-    cat(sprintf('*%s (%s) — %d noise sniffs*\n\n', hi$sessID[k], hi$group[k], hi$nNoiseTot[k]))
-    cat(mdimg(stFig(hi$sessID[k])))
-  }
-  cat('\n**Lowest-noise sessions:**\n\n')
-  for (k in seq_len(nrow(lo))) {
-    cat(sprintf('*%s (%s) — %d noise sniffs*\n\n', lo$sessID[k], lo$group[k], lo$nNoiseTot[k]))
-    cat(mdimg(stFig(lo$sessID[k])))
-  }
-} else cat('*noise counts unavailable*')
-```
-
-## 4. Single-subject example spectrograms
-
-For each group, up to two example sessions, all three sniff lockings (start, free, confirm).
-
-```{r examples, results='asis'}
-pick <- list()
 if (!is.null(man)) {
   for (g in groups) {
-    rows <- man[man$group == g & man$status == 'ok' & nzchar(as.character(man$bestMac)), ]
-    pick[[g]] <- head(rows, 2)
+    rows <- man[man$group == g & man$status == 'ok', ]
+    if (nrow(rows) == 0) next
+    cat(sprintf('\n\n#### %s\n\n', g))
+    for (k in seq_len(nrow(rows))) {
+      sid <- rows$sessID[k]
+      frow <- if (!is.null(fooof)) fooof[fooof$isBestMac == 1 & fooof$sessID == sid, ] else NULL
+      nz <- if (!is.null(frow) && nrow(frow) == 1)
+              sprintf(' — noise start/free/confirm = %s/%s/%s',
+                      frow$nNoiseStart, frow$nNoiseFree, frow$nNoiseConfirm) else ''
+      cat(sprintf('*%s (bestMac = %s)%s*\n\n', sid, rows$bestMac[k], nz))
+      cat(mdimg(stFig(sid)))
+    }
   }
-}
+} else cat('*manifest not found*')
+```
+
+## 4. Single-subject spectrograms — every participant
+
+**All participants**, all three sniff lockings (start, free, confirm), grouped. (Shared per-session
+color scale across the three lockings; heat = z vs the single pre-task baseline.)
+
+```{r examples, results='asis'}
 for (g in groups) {
   cat(sprintf('\n\n### %s\n', g))
-  rr <- pick[[g]]
+  rr <- if (!is.null(man)) man[man$group == g & man$status == 'ok' & nzchar(as.character(man$bestMac)), ] else NULL
   if (is.null(rr) || nrow(rr) == 0) { cat('\n*no sessions*\n'); next }
   for (k in seq_len(nrow(rr))) {
     sid <- rr$sessID[k]; bm <- rr$bestMac[k]

@@ -420,3 +420,52 @@ numerically identical output where a reference exists.
 | **Dev / oracles** | `_dev\` (tests, `run_*` harnesses, `subfunction_catalogue.json`), `getSessionParams_*.m`, `assemble_outDat_*.m` (legacy, kept as oracles) |
 
 Adding a participant is a **sheet edit** (a row + its parameter columns), no code change.
+
+
+---
+
+## Remote compute (lab desktop)
+
+When a task needs more cores/RAM than the local machine or involves long-running batch work, offload to a remote Windows lab desktop over SSH. (A Quest HPC cluster + Globus transfers are also available, set up separately — see the end.)
+
+### Prerequisite — VPN
+All remote access requires Northwestern **GlobalProtect VPN** connected (`vpn-connect.northwestern.edu`; NetID + Duo). The local machine is off-domain, so without the VPN every remote connection times out. The user connects the VPN (Duo is interactive). If remote commands suddenly start timing out, assume the tunnel dropped and ask the user to reconnect — jobs already running on the remote keep going.
+
+### Running commands — `ssh labdesktop`
+- `ssh labdesktop "<command>"` runs non-interactively and returns real stdout/stderr + exit code. Key-based auth (configured in `~/.ssh/config`); no password prompt.
+- Hardware: 8-core/8-thread Intel i7-10700, ~96 GB RAM, **no usable GPU**. Good for CPU/RAM-bound parallel work; not GPU compute.
+- **Default remote shell is cmd.exe.** Plain cmd tools (`net use`, `robocopy`, etc.) run directly. For non-trivial **PowerShell**, base64-encode the script:
+  ```powershell
+  $script = @'
+  $ProgressPreference = "SilentlyContinue"   # avoids CLIXML stderr noise
+  # ... your PowerShell here ...
+  '@
+  $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($script))
+  ssh labdesktop "powershell -NoProfile -NonInteractive -EncodedCommand $enc"
+  ```
+
+### Storage — where to read/write
+- **`E:\` is the workspace.** ~880 GB free, read/write from SSH. Scratch, intermediates, large outputs go here.
+- **`C:\` has only ~4 GB free — never use it for job I/O.**
+- **Lab server (`R:` → `\\fsmresfiles.fsm.northwestern.edu\fsmresfiles`):** not reachable by default from an SSH session (key-based logons carry no network credentials). **`cmdkey`/Windows Credential Manager does NOT work over key-based SSH** — *tested:* a domain-share credential won't store in a passwordless logon and the no-credential mount fails, so don't retry it. The verified pattern is **explicit credentials supplied inline, in a single `ssh` invocation** (the mapping only lives in its own session):
+  - **Work directly on R:** (existing `R:\...` code runs unchanged):
+    ```
+    ssh labdesktop "net use R: /delete /y 2>nul & net use R: \\fsmresfiles.fsm.northwestern.edu\fsmresfiles /user:fsm\dtf8829 <NetID pw> & <job that uses R:\...> & net use R: /delete /y"
+    ```
+  - **Heavy/repeated I/O:** robocopy a working set to local `E:` first, crunch there, write back — same single-invocation rule.
+  - **Credential** = `fsm\dtf8829` + **NetID/SSO password** (sensitive, rotates). Never type it in chat or write it here. Stash it **once** as a DPAPI blob on the client (`Read-Host -AsSecureString | ConvertFrom-SecureString | Set-Content $env:USERPROFILE\.fsmcreds\netid.sec`); at runtime decrypt it **locally** and interpolate via base64 `-EncodedCommand` so the literal never appears in chat or a tracked file.
+- `E:` is BitLocker-encrypted but normally already unlocked. If a check shows it **Locked**, ask the user for the E: BitLocker password (a local secret — never write it here) and unlock with `Unlock-BitLocker`.
+
+### Monitoring long jobs
+Redirect output to a file on `E:` and poll it, or check process state with `ssh labdesktop "..."`. The SSH session is a separate logon from any RDP session, so mapped drives and some profile state differ.
+
+### Code: 
+- On the home local machine, code is in C:\Users\Adam\Documents\GitHub\
+- On the labdesktop, code is in G:\My Drive\GitHub
+- Utilize git to move code between machines
+
+### Related (separate channels) Quest is not ready for Claude use yet. This functionality is coming soon.
+- **Quest HPC** — `ssh dtf8829@login.quest.northwestern.edu`, Slurm batch jobs; same VPN prerequisite, key auth set up the same way.
+- **Globus** — bulk `R:` ↔ HPC transfers via the Globus service (independent of the login nodes).
+
+> **Do not commit secrets.** This file is tracked in git. Never paste the NetID password, BitLocker password, or any credential here — supply them at runtime and keep them in a password manager or untracked location.

@@ -30,7 +30,8 @@ function run_O15Analysis_all(sessFilter, doKnit)
 %         One new participant:   run_o15_fooof_one({'<sessID>'})
 %
 %   (2) Noise + baseline-z spectrograms -- run_o15_ztfr
-%       Splits sniffs by sniffLabel, flags sharp-deflection noise (cue_noise_trials),
+%       Splits sniffs by sniffLabel, flags RELATIVE sharp-deflection noise
+%       (cue_noise_trials, robust-z zd>K; K from o15_noise_K, tune via o15_calibrate_noise),
 %       draws singleTrialRawMac_start.png, and computes bestMac baseline-z TF maps
 %       for start/free/confirm (o15_ztfr_multi) vs the SINGLE pre-first-start
 %       baseline, with respiration overlaid. Saves 3 PNGs + <id>_O15_bestMac_TFR.mat

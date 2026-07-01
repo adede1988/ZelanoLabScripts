@@ -1,0 +1,173 @@
+---
+title: "Chirp Analysis — one chirping oscillator, or two?"
+subtitle: "OB sniff-locked gamma (cueTask)"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+params:
+  outDir: "."
+  figDir: ""
+  exampleSessions: ""
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.width = 9)
+outDir <- params$outDir
+figDir <- params$figDir
+rd  <- function(f, dir = outDir) { p <- file.path(dir, f); if (file.exists(p)) utils::read.csv(p, stringsAsFactors = FALSE) else NULL }
+exSess <- if (nzchar(params$exampleSessions)) strsplit(params$exampleSessions, ",")[[1]] else character(0)
+```
+
+# The question
+
+In OB sniff-locked single-trial gamma, the sniff drives a power increase whose instantaneous
+frequency **descends** (a downchirp). Is this **one oscillator sweeping its frequency down**, or
+**two oscillators** — a higher-frequency one earlier and a lower one later — whose sum merely
+*looks* like a chirp?
+
+Because a single sweep and two phase-coupled overlapping tones can produce near-identical short
+segments, we answer the **decidable** form: *during the transition, is there one moving spectral
+component or two simultaneously-present slowly-varying ones?* The tests are **asymmetric** — each
+confirms one hypothesis cleanly and is mute on the other — so we read a **per-session verdict
+vector**, never a single multiplied p-value, and **report "undecidable"** where the evidence is
+mixed or the regime gives a test no teeth.
+
+| Test | Positive → | Engine |
+|---|---|---|
+| Phase continuity (cross-trial) | **single** (consistent ridge-vs-Hilbert residual across trials) | ridge-IF vs Hilbert phase |
+| Envelope beating | **dual** (beat at \|f_hi−f_lo\|) | amplitude-envelope spectrum |
+| Chirplet trajectory | single (one descending chain) / dual (two parallel atoms) | MPACT MPEM |
+| 2nd ridge / power dip | leans **dual** | FASLT + tfridge peeling |
+| Temporal decoupling | leans **dual** (latencies decorrelate) | band-limited latencies |
+| Spatial profile (macBP) | **dual** (distinct hi/lo topographies) | across-contact similarity |
+
+# Methods (this run)
+
+- **Scope:** cueTask finals only; all macBP channels loaded, **bestMac** (OB) carries the core
+  single-channel tests, the full macBP set carries the spatial test (no geometry — per design).
+- **Locking:** every epoch is locked to `behDat.finalOnset`, window **[−1, +3] s** (padded ±1 s for
+  edge-free FIR/FASLT), `fs = 500 Hz`. No trialStart locking.
+- **TF substrate:** FASLT (fractional adaptive superlets), 20–70 Hz, ridge by `tfridge` on the
+  25–58 Hz power; broadband phase/envelope come from a zero-phase firws bandpass + Hilbert (never
+  from the FASLT power).
+- **Burst length (D4):** per trial, the smoothed gamma-power series locked to finalOnset; burst
+  start/stop where it rises to / falls below the **75th percentile of the cross-trial peak
+  distribution**, searched within (0, 3000] ms.
+- **Synthetic Phase-0 calibration was skipped this run** (it was prohibitively slow on prior
+  attempts). Test thresholds therefore use **spec defaults**, and interpretation is deliberately
+  conservative — a test "speaks" only where its mechanism has teeth in the observed cue regime
+  (e.g. envelope beating needs ≥2 beat cycles within the coexistence window, which short cue bursts
+  rarely afford). Decision thresholds used by the adjudicator:
+
+```{r thresholds}
+th <- data.frame(
+  test = c("phase (single)","beat (dual)","chirplet frac","temporal corr (single)",
+           "ridge 2nd-ridge (dual)","spatial sim ceiling"),
+  rule = c("crossTrialR > 0.5 & crossTrial_p < 0.05",
+           "beat_fracSig >= 0.30",
+           "frac >= 0.40 and is the majority class",
+           "corr(latHi,latLo) >= 0.5",
+           "frac trials with significant 2nd ridge >= 0.30",
+           "mean hi/lo profile similarity < 0.5 -> dual"),
+  stringsAsFactors = FALSE)
+knitr::kable(th)
+```
+
+# Sessions analysed
+
+```{r sessions}
+SS <- rd("subject_summary.csv")
+if (is.null(SS)) cat("No subject_summary.csv yet — the batch has not finished.\n") else {
+  cat(sprintf("%d sessions.\n", nrow(SS)))
+  if ("group" %in% names(SS)) print(table(SS$group))
+}
+```
+
+# Real burst lengths
+
+```{r burst, fig.height=4}
+if (!is.null(SS) && "burst_medianMs" %in% names(SS)) {
+  hist(SS$burst_medianMs, breaks=12, col="grey80", xlab="median burst length (ms)",
+       main=sprintf("Per-session median burst length (n=%d)", nrow(SS)))
+  cat(sprintf("median across sessions: %.0f ms; median p90: %.0f ms; median in-band SNR: %.1f dB\n",
+      median(SS$burst_medianMs, na.rm=TRUE), median(SS$burst_p90Ms, na.rm=TRUE),
+      median(SS$snrDb, na.rm=TRUE)))
+  cat("\nNote: a clean envelope beat needs >=2 cycles. At Delta-f ~ a few Hz, 2 cycles is several\n",
+      "hundred ms; where the median burst is shorter than that, the beat/temporal/spatial DUAL\n",
+      "detectors are out of teeth and correctly stay 'inconclusive' rather than voting single.\n", sep="")
+} else cat("No burst data yet.\n")
+```
+
+# Per-session battery
+
+```{r battery-summary}
+if (!is.null(SS)) {
+  show <- intersect(c("session","group","bestMac","phase_crossR","phase_crossP","phase_permZ",
+                      "beat_fracSig","chirp_fracSingle","chirp_fracDual","temp_corrHiLo",
+                      "ridge_fracNR2","spatial_eligible","spatial_meanSim",
+                      "burst_medianMs","nTrials"), names(SS))
+  knitr::kable(SS[, show], digits=3)
+}
+```
+
+# Group adjudication — verdict vectors
+
+```{r verdicts}
+V <- rd("verdict_vectors.csv")
+if (is.null(V)) cat("No verdict_vectors.csv yet (chirp_group_adjudicate runs at the end of the batch).\n") else {
+  knitr::kable(V)
+  cat("\nVerdict counts:\n"); print(table(V$verdict))
+}
+```
+
+```{r group-tests}
+if (!is.null(V)) {
+  nS <- sum(V$verdict=="single"); nD <- sum(V$verdict=="dual"); nU <- sum(V$verdict=="undecidable")
+  cat(sprintf("Across %d sessions: single=%d, dual=%d, undecidable=%d.\n", nrow(V), nS, nD, nU))
+  # directional tallies per test
+  for (col in c("phase","beat","chirplet","temporal","ridge","spatial")) {
+    if (col %in% names(V)) { cat(sprintf("\n%s:\n", col)); print(table(V[[col]])) }
+  }
+}
+```
+
+# Example single-trial TF + ridge
+
+Each panel is one trial's FASLT spectrogram (power, dB) locked to finalOnset, with the **power
+ridge overlaid in white** and the f_hi / f_lo anchors (red dotted). A single descending ridge ⇒
+chirp; two persistent horizontal bands ⇒ dual.
+
+```{r figs, results='asis'}
+if (nzchar(figDir) && length(exSess) > 0) {
+  for (s in exSess) {
+    sub <- file.path(figDir, s, "singleTrialTF")
+    if (!dir.exists(sub)) next
+    mont <- list.files(sub, pattern="^montage_.*\\.png$", full.names=TRUE)
+    cat(sprintf("\n\n## %s\n\n", s))
+    if (length(mont)) cat(sprintf("![montage](%s)\n\n", normalizePath(mont[1], winslash="/")))
+    trs <- list.files(sub, pattern="_trial-.*\\.png$", full.names=TRUE)
+    for (p in head(trs, 3)) cat(sprintf("![trial](%s)\n\n", normalizePath(p, winslash="/")))
+  }
+} else {
+  cat("Set params$figDir and params$exampleSessions to embed example figures.\n")
+}
+```
+
+# Conclusion
+
+```{r conclusion}
+if (!is.null(V)) {
+  nS <- sum(V$verdict=="single"); nD <- sum(V$verdict=="dual"); nU <- sum(V$verdict=="undecidable")
+  cat(sprintf("Across %d cue sessions: single=%d, dual=%d, undecidable=%d.\n\n", nrow(V), nS, nD, nU))
+  cat("Read per the asymmetric logic: a 'single' verdict means the SINGLE-confirming tests (phase\n",
+      "cross-trial consistency, chirplet one-chain geometry) fired while the DUAL-confirming tests\n",
+      "(beat, 2nd ridge, temporal/spatial decoupling) did not; 'dual' means the reverse; everything\n",
+      "else is 'undecidable'. 'spatial: not assessed' (too few good contacts) is kept distinct from\n",
+      "'spatial: matched' and never averaged into the single tally.\n", sep="")
+} else cat("Pending — batch results not yet available.\n")
+```
+
+*Generated by the chirpAnalysis pipeline. Spec: cueAnalysis/chirpAnalysis.md. Build log: chirpAnalysisStatus.md.*
