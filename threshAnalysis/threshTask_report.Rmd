@@ -167,7 +167,13 @@ if (!is.null(man)) {
   for (g in groups) {
     rows <- man[man$group == g & man$status == 'ok' &
                 !is.na(man$bestMac) & nzchar(as.character(man$bestMac)), ]
-    pick[[g]] <- head(rows, 1)
+    # prefer an example session whose all three condition figures exist
+    chosen <- if (nrow(rows) > 0) rows[1, ] else NULL
+    for (k in seq_len(nrow(rows))) {
+      sid <- rows$sessID[k]; bm <- rows$bestMac[k]
+      if (all(file.exists(vapply(conds, function(c) subFig(sid, bm, c), '')))) { chosen <- rows[k, ]; break }
+    }
+    pick[[g]] <- chosen
   }
 }
 for (g in groups) {
@@ -227,11 +233,14 @@ gtFig <- function(sid, cond) file.path(fr, sid, 'threshTask', sprintf('gammaTime
 ```{r gamma-examples, results='asis'}
 if (!is.null(ge)) {
   for (g in groups) {
-    ex <- unique(ge$sessID[ge$group == g & !is.na(ge$group)])
-    if (length(ex) == 0) { cat(sprintf('\n*%s: none*\n', g)); next }
-    cat(sprintf('\n**%s (%s)**\n\n', ex[1], g))
+    exs <- unique(ge$sessID[ge$group == g & !is.na(ge$group)])
+    if (length(exs) == 0) { cat(sprintf('\n*%s: none*\n', g)); next }
+    # prefer a session with all three gamma-progression figures present
+    chosen <- exs[1]
+    for (s in exs) { if (all(file.exists(vapply(conds, function(c) gtFig(s, c), '')))) { chosen <- s; break } }
+    cat(sprintf('\n**%s (%s)**\n\n', chosen, g))
     for (cond in conds) {
-      cat(sprintf('*%s-odor:*\n\n', cond)); cat(mdimg(gtFig(ex[1], cond)))
+      cat(sprintf('*%s-odor:*\n\n', cond)); cat(mdimg(gtFig(chosen, cond)))
     }
   }
 } else cat('*gamma-epoch CSV not found*')
