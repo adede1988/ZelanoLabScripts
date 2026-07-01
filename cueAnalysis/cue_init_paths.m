@@ -12,7 +12,11 @@ function cue_init_paths()
     addpath(L.eeglab);   % unconditional: a stale/saved eeglab path entry in a detached
                          % (WMI) MATLAB makes an exist() guard skip this, then `eeglab`
                          % resolves to a broken reference and errors. Prepending always wins.
-    eeglab nogui;
+    global PLUGINLIST;   % set by eeglab during init; empty = not yet initialized
+    if isempty(PLUGINLIST)
+        eeglab nogui;    % only call once per session: repeated calls trigger plugin
+                         % update network checks that corrupt Java IO in -batch mode
+    end
 
     % --- FieldTrip (machine-aware via labPaths; add AFTER eeglab so it wins shared names) ---
     ftDir = L.fieldtrip;
