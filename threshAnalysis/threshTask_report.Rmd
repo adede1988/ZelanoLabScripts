@@ -1,0 +1,315 @@
+---
+title: "Thresh-task macBP gamma & odor-condition spectrograms"
+author: "Zelano Lab — threshTask analysis"
+date: "`r format(Sys.Date())`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    df_print: paged
+params:
+  groupDir: 'R:/Neurology/Zelano_Lab/Lab_Common/Adam/Dupi_processing/groupStatFigs'
+  figRoot:  'R:/Neurology/Zelano_Lab/Lab_Common/Adam/Dupi_processing'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+library(knitr)
+gd  <- params$groupDir
+fr  <- params$figRoot
+fooofCsv <- file.path(gd, 'threshTask_fooof_summary.csv')
+manCsv   <- file.path(gd, 'threshTask_data_manifest.csv')
+fooof <- if (file.exists(fooofCsv)) read.csv(fooofCsv, stringsAsFactors = FALSE) else NULL
+man   <- if (file.exists(manCsv))   read.csv(manCsv,   stringsAsFactors = FALSE) else NULL
+groups <- c('DupiS1','DupiS2','DupiS3','Control')
+conds  <- c('low','med','air')
+
+mdimg <- function(p) {
+  if (!is.null(p) && file.exists(p)) sprintf('![](%s)\n\n', p)
+  else sprintf('*[missing figure: %s]*\n\n', p)
+}
+subFig <- function(sid, bestMac, cond) {
+  file.path(fr, sid, 'threshTask', sprintf('%s_%s_TFR_%s.png', sid, bestMac, cond))
+}
+groupFig <- function(g, cond) file.path(gd, sprintf('group_%s_TFR_%s.png', g, cond))
+```
+
+## 1. Methods
+
+**Data.** Thresh-task intracranial/scalp recordings, preprocessed to 500 Hz (high-pass
+0.03 Hz, low-pass ~Nyquist, notch 60/120/180 Hz). Analysis channels are the bipolar
+macro pairs `macBP1..5` (count varies; sessions without any `macBP` are excluded).
+Sessions are grouped as **DupiS1 / DupiS2 / DupiS3** (Dupi study, recording session 1/2/3)
+and **Control** (all non-Dupi thresh sessions).
+
+**Design.** Each thresh session is 45 single-sniff trials. Every trial delivers one of three
+odorants — **air** (clean-air control), **low**, or **med** (two PEA concentrations) — and the
+participant makes one cued sniff per trial. The sniff onset (`finalOnset`, respiration-phase
+refined) is the response event; `TTL.start` (= sniff − 2 s @500 Hz) is the pre-sniff marker
+used as the baseline anchor.
+
+**FOOOF (Task 1).** Per session, each `macBP` PSD (FieldTrip `ft_freqanalysis`, `mtmfft`,
+2 s segments, 50% overlap, piped in via EEGLAB `eeglab2fieldtrip`) was parameterized with
+FOOOF over **2–58 Hz** with a **knee** aperiodic term (`cfg.output = fooof_aperiodic /
+fooof_peaks`; brainstorm `process_fooof`). The **gamma** band is 30–58 Hz. Before selecting
+`bestMac`, each channel's **trial-rejection rate** is estimated (fraction of `TTL.start`
+epochs flagged noisy by the relative sharp-deflection rule, below); channels exceeding **30%**
+are excluded from bestMac consideration, preventing a high-noise channel whose broadband
+artifact mimics a gamma peak from being selected. Among the remaining (clean) channels:
+`bestMac` is the channel with the largest **periodic** gamma peak; if no clean channel has a
+fitted gamma peak we fall back to the largest **flattened** (PSD ÷ aperiodic) power; if all
+channels exceed 30% we select the least-noisy one (`selectionMethod = 'allNoisy_leastBad'`).
+The `selectionMethod` and per-channel `rejRate` columns record the outcome.
+
+**Spectrograms (z-score method), split by odor condition.** For each session's `bestMac`,
+per-trial time-frequency power was obtained from EEGLAB `newtimef` (Morlet, 100 log-spaced
+freqs 2–120 Hz; single-trial `alltfX` → |·|²), locked to the **sniff onset (finalOnset)**.
+Trials were split three ways by odor condition (`behDat.type` ∈ {air, low, med}), all
+finalOnset-locked. Power was normalized with a **bootstrap permutation z-score**
+(`myChanZscore`): per frequency, each condition's finalOnset epochs are z-scored against
+**those same trials' pre-`start` baseline** — the **−700…−200 ms** window relative to
+`TTL.start`, appended per-trial before z-scoring (exactly as cue z-scores finalOnset against
+its trialStart baseline). Because `start = sniff − 2 s`, this baseline sits ~2.2–2.7 s before
+the sniff, a clean pre-stimulus reference. All three condition maps use one identical baseline
+**definition**; they differ only in *which trials* feed them (~15 trials each, minus noise).
+Display window −1000…+3000 ms; the **mean respiration trace** (chosen `rsp` channel, flipped)
+is overlaid (black line, right axis). Group means (Task 4) average the per-subject z maps (and
+respiration) within each group × condition on one shared color scale.
+
+*Noise rejection (relative sharp-deflection rule).* Sharp deflections are detected **relative
+to each channel's own variability**, so a uniformly high-amplitude channel is not rejected
+merely for being high-amplitude. For the `bestMac` trace we compute the sliding 10 ms
+max-to-min range `d` and robust-z it over the **whole recording**:
+`zd = (d − median(d)) / (1.4826·MAD(d))` — how many robust-SDs a given 10 ms swing sits above
+that channel's *typical* 10 ms swing. A 10 ms window is an **event** if `zd > K`, and a trial
+(`TTL.start`-locked epoch −1.75…+5.75 s) is flagged **noisy** if it contains any event. The
+threshold **K = 10** was calibrated once across the dataset (`thresh_calibrate_noise`) to drop
+>0 % and ≤20 % of trials; the same K applies to every session. Noisy trials are drawn in
+**red** on `singleTrialRawMac.png` and excluded from all spectrograms and from the gamma
+analysis.
+
+## 2. Data available
+
+```{r data-table}
+if (!is.null(man)) {
+  knitr::kable(man, caption = 'Thresh sessions analysed (one row per session).')
+} else cat('*manifest not found*')
+```
+
+## 3. FOOOF findings
+
+```{r fooof-best}
+if (!is.null(fooof)) {
+  best <- fooof[fooof$isBestMac == 1, c('sessID','group','channel','gammaPeakDetected',
+            'peakGammaFreq','peakGammaPower','flattenedGammaMax','selectionMethod')]
+  knitr::kable(best, digits = 3, caption = 'Selected bestMac channel per session.')
+} else cat('*fooof summary not found*')
+```
+
+```{r fooof-all}
+if (!is.null(fooof)) {
+  cols <- intersect(c('sessID','group','channel','gammaPeakDetected','peakGammaFreq',
+            'peakGammaPower','flattenedGammaMax','aperiodicExponent','fooofR2',
+            'rejRate','isBestMac'), names(fooof))
+  knitr::kable(fooof[, cols], digits = 3, caption = 'All macBP channels.')
+}
+```
+
+## 3b. Trial noise rejection (relative sharp-deflection rule)
+
+`nTrials` = `TTL.start` events; `nNoiseTrials` = trials flagged by the **relative** sharp-
+deflection rule (any 10 ms window with `zd > 10`; drawn red on `singleTrialRawMac.png` and
+excluded); `nLow`/`nMed`/`nAir` = clean trials per odor condition; `nFinal_*` = clean trials
+actually entering each condition's average (further limited by epochs running off the
+recording end).
+
+```{r qc-table}
+qcCols <- c('sessID','group','nTrials','nNoiseTrials','nLow','nMed','nAir',
+            'nFinal_low','nFinal_med','nFinal_air')
+if (!is.null(fooof) && 'nNoiseTrials' %in% names(fooof)) {
+  qc <- fooof[fooof$isBestMac == 1, intersect(qcCols, names(fooof))]
+  knitr::kable(qc, caption = 'Per-session noise rejection for the bestMac spectrograms.')
+} else cat('*noise columns not present in the summary CSV*')
+```
+
+### Example single-trial noise plots
+
+Two sessions with the **most** flagged-noise trials and two with the **fewest**, showing the
+red-flagged single-trial raw `bestMac` traces.
+
+```{r noise-examples, results='asis'}
+stFig <- function(sid) file.path(fr, sid, 'threshTask', 'singleTrialRawMac.png')
+if (!is.null(fooof) && 'nNoiseTrials' %in% names(fooof)) {
+  nz <- fooof[fooof$isBestMac == 1 & !is.na(fooof$nNoiseTrials), c('sessID','group','nNoiseTrials')]
+  nz <- nz[order(-nz$nNoiseTrials), ]
+  hi <- head(nz, 2); lo <- tail(nz, 2)
+  cat('\n**Highest-noise sessions:**\n\n')
+  for (k in seq_len(nrow(hi))) {
+    cat(sprintf('*%s (%s) — %d noise trials*\n\n', hi$sessID[k], hi$group[k], hi$nNoiseTrials[k]))
+    cat(mdimg(stFig(hi$sessID[k])))
+  }
+  cat('\n**Lowest-noise sessions:**\n\n')
+  for (k in seq_len(nrow(lo))) {
+    cat(sprintf('*%s (%s) — %d noise trials*\n\n', lo$sessID[k], lo$group[k], lo$nNoiseTrials[k]))
+    cat(mdimg(stFig(lo$sessID[k])))
+  }
+} else cat('*noise counts unavailable*')
+```
+
+## 4. Single-subject example spectrograms
+
+For each group, one example session, all three odor conditions (low / med / air), all
+finalOnset-locked.
+
+```{r examples, results='asis'}
+pick <- list()
+if (!is.null(man)) {
+  for (g in groups) {
+    rows <- man[man$group == g & man$status == 'ok' &
+                !is.na(man$bestMac) & nzchar(as.character(man$bestMac)), ]
+    pick[[g]] <- head(rows, 1)
+  }
+}
+for (g in groups) {
+  cat(sprintf('\n\n### %s\n', g))
+  rr <- pick[[g]]
+  if (is.null(rr) || nrow(rr) == 0) { cat('\n*no sessions*\n'); next }
+  sid <- rr$sessID[1]; bm <- rr$bestMac[1]
+  cat(sprintf('\n**%s** (bestMac = %s)\n\n', sid, bm))
+  for (cond in conds) {
+    cat(sprintf('*%s-odor:*\n\n', cond)); cat(mdimg(subFig(sid, bm, cond)))
+  }
+}
+```
+
+## 5. Group-average spectrograms
+
+4 groups × 3 odor conditions (low / med / air), shared ±5 z color scale.
+
+```{r group-means, results='asis'}
+for (g in groups) {
+  cat(sprintf('\n\n### %s\n\n', g))
+  for (cond in conds) {
+    cat(sprintf('*%s-odor:*\n\n', cond)); cat(mdimg(groupFig(g, cond)))
+  }
+}
+```
+
+## 6. Time-resolved gamma (FOOOF over epochs, per odor condition)
+
+**Methods.** For each session's `bestMac`, per odor condition, Morlet power (2–58 Hz, 100
+linear freqs) was computed on that condition's noise-clean finalOnset-locked trials, then
+averaged over trials and into ten sequential **250 ms windows** spanning −500…+2000 ms. FOOOF
+(same settings as the overall channel fit) was applied to each window; the largest 30–58 Hz
+periodic peak per window is recorded in `threshTask_gammaEpochs.csv` (with a `cond` column). A
+condition with fewer than 8 clean trials in a session is skipped for that session.
+"Channel-centered" = each window's gamma peak frequency minus that channel's overall gamma
+peak (from §3).
+
+```{r gamma-setup, include=FALSE}
+geCsv <- file.path(gd, 'threshTask_gammaEpochs.csv')
+ge <- if (file.exists(geCsv)) read.csv(geCsv, stringsAsFactors = FALSE) else NULL
+suppressMessages({library(dplyr); library(ggplot2)})
+if (!is.null(ge)) {
+  ovl <- fooof[fooof$isBestMac == 1, c('sessID','peakGammaFreq','peakGammaPower')]
+  names(ovl)[2:3] <- c('overallPeakFreq','overallPeakPower')
+  ge <- merge(ge, ovl, by = 'sessID', all.x = TRUE)
+  ge$centeredFreq  <- ge$gammaPeakFreq  - ge$overallPeakFreq
+  ge$centeredPower <- ge$gammaPeakPower - ge$overallPeakPower
+  ge$group <- factor(ge$group, levels = groups)
+  ge$cond  <- factor(ge$cond,  levels = conds)
+}
+gtFig <- function(sid, cond) file.path(fr, sid, 'threshTask', sprintf('gammaTimeProgression_%s.png', cond))
+```
+
+### 6.1 Example gamma time-progression (one per group, three conditions)
+
+```{r gamma-examples, results='asis'}
+if (!is.null(ge)) {
+  for (g in groups) {
+    ex <- unique(ge$sessID[ge$group == g & !is.na(ge$group)])
+    if (length(ex) == 0) { cat(sprintf('\n*%s: none*\n', g)); next }
+    cat(sprintf('\n**%s (%s)**\n\n', ex[1], g))
+    for (cond in conds) {
+      cat(sprintf('*%s-odor:*\n\n', cond)); cat(mdimg(gtFig(ex[1], cond)))
+    }
+  }
+} else cat('*gamma-epoch CSV not found*')
+```
+
+### 6.2 Participants with a detectable gamma peak, per epoch × condition
+
+```{r gamma-count, fig.width=10, fig.height=6}
+if (!is.null(ge)) {
+  cnt <- ge %>% group_by(group, cond, centerMs) %>%
+    summarise(nDet = sum(gammaDetected == 1, na.rm = TRUE),
+              nTot = n_distinct(sessID), .groups = 'drop')
+  ggplot(cnt, aes(centerMs, nDet, color = cond)) +
+    geom_line() + geom_point(size = 1) +
+    facet_wrap(~group) +
+    labs(x = 'epoch center (ms, rel. finalOnset)', y = '# participants with gamma peak',
+         title = 'Detectable gamma oscillation per epoch, by odor condition') + theme_bw()
+}
+```
+
+### 6.3 Channel-centered gamma peak frequency across epochs
+
+Group average per condition (bold) with individual sessions as lighter connected dots.
+
+```{r gamma-centered, fig.width=10, fig.height=6}
+if (!is.null(ge)) {
+  d <- ge[!is.na(ge$centeredFreq), ]
+  ggplot(d, aes(centerMs, centeredFreq, color = cond)) +
+    geom_hline(yintercept = 0, color = 'grey80') +
+    geom_line(aes(group = interaction(sessID, cond)), alpha = 0.25) +
+    stat_summary(fun = mean, geom = 'line', linewidth = 1.2) +
+    stat_summary(fun = mean, geom = 'point', size = 2) +
+    facet_wrap(~group) +
+    labs(x = 'epoch center (ms, rel. finalOnset)',
+         y = 'epoch gamma peak − channel overall peak (Hz)',
+         title = 'Channel-centered gamma peak frequency over epochs, by odor condition') +
+    theme_bw()
+}
+```
+
+### 6.4 Does gamma peak frequency change over epochs / condition? (LME per group)
+
+Linear mixed-effects model `gammaPeakFreq ~ epoch * cond + (1|subject)`, fit within each
+group; falls back to `~ epoch + cond` if the interaction model is singular or fails. Epochs
+with no FOOOF-detected gamma peak are treated as missing. The `epoch` slope is Hz per 250 ms
+window; `cond` terms are Hz offsets from the `low` reference condition.
+
+```{r gamma-lme}
+if (!is.null(ge)) {
+  suppressMessages({library(lme4); library(lmerTest)})
+  fitOne <- function(sub) {
+    m <- tryCatch(lmer(gammaPeakFreq ~ epoch * cond + (1 | sessID), data = sub), error = function(e) NULL)
+    mdl <- 'epoch*cond'
+    if (is.null(m) || lme4::isSingular(m)) {
+      m <- tryCatch(lmer(gammaPeakFreq ~ epoch + cond + (1 | sessID), data = sub), error = function(e) NULL)
+      mdl <- 'epoch+cond'
+    }
+    list(m = m, mdl = mdl)
+  }
+  res <- lapply(levels(ge$group), function(g) {
+    sub <- ge[ge$group == g & !is.na(ge$gammaPeakFreq), ]
+    sub$cond <- droplevels(factor(sub$cond, levels = conds))
+    nsub <- length(unique(sub$sessID)); ncond <- length(unique(sub$cond))
+    out <- data.frame(group = g, n_obs = nrow(sub), n_subj = nsub, model = 'NA',
+                      epoch_slope = NA, p_epoch = NA)
+    if (nrow(sub) >= 8 && nsub >= 3 && ncond >= 2) {
+      fo <- fitOne(sub)
+      if (!is.null(fo$m)) {
+        co <- summary(fo$m)$coefficients
+        out$model <- fo$mdl
+        if ('epoch' %in% rownames(co)) {
+          out$epoch_slope <- co['epoch','Estimate']; out$p_epoch <- co['epoch','Pr(>|t|)']
+        }
+      }
+    }
+    out
+  })
+  knitr::kable(do.call(rbind, res), digits = 4,
+    caption = 'LME: gamma peak frequency ~ epoch * cond + (1|subject), per group.')
+} else cat('*gamma-epoch CSV not found*')
+```
