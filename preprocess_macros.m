@@ -70,8 +70,22 @@ if P.spikeClean
         %are more stable this way.
     out = ica_flag_spikes_targeted(x_high, test, prominence, ...
         'Fs', outDat.fs);
-    %add low frequency component back into the clean data: 
-    out.data_clean = out.data_clean + x_low; 
+    if isempty(out)
+        % Too few macro spikes to train the targeted ICA -> keep the bipolar
+        % data as-is (no spike removal), matching the spikeClean=off path.
+        % spikeCleanVec = all ones flags that nothing was removed.
+        C = size(macOut,1);
+        newLabs = {'macBP1', 'macBP2', 'macBP3','macBP4', 'macBP5'};
+        newLabs = newLabs(1:C);
+        outDat.data(end+1:end+C, :) = macOut;
+        outDat.labels(end+1:end+C) = newLabs;
+        outDat.data(end+1, :) = ones(size(outDat.data,2),1);
+        outDat.labels{end+1} = "spikeCleanVec";
+        outDat.spikeRemoval = 1;
+        return;
+    end
+    %add low frequency component back into the clean data:
+    out.data_clean = out.data_clean + x_low;
     whereSpikes = movmean(out.mixVector, 10*outDat.fs);
     [~, idx] = min(whereSpikes(20000:end-20000)); 
     idx = idx + 10000; 
