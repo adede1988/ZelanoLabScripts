@@ -176,7 +176,29 @@ function [out, badChan, blinkIndicator] = blinkRemoveWrapper(outDat, ...
     trainDatHP = filtfilt(bHP, aHP, trainDat.').'; 
     trainDatHP = trainDatHP(:, selStart:selEnd); 
 
-    out = ica_blinks(trainDatHP, 'blinkChan', blinkChan); 
+    out = ica_blinks(trainDatHP, 'blinkChan', blinkChan);
+
+    if isfield(out, 'ambiguous') && out.ambiguous
+        % Batch run could not auto-select a blink IC. Save a candidate-vs-blink
+        % plot for manual review, then abort THIS session (the caller's
+        % try/catch logs it as skipped). To reprocess after inspecting, set
+        % ZLP_BLINK_IC to the chosen IC index and re-run just that session.
+        try
+            fA = figure('visible','off','Color','w'); nC = size(out.candSact,1);
+            for ic = 1:nC
+                subplot(nC,1,ic);
+                zic = (out.candSact(ic,:)-mean(out.candSact(ic,:)))/max(std(out.candSact(ic,:)),eps);
+                plot(zic); hold on; plot(out.blinkSig);
+                ylabel(sprintf('IC %d', out.candIdx(ic)));
+                if ic==1, title(sprintf('%s: choose blink IC, set ZLP\\_BLINK\\_IC', outDat.sessID)); end
+            end
+            if ~exist(outDat.figs,'dir'), mkdir(outDat.figs); end
+            saveas(fA, fullfile(outDat.figs, ['blinkAmbiguous_' outDat.sessID '.jpg']));
+            close(fA);
+        catch, end
+        error('ZLP:blinkAmbiguous', 'blink IC ambiguous for %s (candidate ICs %s)', ...
+              outDat.sessID, mat2str(out.candIdx));
+    end
 
     if ~isempty(out.badICs)
         ax = figure; 
