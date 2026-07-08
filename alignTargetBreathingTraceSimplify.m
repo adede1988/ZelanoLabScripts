@@ -89,12 +89,20 @@ function [outDat, targTraces] = alignTargetBreathingTraceSimplify(outDat, targTr
                 csvPath = fullfile(dataDir, csvName);
         
                 targTbl = readtable(csvPath);
-    
+
             end
-    
+
             % Remove any zero-voltage rows
             targTbl(targTbl.voltage == 0, :) = [];
-            
+
+            % A voltage-only recording (no 'target' waveform column, e.g. an NA
+            % condition remapped to the audioResp CSV) has no target trace:
+            % treat it like the audio/pre conditions and use a zero trace.
+            if ~ismember('target', targTbl.Properties.VariableNames)
+                targTraces{cndi} = zeros(1, nSamples(cndi));
+                continue;
+            end
+
             if cndi == length(outDat.TTL)
                 targ_len = length(rspDat) - outDat.TTL(end); 
                 seg = rspDat(outDat.TTL(cndi): end);
