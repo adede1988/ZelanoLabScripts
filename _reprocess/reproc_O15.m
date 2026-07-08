@@ -23,6 +23,9 @@ function reproc_O15(idxList)
     logf = fopen(fullfile(reprocRoot(), 'O15_run.log'), 'a');
     logmsg(logf, sprintf('==== reproc_O15 start %s ====', datestr(now)));
 
+    donePath = fullfile(reprocRoot(), 'O15_done.txt');
+    doneIds  = readDone(donePath);
+
     cfg = applyParams('O15', 'main');
     if nargin < 1 || isempty(idxList), idxList = 1:numel(cfg.sessionIDs); end
 
@@ -30,6 +33,9 @@ function reproc_O15(idxList)
         id = cfg.sessionIDs{s};
         if strcmpi(cfg.paramSource{s}, 'guess')
             logmsg(logf, sprintf('GUESS_SKIP_O15 %s', id)); continue;
+        end
+        if any(strcmpi(id, doneIds))
+            logmsg(logf, sprintf('ALREADY_DONE_O15 %s (skip; delete O15_done.txt to force)', id)); continue;
         end
         try
             S = struct('id', id, 'root', cfg.root{s}, 'figPath', figPath);
@@ -60,6 +66,7 @@ function reproc_O15(idxList)
             hasMan = ismember('manOnset', outDat.behDat.Properties.VariableNames);
             logmsg(logf, sprintf('SUCCESS_O15 %s (manOnset=%d nBeh=%d nCh=%d fs=%d)', ...
                 id, hasMan, height(outDat.behDat), numel(outDat.labels), outDat.fs));
+            markDone(donePath, id);
         catch ME
             logmsg(logf, sprintf('FAIL_O15 %s : %s', id, ME.message));
         end
@@ -78,4 +85,16 @@ end
 function logmsg(fid, msg)
     fprintf('%s\n', msg);
     if fid > 0, fprintf(fid, '%s\n', msg); end
+end
+
+function ids = readDone(p)
+    ids = {};
+    if exist(p, 'file') == 2
+        ids = strtrim(string(splitlines(fileread(p))));
+        ids = cellstr(ids(strlength(ids) > 0));
+    end
+end
+
+function markDone(p, id)
+    fid = fopen(p, 'a'); if fid > 0, fprintf(fid, '%s\n', id); fclose(fid); end
 end
