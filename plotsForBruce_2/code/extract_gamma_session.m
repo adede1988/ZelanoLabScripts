@@ -14,7 +14,7 @@ function out = extract_gamma_session(fp, taskRow, bestLabel, cfg)
 if nargin<4, cfg = struct(); end
 D = struct('F',22:1:62,'ridgeBand',[25 58],'c1',3,'ord',[3 30],'mult',1, ...
    'epochMs',[-1000 4000],'baseMs',[-1000 -250],'burstZ',3,'freqFloorZ',2, ...
-   'peakWinMs',[0 2000],'chirpWinMs',[0 500],'penalty',1.0,'ridgeBW',2, ...
+   'peakWinMs',[0 2000],'chirpWinMs',[0 500],'chirpWin2Ms',[200 1000],'penalty',1.0,'ridgeBW',2, ...
    'peakSearchMs',2500,'fs',500);
 fn=fieldnames(D); for i=1:numel(fn), if ~isfield(cfg,fn{i}), cfg.(fn{i})=D.(fn{i}); end, end
 
@@ -136,7 +136,9 @@ for k=1:nEv
 
     % frequency dynamics
     cidx = tMs>=cfg.chirpWinMs(1) & tMs<=cfg.chirpWinMs(2);
-    M.chirpSlope = linslope(tMs(cidx)/1000, frW(cidx));   % Hz/s over inhale window
+    M.chirpSlope = linslope(tMs(cidx)/1000, frW(cidx));   % Hz/s over inhale window (0-500 ms)
+    cidx2 = tMs>=cfg.chirpWin2Ms(1) & tMs<=cfg.chirpWin2Ms(2);
+    M.chirpSlope2 = linslope(tMs(cidx2)/1000, frW(cidx2)); % Hz/s over 200-1000 ms
     gidx = rwin & (zpW>cfg.freqFloorZ);
     if nnz(gidx)>=3
         M.freqSpan = max(frW(gidx))-min(frW(gidx));

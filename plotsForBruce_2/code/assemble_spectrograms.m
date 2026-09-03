@@ -65,7 +65,7 @@ for s=1:3
     rg=[]; for ri=1:nR, for ci=1:nC, if Nrsp(ri,ci)>0, rg=[rg, Rsp{ri,ci}/Nrsp(ri,ci)]; end, end, end %#ok<AGROW>
     rmin=prctile(rg,1); rmax=prctile(rg,99); if rmax<=rmin, rmax=rmin+1; end
 
-    fig=figure('Position',[40 40 1750 1500],'Color','w','Visible','off');
+    fig=figure('Position',[30 30 2300 1950],'Color','w','Visible','off');
     tl=tiledlayout(nR,nC,'TileSpacing','compact','Padding','compact');
     for ri=1:nR
       for ci=1:nC
@@ -79,18 +79,18 @@ for s=1:3
                 ry=F(1)+(r-rmin)/(rmax-rmin)*(F(end)-F(1));
                 plot(tMs, ry, 'w-', 'LineWidth',1.0);
             end
-            title(sprintf('%s / %s\nn=%d br, %d sess', rows{ri}, cols{ci}, Ns(ri,ci), Ss(ri,ci)),'FontSize',7,'Interpreter','none');
+            title(sprintf('%s / %s (n=%d br, %d sess)', rows{ri}, cols{ci}, Ns(ri,ci), Ss(ri,ci)),'FontSize',12,'Interpreter','none');
         else
-            axis off; title(sprintf('%s / %s\n(no data)', rows{ri}, cols{ci}),'FontSize',7,'Interpreter','none');
+            axis off; title(sprintf('%s / %s (no data)', rows{ri}, cols{ci}),'FontSize',12,'Interpreter','none');
         end
-        if ci==1, ylabel('Hz','FontSize',7); end
-        if ri==nR, xlabel('ms','FontSize',7); end
-        set(gca,'FontSize',6);
+        if ci==1, ylabel('Hz','FontSize',12); end
+        if ri==nR, xlabel('ms','FontSize',12); end
+        set(gca,'FontSize',11);
       end
     end
     try, colormap(turbo); catch, colormap(jet); end
-    cb=colorbar; cb.Layout.Tile='east'; cb.Label.String='baseline-z (-500..-100 ms)';
-    title(tl, sprintf('Inhale/sniff-locked group spectrograms — %s (superlet; baseline-z; white = mean respiration)', setLabel{s}),'FontSize',11);
+    cb=colorbar; cb.Layout.Tile='east'; cb.Label.String='baseline-z (-500..-100 ms)'; cb.FontSize=12; cb.Label.FontSize=12;
+    title(tl, sprintf('Inhale/sniff-locked group spectrograms — %s (superlet; baseline-z; white = mean respiration)', setLabel{s}),'FontSize',16);
     exportgraphics(fig, fullfile(fdir, sprintf('spectrograms_%s.png', sets{s})),'Resolution',140);
     close(fig);
     fprintf('wrote spectrograms_%s.png (cells with data %d/%d, clim +-%.2f)\n', sets{s}, sum(Ns(:)>0), nR*nC, cl);

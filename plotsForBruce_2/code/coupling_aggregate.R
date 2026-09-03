@@ -25,11 +25,16 @@ for(mc in mets){
     geom_errorbar(data=ms, aes(xpos, ymin=m-se, ymax=m+se), inherit.aes=FALSE, width=.2, linewidth=.6) +
     geom_point(data=ms, aes(xpos,m), inherit.aes=FALSE, shape=95, size=6) +
     facet_wrap(~taskRow, nrow=1) + scale_color_manual(values=pal, name="") +
-    labs(x=NULL, y=mc, title=paste("Respiration-gamma coupling:", mc)) + theme_bw(base_size=16) +
-    theme(legend.position="bottom", legend.text=element_text(size=13),
-          axis.text.x=element_text(size=12), axis.text.y=element_text(size=12),
-          strip.text=element_text(size=14), plot.title=element_text(size=18))
-  ggsave(file.path(fdir, paste0("coup_", mc, ".png")), p, width=17, height=4.6, dpi=120)
+    labs(x=NULL, y=mc, title=paste("Respiration-gamma coupling:", mc),
+         subtitle=switch(mc, coup_MI="session Tort modulation index of gamma amplitude by respiratory phase",
+                             coup_resultantLen="resultant vector length of the preferred respiratory phase of gamma",
+                             coup_inhExhRatio="ratio of mean gamma amplitude during inhalation vs exhalation", "")) +
+    theme_bw(base_size=19) +
+    theme(legend.position="bottom", legend.text=element_text(size=16), legend.title=element_text(size=16),
+          axis.text.x=element_text(size=15), axis.text.y=element_text(size=15), axis.title.y=element_text(size=17),
+          strip.text=element_text(size=17), plot.title=element_text(size=22, face="bold"),
+          plot.subtitle=element_text(size=17, color="grey25"))
+  ggsave(file.path(fdir, paste0("coup_", mc, ".png")), p, width=18, height=5.2, dpi=120)
 }
 # goodness for coupling measures
 d_between <- function(a,b){ a<-a[is.finite(a)]; b<-b[is.finite(b)]; if(length(a)<2||length(b)<2) return(NA)

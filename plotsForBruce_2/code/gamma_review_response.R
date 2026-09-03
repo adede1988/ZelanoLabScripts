@@ -1,4 +1,4 @@
-# gamma_review_response.R — analyses answering the Zelano/Voytek/Cohen reviews:
+# gamma_review_response.R — robustness analyses for the gamma measures:
 #  (1) peak-gated re-ranking (only breaths with a FOOOF gamma peak)
 #  (2) airflow-regressed re-ranking (residualize on inhale volume/duration/flow)
 #  (3) aperiodic exponent/offset per group + 1/f-controlled separation
@@ -113,15 +113,18 @@ pal <- c(responder="#1b9e77",`non-responder`="#d95f02",control="#7570b3",unclass
 for(mc in c("apExp","apOffset")){
   d<-apx|>select(task,xpos,grp,val=all_of(mc))|>filter(is.finite(val))
   ms<-d|>group_by(task,xpos)|>summarise(m=mean(val,na.rm=TRUE),se=sd(val,na.rm=TRUE)/sqrt(sum(is.finite(val))),.groups="drop")
-  p<-ggplot(d,aes(xpos,val))+geom_jitter(aes(color=grp),width=.12,height=0,size=1.9,alpha=.75)+
-    geom_errorbar(data=ms,aes(xpos,ymin=m-se,ymax=m+se),inherit.aes=FALSE,width=.2,linewidth=.6)+
-    geom_point(data=ms,aes(xpos,m),inherit.aes=FALSE,shape=95,size=6)+
+  desc <- ifelse(mc=="apExp","session mean of the per-breath aperiodic (1/f) exponent (FOOOF-lite)",
+                 "session mean of the per-breath aperiodic (1/f) offset (FOOOF-lite)")
+  p<-ggplot(d,aes(xpos,val))+geom_jitter(aes(color=grp),width=.12,height=0,size=2.1,alpha=.8)+
+    geom_errorbar(data=ms,aes(xpos,ymin=m-se,ymax=m+se),inherit.aes=FALSE,width=.2,linewidth=.7)+
+    geom_point(data=ms,aes(xpos,m),inherit.aes=FALSE,shape=95,size=7)+
     facet_wrap(~task,nrow=1)+scale_color_manual(values=pal,name="")+
-    labs(x=NULL,y=mc,title=paste("Aperiodic",mc,"(Voytek 1/f control)"))+theme_bw(base_size=16)+
-    theme(legend.position="bottom",legend.text=element_text(size=13),
-          axis.text.x=element_text(size=12),axis.text.y=element_text(size=12),
-          strip.text=element_text(size=14),plot.title=element_text(size=18))
-  ggsave(file.path(fdir,paste0("ap_",mc,".png")),p,width=17,height=4.6,dpi=120)
+    labs(x=NULL,y=mc,title=mc,subtitle=desc)+theme_bw(base_size=19)+
+    theme(legend.position="bottom",legend.text=element_text(size=16),legend.title=element_text(size=16),
+          axis.text.x=element_text(size=15),axis.text.y=element_text(size=15),axis.title.y=element_text(size=17),
+          strip.text=element_text(size=17),plot.title=element_text(size=22,face="bold"),
+          plot.subtitle=element_text(size=17,color="grey25"))
+  ggsave(file.path(fdir,paste0("ap_",mc,".png")),p,width=18,height=5.2,dpi=120)
 }
 # is the control<->Dupi separation aperiodic? separation on apExp itself:
 ap_sep <- ap |> group_by(task) |> summarise(
