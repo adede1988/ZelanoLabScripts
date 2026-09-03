@@ -1,0 +1,6 @@
+# Bulky, regenerable intermediates (re-created by code/run_gamma_all.m + assemble_spectrograms.m)
+out/gamma/spectro/*.mat
+out/gamma/group_spectrograms.mat
+logs/
+# transient
+*.tmp

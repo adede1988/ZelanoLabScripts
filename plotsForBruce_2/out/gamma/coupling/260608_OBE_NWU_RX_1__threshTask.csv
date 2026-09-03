@@ -1,0 +1,2 @@
+sessID,taskRow,bestLabel,cohort,group,participant,sessNum,coup_MI,coup_prefPhaseRad,coup_resultantLen,coup_rayleighP,coup_inhExhRatio
+260608_OBE_NWU_RX_1,threshTask,macBP4,OBE,Control,RX,1,0.0208574386832113,-1.73125120608442,0.0771937545959132,5.53239851927668e-28,0.975362222235377

@@ -1,0 +1,2 @@
+sessID,task,issue
+250811_Dupi_NMH_TB_2,threshTask,"final loads in h5info but MATLAB load() fails on a corrupt data chunk (262MB, ~4x normal); excluded"

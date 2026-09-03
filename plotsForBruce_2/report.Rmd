@@ -1,0 +1,279 @@
+---
+title: "Dupi Olfactory Gamma Analysis"
+subtitle: "Inventory · behavioral recovery · macBP gamma selection · per-breath gamma characterization"
+author: "plotsForBruce_2 pipeline"
+date: "`r format(Sys.Date())`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    number_sections: true
+    df_print: paged
+    theme: flatly
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE, fig.align="center", dpi=110)
+suppressWarnings(suppressMessages({library(dplyr); library(tidyr); library(readr); library(stringr); library(knitr); library(kableExtra); library(ggplot2)}))
+proj <- normalizePath(".")
+T <- file.path(proj,"out","tables"); Fg <- file.path(proj,"out","figs")
+rd <- function(f){ p<-file.path(T,f); if(file.exists(p)) suppressMessages(read_csv(p, show_col_types=FALSE)) else NULL }
+hasfig <- function(p) file.exists(file.path(Fg,p))
+kt <- function(df, cap=NULL, ...) { if(is.null(df)||nrow(df)==0) return(cat("_not available_")); kbl(df, caption=cap, ...) |> kable_styling(bootstrap_options=c("striped","condensed","hover"), full_width=FALSE, font_size=12) }
+```
+
+# Overview
+
+This report analyzes gamma-band (25–58 Hz) activity on intracranial macro-bipolar (macBP) channels in the **Dupi** intervention cohort, locked to breaths and sniffs, and asks which gamma measures are **stable across controls** while **separating controls from Dupi**, **separating responders from non-responders**, or **tracking olfactory recovery** across sessions.
+
+**Cohorts.** Dupi = intervention, up to three sessions per participant (S1/S2/S3). **Control = OBEControl (OBE)**. The EEGbreathing (EEG) cohort is **excluded** — those recordings carry no nasal/depth electrode on which to measure gamma.
+
+**Design decisions baked in (before external review):**
+
+- Best macBP channel selected per recording by **peak power after FOOOF spectral flattening in 25–58 Hz** (highest gamma).
+- Superlet time-frequency power (fractional adaptive, base cycles 3, order 3–30), validated to machine precision against the reference `faslt`.
+- Ridge tracked with the **Frequency_ridge_tracking** forward–backward algorithm (ported to MATLAB), on the per-breath within-frequency z-scored power (`myChanZscore`, no baseline).
+- **Both** whole-window z (as specified) **and** a pre-inhale baseline z are computed, so burst/peak results can be checked against Cohen's normalization-window concern.
+- **Per-breath FOOOF** (aperiodic exponent/offset + periodic gamma peak presence) so a "gamma" claim is not confused with a broadband 1/f shift (Voytek).
+- Per-breath **breathing/airflow covariates** (inhale volume, duration, peak flow) and `goodBreath` QC are carried, to address the sniff-airflow confound (Zelano).
+- Group statistics **aggregate to session level first** (each session = one observation), avoiding trial-count bias (Cohen).
+
+---
+
+# Inventory
+
+```{r inv-summary}
+idx <- rd("session_index.csv")
+cat("Analysis set: Dupi + OBE (EEG excluded). Finals on disk by task:\n")
+if(!is.null(idx)){
+  s <- idx |> filter(cohort %in% c("Dupi","OBE"), onDisk==1) |> count(task, cohort) |> pivot_wider(names_from=cohort, values_from=n, values_fill=0)
+  kt(s, "On-disk finals (Dupi vs OBE) per task")
+}
+```
+
+## Dupi participant × session grid
+
+```{r inv-dupi}
+kt(rd("INVENTORY_dupi_grid.csv"), "Dupi participants: tasks present per session (B=breathing C=cue T=thresh O=O15)")
+```
+
+## Missing / unprocessed (both directions)
+
+```{r inv-missing}
+mf <- rd("INVENTORY_missing_finals.csv")
+cat("**Sheet-listed sessions missing a preproc final:**\n")
+kt(mf, "In the tracking sheet but no final on disk")
+nf <- rd("INVENTORY_ondisk_not_in_sheet.csv")
+cat("\n\n**Session folders on disk NOT in the analysis set** (raw folders with no preproc finals, or not marked raw-extracted):\n")
+kt(nf, "On disk, absent from the sheet-driven analysis set")
+```
+
+## Controls (OBE)
+
+```{r inv-control}
+kt(rd("INVENTORY_control_grid.csv"), "OBE control recordings (tasks present)")
+```
+
+---
+
+# Behavioral olfactory performance
+
+Scores follow the lab's validated formulas: cue **d′** (signal = cue==odor; log-linear corrected), threshold **air-calibrated PEA intensity**, O15 **identification accuracy** (`sum(expScore)/15`). breathingTask has no olfactory score. Points are colored by responder status (defined below); black bars = session means ± SE.
+
+```{r beh-plots, fig.show="hold", out.width="49%"}
+for(p in c("beh_cue_d.png","beh_thresh_lowcal.png","beh_o15_acc.png","beh_composite_all3.png"))
+  if(hasfig(p)) knitr::include_graphics(file.path(Fg,p))
+```
+
+---
+
+# Composite Olfaction Index & responder split
+
+The **Olfaction Index** is the mean of three normalized sub-scores (`O15_acc`, `thresh_low_cal/400`, `cue_d/3.5`) for sessions with all three olfactory tasks. Dupi participants are split into **responders** vs **non-responders** by whether the composite **improves from session 1 to session 2**.
+
+```{r resp-table}
+kt(rd("responder_table.csv"), "Responder / non-responder classification (composite S2 vs S1)")
+```
+
+```{r comp-plot, out.width="60%"}
+if(hasfig("beh_composite.png")) knitr::include_graphics(file.path(Fg,"beh_composite.png"))
+```
+
+---
+
+# macBP gamma channel selection
+
+For each recording, the **peak flattened power in 25–58 Hz (dB over the FOOOF aperiodic fit)** is shown for every macBP channel; the **maximum per recording is bold** (the selected channel). We also report whether the selected channel had a **FOOOF-detectable gamma peak**, and how many non-selected channels did.
+
+```{r macbp-table}
+mw <- rd("macbp_table_wide.csv")
+if(!is.null(mw)){
+  chanCols <- grep("^macBP", names(mw), value=TRUE)
+  disp <- mw |> select(sessID, task, cohort, all_of(chanCols), bestLabel, bestGammaDetected, nNonMaxDetected, nMacBP)
+  # bold the max per row across chanCols
+  m <- as.matrix(disp[,chanCols]); storage.mode(m) <- "double"
+  disp <- disp |> mutate(across(all_of(chanCols), as.character))
+  for(i in seq_len(nrow(m))){
+    r <- m[i,]; j <- which.max(r)
+    for(k in seq_along(r)) disp[i,chanCols[k]] <- if(!is.na(r[k]) && length(j)==1 && k==j)
+      cell_spec(sprintf("%.2f",r[k]), bold=TRUE) else if(is.na(r[k])) "" else sprintf("%.2f",r[k])
+  }
+  kbl(disp, escape=FALSE, caption="Peak flattened power (dB) in 25–58 Hz per macBP channel; bold = selected (max).") |>
+    kable_styling(bootstrap_options=c("striped","condensed"), font_size=10) |>
+    scroll_box(height="520px")
+}
+```
+
+```{r macbp-summary}
+b <- rd("macbp_best.csv")
+if(!is.null(b)){
+  cat(sprintf("Selected channel had a FOOOF-detectable gamma peak in **%d of %d recordings (%.0f%%)**.\n\n",
+              sum(b$bestGammaDetected), nrow(b), 100*mean(b$bestGammaDetected)))
+  cat(sprintf("Among non-selected channels, a detectable gamma peak appeared in a mean of **%.2f** channels per recording (of %.1f non-selected).\n",
+              mean(b$nNonMaxDetected), mean(b$nMacBP-1)))
+  s <- b |> group_by(task) |> summarise(n=n(), selDetected=sum(bestGammaDetected),
+        pctSelDetected=round(100*mean(bestGammaDetected),1), meanNonMaxDet=round(mean(nNonMaxDetected),2))
+  kt(s, "FOOOF gamma-peak detectability by task")
+}
+```
+
+---
+
+# Group gamma spectrograms (inhale/sniff-locked)
+
+Superlet power, z-scored within frequency (no baseline) per breath and averaged; −1000 to +4000 ms; 5 task rows × 5 columns (control, S2/3 responder, S1 responder, S2/3 non-responder, S1 non-responder). Panel labels give the breath and session counts.
+
+```{r spectro, out.width="100%"}
+if(hasfig("spectrograms_5x5.png")) knitr::include_graphics(file.path(Fg,"spectrograms_5x5.png"))
+```
+
+---
+
+# Per-breath gamma characterization
+
+Each breath/sniff yields a large set of gamma descriptors (see Methods). Below, each measure is plotted with **session 1/2/3/control on X**, colored by responder / non-responder / control, faceted by task; bars = session means ± SE.
+
+```{r gamma-plots, results="asis"}
+gf <- list.files(file.path(Fg,"gamma"), pattern="^gm_.*\\.png$", full.names=TRUE)
+for(g in gf){ cat(sprintf('\n\n![](%s)\n\n', g)) }
+```
+
+---
+
+# Which measures are good? (low control variability + separation / tracking)
+
+The headline question: measures with **low between-control variability** that also (1) separate control↔Dupi, (2) separate responder↔non-responder, and/or (3) track recovery across sessions. The table below ranks measures by `goodness = |max separation effect| / (1 + |control CV|)`.
+
+> **Important caveat (added after external review).** This first-pass ranking is **not** the final verdict. Three independent reviews showed it is driven by artifacts: the responder↔non-responder separation rests on **n=2 non-responders**; ridge-frequency's low CV is a **bounded-tracker artifact**; the FOOOF-selected channel has a real gamma peak in only **39%** of recordings; and no multiple-comparison control was applied. The **Reviewer-response analyses** section below re-tests everything with bootstrap CIs, peak-gating, airflow regression, and 1/f control — where **0 of 460** control↔Dupi separations survive as CI-significant. Read that section for the corrected conclusions.
+
+```{r goodness}
+G <- rd("gamma_top_measures.csv")
+if(!is.null(G)){
+  disp <- G |> transmute(task, metric,
+    control_CV=round(control_CV,3), sep_control_dupi=round(sep_control_dupi,2),
+    sep_resp_nonresp=round(sep_resp_nonresp,2), recovery_rho_resp=round(recovery_rho_resp,2),
+    goodness=round(goodness,2)) |> arrange(desc(goodness)) |> head(30)
+  kt(disp, "Top gamma measures (low control CV × high separation/tracking)")
+}
+```
+
+```{r top-plots, results="asis"}
+tf <- list.files(file.path(Fg,"gamma"), pattern="^top_.*\\.png$", full.names=TRUE)
+for(g in head(tf,10)){ cat(sprintf('\n\n![](%s)\n\n', g)) }
+```
+
+---
+
+# Respiration–gamma coupling
+
+Session-level coupling of gamma amplitude to respiratory phase: Tort modulation index (MI), preferred-phase resultant length, and an inhale/exhale gamma ratio. Plotted by session/control, colored by responder status.
+
+```{r coup-table}
+cg <- rd("coupling_goodness.csv")
+kt(cg |> mutate(across(where(is.numeric), ~round(.x,3))), "Coupling measures: control CV and separation effect sizes")
+```
+
+```{r coup-plots, results="asis"}
+for(p in c("coup_coup_MI.png","coup_coup_resultantLen.png","coup_coup_inhExhRatio.png")){
+  fp <- file.path(Fg,"gamma",p); if(file.exists(fp)) cat(sprintf("\n\n![](%s)\n\n", fp)) }
+```
+
+---
+
+# Robustness & confounds
+
+- **Aperiodic vs periodic (Voytek).** Per-breath FOOOF exponent/offset are tracked; the goodness table includes `apExp` and `gammaBumpDb`/`gammaPeakPresent`, so any group "gamma power" difference can be checked against a 1/f shift.
+- **Normalization window (Cohen).** Burst/peak metrics are computed under both whole-window z and a pre-inhale baseline z (`*_base` columns) — agreement indicates the z=3 results are not an artifact of the normalization window.
+- **Airflow/sniff confound (Zelano).** Per-breath inhale volume/duration/peak flow are carried as covariates; `goodBreath` QC is applied. (Airflow-adjusted comparisons in the reviewer-response section.)
+- **Respiration–gamma coupling.** Session-level Tort MI, preferred respiratory phase (circular), resultant length, and inhale/exhale ratio are computed (`out/gamma/coupling`).
+
+---
+
+# Reviewer-response analyses
+
+These analyses were added to answer the three reviews directly. **Headline result: with session-level bootstrap CIs, no gamma measure cleanly separates controls from Dupi.**
+
+## Honest control↔Dupi ranking (outcome-blind, bootstrap CIs)
+
+Ranked by |Cohen's d| for control-vs-Dupi (the outcome-blind, non-circular axis); `cd_sig=1` only if the 95% CI excludes zero. The largest point-effects are **absolute power** measures (Dupi lower), not ridge-frequency.
+
+```{r hl-cd}
+kt(rd("gamma_headline_controlDupi.csv") |> head(15), "Top control↔Dupi separations by |d| (all 0 are CI-significant → underpowered/artifact)")
+```
+
+## Is the effect aperiodic? (Voytek)
+
+Dupi show a **steeper aperiodic exponent** than controls (positive d), and absolute-power separations **partially survive** residualizing on the exponent — so the gap is not purely 1/f.
+
+```{r ap-sep, fig.show="hold", out.width="49%"}
+kt(rd("gamma_aperiodic_separation.csv") |> mutate(across(where(is.numeric),~round(.x,2))), "Aperiodic exponent/offset: control↔Dupi effect size (d)")
+kt(rd("gamma_1f_controlled_separation.csv") |> mutate(across(where(is.numeric),~round(.x,2))), "Power separations: raw vs after 1/f (exponent) control")
+if(hasfig("gamma/ap_apExp.png")) knitr::include_graphics(file.path(Fg,"gamma","ap_apExp.png"))
+```
+
+## z-window robustness (Cohen) and the "chirp" (Voytek/Cohen)
+
+peakZ depends on the normalization window (low whole-window vs baseline-z correlation), though burst *presence* is robust. The simulation shows a broadband transient + ridge tracker reproduces a wandering mid-band ridge with **no oscillation present**; superlet FWHM ≈ 64–80 ms / 4 Hz.
+
+```{r zconc}
+kt(rd("gamma_zwindow_concordance.csv") |> mutate(across(where(is.numeric),~round(.x,3))), "Whole-window vs pre-inhale-baseline z concordance")
+kt(rd("superlet_FWHM.csv"), "Superlet effective resolution (impulse-response FWHM)")
+```
+
+```{r sim, out.width="95%"}
+if(hasfig("gamma/sim_broadband_transient.png")) knitr::include_graphics(file.path(Fg,"gamma","sim_broadband_transient.png"))
+```
+
+---
+
+# External reviews & synthesis
+
+Three independent expert reviews (personas modeled on Christina Zelano, Bradley Voytek, Michael X Cohen, each preceded by a deep-research pass) are in `out/reviews/review_{zelano,voytek,cohen}.md`. Synthesis:
+
+```{r reviews, results="asis"}
+rp <- file.path(proj,"out","reviews","review_synthesis.md")
+if(file.exists(rp)) cat(readLines(rp), sep="\n") else cat("_reviews pending_")
+```
+
+The full in-character reviews are in `out/reviews/review_zelano.md`, `review_voytek.md`, `review_cohen.md`.
+
+---
+
+# Integrative summary
+
+```{r summary, results="asis"}
+sp <- file.path(proj,"out","reviews","integrative_summary.md")
+if(file.exists(sp)) cat(readLines(sp), sep="\n") else cat("_summary pending_")
+```
+
+---
+
+# Methods & reproducibility
+
+**Adding a participant** is a data-tracking-sheet edit (a row + parameters); the pipeline is sheet-driven end to end. To refresh the analysis: (1) `build_session_index.m` (inventory), (2) `run_scores.m` (behavioral + macBP selection), (3) `run_gamma_all.m` (per-breath gamma; lab, parfor), (4) `assemble_spectrograms.m`, (5) the R scripts `inventory_report.R`, `behavioral_composite.R`, `macbp_table.R`, `gamma_aggregate.R`, then knit `report.Rmd`. All project code lives in `plotsForBruce_2/code`; external tools (`fooof_basic`, `myChanZscore`, Superlets `faslt`, Frequency_ridge_tracking) are called in place.
+
+```{r sessioninfo}
+cat("Superlet: fractional adaptive multiplicative, F=22:1:62 Hz, c1=3, order [3 30]; ridge band 25–58 Hz, penalty 1.0.\n")
+```
