@@ -113,13 +113,15 @@ pal <- c(responder="#1b9e77",`non-responder`="#d95f02",control="#7570b3",unclass
 for(mc in c("apExp","apOffset")){
   d<-apx|>select(task,xpos,grp,val=all_of(mc))|>filter(is.finite(val))
   ms<-d|>group_by(task,xpos)|>summarise(m=mean(val,na.rm=TRUE),se=sd(val,na.rm=TRUE)/sqrt(sum(is.finite(val))),.groups="drop")
-  p<-ggplot(d,aes(xpos,val))+geom_jitter(aes(color=grp),width=.12,height=0,size=1.3,alpha=.7)+
-    geom_errorbar(data=ms,aes(xpos,ymin=m-se,ymax=m+se),inherit.aes=FALSE,width=.2)+
-    geom_point(data=ms,aes(xpos,m),inherit.aes=FALSE,shape=95,size=4)+
-    facet_wrap(~task,scales="free_y",nrow=1)+scale_color_manual(values=pal,name="")+
-    labs(x=NULL,y=mc,title=paste("Aperiodic",mc,"(Voytek 1/f control)"))+theme_bw(base_size=10)+
-    theme(legend.position="bottom",axis.text.x=element_text(size=7))
-  ggsave(file.path(fdir,paste0("ap_",mc,".png")),p,width=13,height=3.2,dpi=120)
+  p<-ggplot(d,aes(xpos,val))+geom_jitter(aes(color=grp),width=.12,height=0,size=1.9,alpha=.75)+
+    geom_errorbar(data=ms,aes(xpos,ymin=m-se,ymax=m+se),inherit.aes=FALSE,width=.2,linewidth=.6)+
+    geom_point(data=ms,aes(xpos,m),inherit.aes=FALSE,shape=95,size=6)+
+    facet_wrap(~task,nrow=1)+scale_color_manual(values=pal,name="")+
+    labs(x=NULL,y=mc,title=paste("Aperiodic",mc,"(Voytek 1/f control)"))+theme_bw(base_size=16)+
+    theme(legend.position="bottom",legend.text=element_text(size=13),
+          axis.text.x=element_text(size=12),axis.text.y=element_text(size=12),
+          strip.text=element_text(size=14),plot.title=element_text(size=18))
+  ggsave(file.path(fdir,paste0("ap_",mc,".png")),p,width=17,height=4.6,dpi=120)
 }
 # is the control<->Dupi separation aperiodic? separation on apExp itself:
 ap_sep <- ap |> group_by(task) |> summarise(

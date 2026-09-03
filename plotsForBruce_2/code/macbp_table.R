@@ -7,10 +7,24 @@ tdir <- file.path(proj,"out","tables")
 g <- read_csv(file.path(tdir,"macbp_gamma_long.csv"), show_col_types=FALSE)
 b <- read_csv(file.path(tdir,"macbp_best.csv"), show_col_types=FALSE)
 
+# ---- monotonicity of the gamma-power fall-off around the max channel (both directions) ----
+# channels macBP1..k are spatially ordered adjacent bipolar pairs.
+mono <- g %>% arrange(sessID, task, chanIdx) %>% group_by(sessID, task) %>%
+  summarise(
+    .groups="drop",
+    monoUp   = { v<-peakFlatDb; bi<-which.max(v); if(bi==length(v)) NA else all(diff(v[bi:length(v)])<=0) },
+    monoDown = { v<-peakFlatDb; bi<-which.max(v); if(bi==1)          NA else all(diff(v[1:bi])>=0) }) %>%
+  mutate(falloff = case_when(
+    (monoUp %in% TRUE | is.na(monoUp)) & (monoDown %in% TRUE | is.na(monoDown)) ~ "monotonic both",
+    (monoUp %in% TRUE | is.na(monoUp)) ~ "monotonic up only",
+    (monoDown %in% TRUE | is.na(monoDown)) ~ "monotonic down only",
+    TRUE ~ "non-monotonic both"))
+
 # wide: peak flattened power (dB over aperiodic) per macBP channel, one row per recording
 wide <- g %>% select(sessID, task, cohort, group, participant, sessNum, chanLabel, peakFlatDb) %>%
   pivot_wider(names_from=chanLabel, values_from=peakFlatDb) %>%
-  arrange(cohort, participant, sessNum, task)
+  arrange(cohort, participant, sessNum, task) %>%
+  left_join(mono, by=c("sessID","task"))
 
 # attach best-channel + detectability info
 wide2 <- wide %>% left_join(
@@ -49,5 +63,8 @@ cat("\n--- selected-channel noisiness (spikeFrac) distribution ---\n")
 print(summary(b$bestSpikeFrac))
 cat("  recordings where selected channel spikeFrac>0.02 (possibly noise-driven):",
     sum(b$bestSpikeFrac>0.02, na.rm=TRUE), "\n")
+
+cat("\n--- gamma-power fall-off around the max macBP channel (monotonic in both directions?) ---\n")
+print(mono %>% count(falloff) %>% mutate(pct=round(100*n/sum(n),1)) %>% as.data.frame(), row.names=FALSE)
 
 cat("\nWrote macbp_table_wide.csv\n")

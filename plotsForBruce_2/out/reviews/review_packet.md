@@ -43,21 +43,21 @@ Responder table:
 
 
 
-|participant | composite_S1| composite_S2|usedAll3 |      delta|class                                     |
-|:-----------|------------:|------------:|:--------|----------:|:-----------------------------------------|
-|BS          |    0.0630853|    0.6190203|TRUE     |  0.5559350|responder                                 |
-|TB          |   -0.1037268|    0.4231614|FALSE    |  0.5268882|responder                                 |
-|JH          |    0.0370648|    0.3706548|TRUE     |  0.3335900|responder                                 |
-|AB          |   -0.0816880|    0.2375768|TRUE     |  0.3192648|responder                                 |
-|GH          |    0.0967874|    0.3088261|TRUE     |  0.2120387|responder                                 |
-|PD          |    0.2263226|    0.4213628|FALSE    |  0.1950402|responder                                 |
-|DB          |   -0.0489492|    0.1360609|TRUE     |  0.1850101|responder                                 |
-|KS          |    0.1965322|    0.3478550|TRUE     |  0.1513228|responder                                 |
-|JL          |   -0.0749739|   -0.0094785|TRUE     |  0.0654954|responder                                 |
-|JA          |    0.4559237|    0.3412058|FALSE    | -0.1147179|non-responder                             |
-|PC          |    0.4475183|    0.2803149|TRUE     | -0.1672034|non-responder                             |
-|DL          |   -0.1160737|           NA|FALSE    |         NA|unclassified (missing S1 or S2 composite) |
-|JN          |           NA|    0.2407440|FALSE    |         NA|unclassified (missing S1 or S2 composite) |
+|participant | nSess| firstSess| lastSess| composite_S1| composite_final|      delta|class                         |
+|:-----------|-----:|---------:|--------:|------------:|---------------:|----------:|:-----------------------------|
+|JA          |     2|         1|        2|    0.4559237|       0.3412058| -0.1147179|non-responder                 |
+|PC          |     2|         1|        2|    0.4475183|       0.2803149| -0.1672034|non-responder                 |
+|GH          |     3|         1|        3|    0.0967874|       0.1515851|  0.0547977|non-responder                 |
+|DB          |     2|         1|        2|   -0.0489492|       0.1360609|  0.1850101|non-responder                 |
+|TB          |     3|         1|        3|   -0.1037268|       0.0563964|  0.1601232|non-responder                 |
+|JL          |     2|         1|        2|   -0.0749739|      -0.0094785|  0.0654954|non-responder                 |
+|KS          |     3|         1|        3|    0.1965322|      -0.0730248| -0.2695570|non-responder                 |
+|JN          |     2|         2|        3|    0.2407440|      -0.1043481| -0.3450921|non-responder                 |
+|JH          |     3|         1|        3|    0.0370648|       0.8497849|  0.8127202|responder                     |
+|AB          |     3|         1|        3|   -0.0816880|       0.6936784|  0.7753664|responder                     |
+|BS          |     2|         1|        2|    0.0630853|       0.6190203|  0.5559350|responder                     |
+|PD          |     2|         1|        2|    0.2263226|       0.4213628|  0.1950402|responder                     |
+|DL          |     1|         1|        1|   -0.1160737|      -0.1160737|  0.0000000|unclassified (single session) |
 
 
 ## macBP gamma selection
@@ -81,36 +81,36 @@ Goodness = |max separation effect| / (1 + |control CV|). Top measures:
 
 |task             |metric                 | control_CV| sep_control_dupi| sep_resp_nonresp| recovery_rho_resp| goodness|
 |:----------------|:----------------------|----------:|----------------:|----------------:|-----------------:|--------:|
-|O15              |w3_rfreqGated__mean    |      0.049|             0.94|             2.10|              0.24|     2.00|
-|O15              |w3_rfreqRaw__mean      |      0.045|             1.09|             2.07|              0.22|     1.98|
-|audiobook        |w5_aucZ__mean          |      0.048|            -0.41|            -2.03|              0.27|     1.93|
-|audiobook        |w5_rpowZ__mean         |      0.048|            -0.41|            -2.03|              0.27|     1.93|
-|O15              |w3_rfreqPW__mean       |      0.048|             1.10|             2.00|              0.18|     1.90|
-|audiobook        |timeAboveMs_base__mean |      0.049|            -0.60|            -1.99|              0.52|     1.89|
-|audiobook        |w3_rfreqRaw__var       |      0.253|             0.71|             2.22|             -0.33|     1.77|
-|audiobook        |w3_rfreqPW__var        |      0.260|             0.76|             2.11|             -0.35|     1.68|
-|audiobook        |nBursts__mean          |      0.158|            -0.02|            -1.94|             -0.10|     1.67|
-|threshTask       |w5_aucZ__mean          |      0.067|            -1.30|            -1.74|              0.15|     1.63|
-|threshTask       |w5_rpowZ__mean         |      0.067|            -1.30|            -1.74|              0.15|     1.63|
-|focusedBreathing |p1_rpowZ__mean         |      0.017|            -1.63|             0.16|              0.15|     1.61|
-|O15              |p2_rfreqRaw__mean      |      0.042|             0.26|             1.65|              0.14|     1.58|
-|focusedBreathing |p2_aucZ__mean          |      0.201|             0.59|            -1.86|              0.32|     1.55|
-|O15              |p2_rfreqPW__mean       |      0.047|             0.28|             1.62|              0.13|     1.55|
-|audiobook        |p2_aucZ__mean          |      0.172|            -0.07|            -1.81|              0.04|     1.54|
-|O15              |p2_rfreqGated__mean    |      0.051|             0.27|             1.61|             -0.01|     1.53|
-|cueTask          |peakFreq__var          |      0.181|            -0.44|             1.80|             -0.05|     1.52|
-|audiobook        |w3_rfreqGated__var     |      0.304|             0.78|             1.97|             -0.25|     1.51|
-|audiobook        |dutyCycle__mean        |      0.141|            -0.70|            -1.72|              0.28|     1.50|
-|audiobook        |timeAboveMs__mean      |      0.141|            -0.70|            -1.72|              0.28|     1.50|
-|O15              |peakFreq__var          |      0.190|            -0.36|             1.79|             -0.09|     1.50|
-|audiobook        |w4_rfreqGated__var     |      0.336|             0.21|             1.96|             -0.37|     1.47|
-|focusedBreathing |nBursts__mean          |      0.024|             0.23|            -1.50|              0.21|     1.46|
-|cueTask          |w2_rfreqGated__mean    |      0.042|            -0.36|             1.51|              0.10|     1.45|
-|threshTask       |w4_rfreqGated__mean    |      0.053|             1.52|             0.46|             -0.12|     1.44|
-|focusedBreathing |w5_rfreqPW__mean       |      0.044|            -1.19|             1.50|              0.08|     1.43|
-|audiobook        |w3_aucZ__mean          |      0.095|            -0.99|            -1.56|              0.16|     1.43|
-|audiobook        |w3_rpowZ__mean         |      0.095|            -0.99|            -1.56|              0.16|     1.43|
-|focusedBreathing |w5_rfreqRaw__mean      |      0.044|            -1.49|             1.25|              0.08|     1.42|
+|focusedBreathing |p1_rpowZ__mean         |      0.017|            -1.60|             0.25|             -0.36|     1.58|
+|focusedBreathing |w5_rfreqRaw__mean      |      0.044|            -1.52|             0.59|             -0.25|     1.46|
+|threshTask       |w4_rfreqGated__mean    |      0.053|             1.52|             0.39|             -0.44|     1.44|
+|cueTask          |w4_rfreqPW__mean       |      0.071|             1.52|            -0.15|             -0.54|     1.42|
+|threshTask       |w4_rfreqPW__mean       |      0.056|             1.46|             0.30|             -0.49|     1.38|
+|O15              |maxBurstMs__mean       |      0.098|            -1.51|             0.01|              0.36|     1.38|
+|cueTask          |w4_rfreqGated__mean    |      0.075|             1.48|            -0.07|             -0.51|     1.38|
+|threshTask       |freqSpan__mean         |      0.068|            -1.45|            -0.26|             -0.76|     1.36|
+|O15              |timeAboveMs_base__mean |      0.056|            -1.41|             0.60|              0.03|     1.33|
+|threshTask       |peakFreq__mean         |      0.053|             1.40|             0.17|             -0.58|     1.33|
+|O15              |dutyCycle__mean        |      0.123|            -1.46|             0.34|              0.39|     1.30|
+|O15              |timeAboveMs__mean      |      0.123|            -1.46|             0.34|              0.39|     1.30|
+|O15              |w4_rfreqPW__mean       |      0.033|             1.32|             0.00|             -0.42|     1.28|
+|cueTask          |w4_rfreqRaw__mean      |      0.070|             1.35|            -0.25|             -0.54|     1.27|
+|focusedBreathing |w3_rpowDb__mean        |      0.434|            -1.81|            -0.82|              0.60|     1.26|
+|threshTask       |w4_rfreqRaw__mean      |      0.056|             1.32|             0.30|             -0.49|     1.25|
+|focusedBreathing |w2_rpowDb__mean        |      0.437|            -1.79|            -0.92|              0.38|     1.24|
+|threshTask       |w3_rfreqRaw__mean      |      0.030|             1.28|             0.30|             -0.54|     1.24|
+|threshTask       |w3_rfreqPW__mean       |      0.038|             1.29|             0.44|             -0.49|     1.24|
+|focusedBreathing |maxBurstMs__mean       |      0.061|            -1.30|             0.13|              0.45|     1.23|
+|threshTask       |w3_rfreqGated__mean    |      0.043|             1.28|             0.49|             -0.39|     1.23|
+|O15              |w4_rfreqRaw__mean      |      0.033|             1.27|             0.02|             -0.49|     1.23|
+|threshTask       |w5_aucZ__mean          |      0.067|            -1.30|             0.02|              0.54|     1.22|
+|threshTask       |w5_rpowZ__mean         |      0.067|            -1.30|             0.02|              0.54|     1.22|
+|focusedBreathing |w1_rpowDb__mean        |      0.425|            -1.71|            -0.85|              0.38|     1.20|
+|threshTask       |p3_rpowZ__mean         |      0.091|            -1.30|            -0.13|              0.47|     1.19|
+|focusedBreathing |p1_rpowDb__mean        |      0.435|            -1.69|            -0.91|              0.38|     1.18|
+|focusedBreathing |w5_rfreqPW__mean       |      0.044|            -1.22|             0.59|             -0.25|     1.17|
+|focusedBreathing |p4_rpowDb__mean        |      0.422|            -1.66|            -0.85|              0.66|     1.17|
+|threshTask       |apExp__mean            |      0.332|             0.79|             1.53|             -0.27|     1.15|
 
 
 ## Coupling summary

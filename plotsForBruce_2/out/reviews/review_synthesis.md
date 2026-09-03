@@ -4,7 +4,7 @@ Three independent expert reviews were obtained (personas modeled on **Christina 
 
 1. **The ridge often tracks 1/f, not an oscillation.** The FOOOF-selected "best gamma" channel had a *detectable periodic peak in only 39% of recordings* (reported in bold in the macBP section). A forward–backward ridge tracker always returns a ridge, so ridge-frequency/burst measures on the other 61% describe the aperiodic background. (Voytek, Cohen, Zelano.)
 2. **The lowest-variance "winners" were bounded-tracker artifacts.** Ridge-frequency is confined to 25–58 Hz, so its mean sits near band-center (~42 Hz) with mechanically tiny CV; the original `goodness = |sep| / (1+CV)` *rewarded* that uninformative stability. (Cohen, Voytek.)
-3. **The responder/non-responder axis rests on n=2.** There are exactly two non-responders (JA, PC), both of whom started near control-level composite and could only regress downward. The original ranking was driven by this `sep_resp_nonresp ≈ 2.0` on two participants. (All three.)
+3. **The responder/non-responder axis rested on n=2.** The original split had only two non-responders (JA, PC). This was **subsequently fixed**: the classification was changed to *sustained recovery* (responder = final-session composite ≥ 0.40 and improved over session 1), giving **4 responders / 8 non-responders**, which is what the analyses below now use. (All three reviewers.)
 4. **Confounds were carried but not removed:** airflow covariates, aperiodic exponent, and the pre-inhale baseline z were all computed but not used to *test* the effects. (Zelano airflow; Voytek 1/f; Cohen z-window.)
 
 ### What was done in response (new analyses)

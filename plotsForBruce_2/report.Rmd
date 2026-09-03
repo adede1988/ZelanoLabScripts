@@ -80,7 +80,7 @@ kt(rd("INVENTORY_control_grid.csv"), "OBE control recordings (tasks present)")
 
 # Behavioral olfactory performance
 
-Scores follow the lab's validated formulas: cue **d′** (signal = cue==odor; log-linear corrected), threshold **air-calibrated PEA intensity**, O15 **identification accuracy** (`sum(expScore)/15`). breathingTask has no olfactory score. Points are colored by responder status (defined below); black bars = session means ± SE.
+Scores follow the lab's validated formulas: cue **d′** (signal = cue==odor; log-linear corrected), threshold **air-calibrated PEA intensity**, O15 **identification accuracy** (`sum(expScore)/15`). breathingTask has no olfactory score. Each **line is one Dupi participant** (colored, labelled), **solid = responder / dashed = non-responder / dotted = unclassified**; grey points are OBE controls (single session); black bars = session means ± SE.
 
 ```{r beh-plots, fig.show="hold", out.width="49%"}
 for(p in c("beh_cue_d.png","beh_thresh_lowcal.png","beh_o15_acc.png","beh_composite_all3.png"))
@@ -91,7 +91,7 @@ for(p in c("beh_cue_d.png","beh_thresh_lowcal.png","beh_o15_acc.png","beh_compos
 
 # Composite Olfaction Index & responder split
 
-The **Olfaction Index** is the mean of three normalized sub-scores (`O15_acc`, `thresh_low_cal/400`, `cue_d/3.5`) for sessions with all three olfactory tasks. Dupi participants are split into **responders** vs **non-responders** by whether the composite **improves from session 1 to session 2**.
+The **Olfaction Index** is the mean of three normalized sub-scores (`O15_acc`, `thresh_low_cal/400`, `cue_d/3.5`). Dupi participants are split by **sustained recovery**: a **responder** ends at their final recorded session with a composite ≥ 0.40 (≈⅔ of the control mean, 0.64) **and** above their session-1 value; otherwise **non-responder**; a single-session participant is unclassified. This yields **4 responders (JH, AB, BS, PD), 8 non-responders, 1 unclassified (DL)** — correctly labelling the four participants who fell back at session 3 (GH, TB, KS, JN) as non-responders.
 
 ```{r resp-table}
 kt(rd("responder_table.csv"), "Responder / non-responder classification (composite S2 vs S1)")
@@ -139,14 +139,38 @@ if(!is.null(b)){
 }
 ```
 
+**Spatial fall-off around the selected channel.** Whether the gamma power decreases monotonically as you move to adjacent macBP channels in *both* directions (a signature of a focal source) is tabulated below (`monoUp`/`monoDown`/`falloff` columns are also in `macbp_table_wide.csv`).
+
+```{r macbp-mono}
+mw <- rd("macbp_table_wide.csv")
+if(!is.null(mw) && "falloff" %in% names(mw)){
+  kt(mw |> count(falloff) |> mutate(pct=round(100*n/sum(n),1)) |> arrange(desc(n)),
+     "Monotonic gamma-power fall-off around the max channel (both directions)")
+}
+```
+
 ---
 
 # Group gamma spectrograms (inhale/sniff-locked)
 
-Superlet power, z-scored within frequency (no baseline) per breath and averaged; −1000 to +4000 ms; 5 task rows × 5 columns (control, S2/3 responder, S1 responder, S2/3 non-responder, S1 non-responder). Panel labels give the breath and session counts.
+Superlet power, z-scored **within channel** (per session) to a **−500 to −100 ms pre-inhale baseline** via the `myChanZscore` convention (baseline pooled over that session's breaths, so no single breath dominates), then **averaged across sessions** to form each group map; −1000 to +4000 ms; 5 task rows × 5 columns (control, S2/3 responder, S1 responder, S2/3 non-responder, S1 non-responder). The **white line overlays the mean respiration waveform**. Three frequency-range sets cover the spectrum; within each set all 25 panels share one color scale. Panel labels give breath and session counts.
 
-```{r spectro, out.width="100%"}
-if(hasfig("spectrograms_5x5.png")) knitr::include_graphics(file.path(Fg,"spectrograms_5x5.png"))
+**Gamma band (25–58 Hz):**
+
+```{r spectro-mid, out.width="100%"}
+if(hasfig("spectrograms_mid.png")) knitr::include_graphics(file.path(Fg,"spectrograms_mid.png"))
+```
+
+**Low band (2–25 Hz):**
+
+```{r spectro-low, out.width="100%"}
+if(hasfig("spectrograms_low.png")) knitr::include_graphics(file.path(Fg,"spectrograms_low.png"))
+```
+
+**High-gamma band (60–150 Hz):**
+
+```{r spectro-high, out.width="100%"}
+if(hasfig("spectrograms_high.png")) knitr::include_graphics(file.path(Fg,"spectrograms_high.png"))
 ```
 
 ---
@@ -166,7 +190,7 @@ for(g in gf){ cat(sprintf('\n\n![](%s)\n\n', g)) }
 
 The headline question: measures with **low between-control variability** that also (1) separate control↔Dupi, (2) separate responder↔non-responder, and/or (3) track recovery across sessions. The table below ranks measures by `goodness = |max separation effect| / (1 + |control CV|)`.
 
-> **Important caveat (added after external review).** This first-pass ranking is **not** the final verdict. Three independent reviews showed it is driven by artifacts: the responder↔non-responder separation rests on **n=2 non-responders**; ridge-frequency's low CV is a **bounded-tracker artifact**; the FOOOF-selected channel has a real gamma peak in only **39%** of recordings; and no multiple-comparison control was applied. The **Reviewer-response analyses** section below re-tests everything with bootstrap CIs, peak-gating, airflow regression, and 1/f control — where **0 of 460** control↔Dupi separations survive as CI-significant. Read that section for the corrected conclusions.
+> **Important caveat (added after external review).** This first-pass `goodness` ranking is **not** the final verdict. Three independent reviews showed it is inflated by artifacts: ridge-frequency's low CV is a **bounded-tracker artifact**; the FOOOF-selected channel has a real gamma peak in only **39%** of recordings; and no multiple-comparison control was applied. (The original responder↔non-responder axis also rested on only n=2 non-responders; the classification has since been changed to the balanced sustained-recovery split.) The **Reviewer-response analyses** section below re-tests everything with bootstrap CIs, peak-gating, airflow regression, and 1/f control — where **0 of 460** control↔Dupi separations survive as CI-significant. Read that section for the corrected conclusions.
 
 ```{r goodness}
 G <- rd("gamma_top_measures.csv")

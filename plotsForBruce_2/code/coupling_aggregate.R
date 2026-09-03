@@ -21,13 +21,15 @@ mets <- c("coup_MI","coup_resultantLen","coup_inhExhRatio")
 for(mc in mets){
   d <- cp |> select(taskRow, xpos, grpColor, val=all_of(mc)) |> filter(is.finite(val))
   ms <- d |> group_by(taskRow,xpos) |> summarise(m=mean(val,na.rm=TRUE), se=sd(val,na.rm=TRUE)/sqrt(sum(is.finite(val))), .groups="drop")
-  p <- ggplot(d, aes(xpos,val)) + geom_jitter(aes(color=grpColor), width=.12, height=0, size=1.3, alpha=.7) +
-    geom_errorbar(data=ms, aes(xpos, ymin=m-se, ymax=m+se), inherit.aes=FALSE, width=.2) +
-    geom_point(data=ms, aes(xpos,m), inherit.aes=FALSE, shape=95, size=4) +
-    facet_wrap(~taskRow, scales="free_y", nrow=1) + scale_color_manual(values=pal, name="") +
-    labs(x=NULL, y=mc, title=paste("Respiration-gamma coupling:", mc)) + theme_bw(base_size=10) +
-    theme(legend.position="bottom", axis.text.x=element_text(size=7))
-  ggsave(file.path(fdir, paste0("coup_", mc, ".png")), p, width=13, height=3.2, dpi=120)
+  p <- ggplot(d, aes(xpos,val)) + geom_jitter(aes(color=grpColor), width=.12, height=0, size=1.9, alpha=.75) +
+    geom_errorbar(data=ms, aes(xpos, ymin=m-se, ymax=m+se), inherit.aes=FALSE, width=.2, linewidth=.6) +
+    geom_point(data=ms, aes(xpos,m), inherit.aes=FALSE, shape=95, size=6) +
+    facet_wrap(~taskRow, nrow=1) + scale_color_manual(values=pal, name="") +
+    labs(x=NULL, y=mc, title=paste("Respiration-gamma coupling:", mc)) + theme_bw(base_size=16) +
+    theme(legend.position="bottom", legend.text=element_text(size=13),
+          axis.text.x=element_text(size=12), axis.text.y=element_text(size=12),
+          strip.text=element_text(size=14), plot.title=element_text(size=18))
+  ggsave(file.path(fdir, paste0("coup_", mc, ".png")), p, width=17, height=4.6, dpi=120)
 }
 # goodness for coupling measures
 d_between <- function(a,b){ a<-a[is.finite(a)]; b<-b[is.finite(b)]; if(length(a)<2||length(b)<2) return(NA)

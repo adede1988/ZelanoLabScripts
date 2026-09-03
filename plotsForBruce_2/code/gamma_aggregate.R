@@ -86,21 +86,51 @@ write_csv(top_overall, file.path(tdir,"gamma_top_measures.csv"))
 
 # ================= plots: key + top metrics =================
 pal <- c(responder="#1b9e77", `non-responder`="#d95f02", control="#7570b3", unclassified="#999999")
+
+describe_metric <- function(mc){
+  base <- sub("__(mean|var)$","",mc); agg <- ifelse(grepl("__var$",mc),"between-breath variance of ","session mean of ")
+  win <- c(w1="window [-500,0] ms", w2="window [0,500] ms", w3="window [500,1000] ms", w4="window [1000,1500] ms", w5="window [1500,2000] ms")
+  seg <- c(p1="phase onset->inhale-peak", p2="phase inhale-peak->return-to-onset-Y", p3="phase exhale-start->trough", p4="phase trough->symmetric-post-trough")
+  suff <- c(rfreqPW="power-weighted mean ridge frequency (Hz)", rfreqGated="mean ridge frequency where z>2 (Hz)",
+            rfreqRaw="mean ridge frequency (Hz)", rpowZ="mean ridge z-power", rpowDb="mean ridge power (dB)",
+            bandDb="mean 25-58 Hz band power (dB)", aucZ="integrated positive ridge z (z*s)")
+  m <- regmatches(base, regexec("^(w[1-5]|p[1-4])_(.+)$", base))[[1]]
+  if(length(m)==3 && !is.na(suff[m[3]])) return(paste0(agg, suff[[m[3]]], " in ", if(startsWith(m[2],"w")) win[[m[2]]] else seg[[m[2]]], "."))
+  stand <- c(peakZ="peak within-frequency z of ridge power in 0-2000 ms",
+    peakLatMs="latency (ms) of the peak ridge z", peakFreq="ridge frequency (Hz) at the peak z",
+    anyBurst="fraction of breaths with any ridge z>3", burstLatMs="latency (ms) to first ridge z>3",
+    timeAboveMs="total time (ms) ridge z>3 in 0-2000 ms", nBursts="number of ridge z>3 threshold crossings",
+    dutyCycle="fraction of 0-2000 ms with ridge z>3", chirpSlope="ridge-frequency slope (Hz/s) over 0-500 ms",
+    freqSpan="max-min ridge frequency (Hz) where z>2", freqJitter="SD of ridge frequency (Hz) where z>2",
+    apExp="per-breath aperiodic (1/f) exponent (FOOOF-lite)", apOffset="per-breath aperiodic offset",
+    gammaBumpDb="per-breath max flattened power (dB over 1/f) in 25-58 Hz", gammaPeakPresent="fraction of breaths with a detectable periodic gamma bump")
+  if(base %in% names(stand)) return(paste0(agg, stand[[base]], "."))
+  paste0(agg, base, ".")
+}
+
 plot_metric_faceted <- function(mc, fname){
   d <- sess |> select(task, xpos, grpColor, val=all_of(mc)) |> filter(is.finite(val))
   if(nrow(d)==0) return(invisible())
   ms <- d |> group_by(task,xpos) |>
     summarise(m=mean(val,na.rm=TRUE), se=sd(val,na.rm=TRUE)/sqrt(sum(is.finite(val))),
               n=sum(is.finite(val)), .groups="drop")
+  gann <- G |> filter(metric==mc) |>
+    transmute(task, lab=sprintf("ctrl↔Dupi d=%.2f\nresp↔nonR d=%.2f", sep_control_dupi, sep_resp_nonresp))
+  ytop <- max(d$val, na.rm=TRUE); x1 <- factor(levels(d$xpos)[1], levels=levels(d$xpos))
+  gann$xpos <- x1; gann$val <- ytop
   p <- ggplot(d, aes(xpos, val)) +
-    geom_jitter(aes(color=grpColor), width=.13, height=0, size=1.4, alpha=.7) +
-    geom_errorbar(data=ms, aes(xpos, ymin=m-se, ymax=m+se), inherit.aes=FALSE, width=.2) +
-    geom_point(data=ms, aes(xpos, m), inherit.aes=FALSE, shape=95, size=4) +
-    facet_wrap(~task, scales="free_y", nrow=1) +
+    geom_jitter(aes(color=grpColor), width=.13, height=0, size=1.9, alpha=.75) +
+    geom_errorbar(data=ms, aes(xpos, ymin=m-se, ymax=m+se), inherit.aes=FALSE, width=.2, linewidth=.6) +
+    geom_point(data=ms, aes(xpos, m), inherit.aes=FALSE, shape=95, size=6) +
+    geom_text(data=gann, aes(xpos, val, label=lab), inherit.aes=FALSE, hjust=0, vjust=1, size=3.6, color="grey15") +
+    facet_wrap(~task, nrow=1) +   # fixed scales => shared y across the row
     scale_color_manual(values=pal, name="") +
-    labs(x=NULL, y=mc, title=mc) + theme_bw(base_size=10) +
-    theme(legend.position="bottom", axis.text.x=element_text(size=7))
-  ggsave(file.path(fdir,fname), p, width=13, height=3.4, dpi=120)
+    labs(x=NULL, y=mc, title=mc, subtitle=str_wrap(describe_metric(mc), 95)) + theme_bw(base_size=16) +
+    theme(legend.position="bottom", legend.text=element_text(size=13),
+          axis.text.x=element_text(size=12), axis.text.y=element_text(size=12),
+          strip.text=element_text(size=14), plot.title=element_text(size=18),
+          plot.subtitle=element_text(size=13, color="grey30"))
+  ggsave(file.path(fdir,fname), p, width=17, height=5.0, dpi=120)
 }
 key_metrics <- c("peakZ__mean","peakLatMs__mean","peakFreq__mean","timeAboveMs__mean",
   "dutyCycle__mean","nBursts__mean","anyBurst__mean","gammaBumpDb__mean","gammaPeakPresent__mean",
