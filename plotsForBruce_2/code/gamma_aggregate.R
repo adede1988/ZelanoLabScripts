@@ -143,10 +143,13 @@ key_metrics <- c("peakZ__mean","peakLatMs__mean","peakFreq__mean","timeAboveMs__
   "apExp__mean","chirpSlope__mean","chirpSlope2__mean","freqSpan__mean","freqJitter__mean",
   "w2_rpowZ__mean","w2_rfreqPW__mean","w3_rpowZ__mean","p1_rfreqPW__mean","p1_rpowZ__mean",
   "peakZ__var","w2_rfreqPW__var","peakFreq__var")
+# clear stale gm_/top_ plots so the report gallery never picks up figures from a prior ranking
+old <- list.files(fdir, pattern="^(gm_|top_).*\\.png$", full.names=TRUE); if(length(old)) file.remove(old)
 key_metrics <- intersect(key_metrics, names(sess))
 for (mc in key_metrics) plot_metric_faceted(mc, paste0("gm_", str_replace_all(mc,"[^A-Za-z0-9]","_"), ".png"))
-# top-ranked measures too
-for (mc in unique(top_overall$metric)[1:min(20,nrow(top_overall))])
+# top-ranked measures too (plot every metric in the ranked table, not just the first 20,
+# so p3_rpowZ and the rest of the gallery are always regenerated from the current data)
+for (mc in unique(top_overall$metric))
   if(mc %in% names(sess)) plot_metric_faceted(mc, paste0("top_", str_replace_all(mc,"[^A-Za-z0-9]","_"), ".png"))
 
 cat("\n=== TOP 20 gamma measures (low control CV x high separation) ===\n")

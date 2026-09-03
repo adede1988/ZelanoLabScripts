@@ -78,9 +78,14 @@ switch taskRow
     v=coerce(bd.finalOnset); v=round(v(~isnan(v)&v>0)); on=v(:);
   case {'audiobook','focusedBreathing'}
     vn=bd.Properties.VariableNames;
-    if any(strcmp(vn,'task')), tc=stringcol(bd.task); else, return; end
-    want=ternary(strcmp(taskRow,'audiobook'),'audio','focus');
-    sel=strcmpi(strtrim(tc),want);
+    if any(strcmp(vn,'task')), tc=strtrim(string(stringcol(bd.task))); else, return; end
+    % audiobook = 'audio'; focusedBreathing = focus | naturalFocus | slowFocus
+    % (newer sessions relabel focused breathing; older use the literal 'focus').
+    if strcmp(taskRow,'audiobook')
+        sel=strcmpi(tc,'audio');
+    else
+        sel=strcmpi(tc,'focus') | strcmpi(tc,'naturalFocus') | strcmpi(tc,'slowFocus');
+    end
     fo=round(coerce(bd.finalOnset));
     on=fo(sel & ~isnan(fo) & fo>0); on=on(:);
 end

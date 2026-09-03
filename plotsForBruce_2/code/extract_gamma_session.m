@@ -210,9 +210,15 @@ switch taskRow
     end
   case {'audiobook','focusedBreathing'}
     vn=bd.Properties.VariableNames;
-    tcol = getstr(bd,'task');
-    want = ternary(strcmp(taskRow,'audiobook'),'audio','focus');
-    sel = strcmpi(strtrim(tcol), want);
+    tcol = strtrim(string(getstr(bd,'task')));
+    % audiobook = the 'audio' block; focusedBreathing = any focus-family block.
+    % Newer sessions relabel focused breathing as naturalFocus / slowFocus
+    % (older sessions use the literal 'focus'); match all three.
+    if strcmp(taskRow,'audiobook')
+        sel = strcmpi(tcol,'audio');
+    else
+        sel = strcmpi(tcol,'focus') | strcmpi(tcol,'naturalFocus') | strcmpi(tcol,'slowFocus');
+    end
     if ~any(sel), ev=struct([]); cov=struct([]); return; end
     on = round(coerce(bd.finalOnset));
     inMaxTim = round(coerce(getnum(bd,'inMaxTim')));
@@ -225,10 +231,13 @@ switch taskRow
     pif=coerce(getnum(bd,'bm_peakInspiratoryFlows'));
     idxs=find(sel(:).');
     for k=idxs
-        lm=struct('inhalePeak',inMaxTim(k),'exhaleStart',endTim(k),'exhaleTrough',exMinTim(k), ...
-            'onsetY',Yonset(k));
+        lm=struct('inhalePeak',inMaxTim(k),'exhaleTrough',exMinTim(k),'onsetY',Yonset(k));
+        % exhale start = first return through onset-Y after the peak (the exhale onset),
+        % which precedes the exhale trough; behDat 'endTim' is the breath END (after the
+        % trough) so it must NOT be used as exhale start.
         lm.returnCross = return_cross(rsp, on(k), inMaxTim(k), Yonset(k));
-        if isnan(lm.exhaleStart), lm.exhaleStart=lm.returnCross; end
+        lm.exhaleStart = lm.returnCross;
+        if isnan(lm.exhaleStart) || lm.exhaleStart>=exMinTim(k), lm.exhaleStart=inMaxTim(k); end
         lm.endSym = exMinTim(k) + max(0,(exMinTim(k)-on(k)));
         lm.breathLenMs = len(k)*1000;
         gbk=gb(k); if isnan(gbk), gbk=1; end

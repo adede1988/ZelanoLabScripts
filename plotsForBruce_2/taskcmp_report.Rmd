@@ -1,0 +1,154 @@
+---
+title: "Audiobook vs Focused Breathing — Within-Control Task Comparison"
+subtitle: "A paired, multi-method sweep for differences in nasal/depth gamma (n=6 control subjects)"
+date: "`r format(Sys.Date())`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    number_sections: true
+    theme: flatly
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE, fig.align="center", dpi=110)
+suppressWarnings(suppressMessages({library(dplyr); library(readr); library(knitr); library(kableExtra); library(stringr)}))
+proj <- normalizePath("."); T <- file.path(proj,"out","tables"); Fg <- file.path(proj,"out","figs")
+rd <- function(f){ p<-file.path(T,f); if(file.exists(p)) suppressMessages(read_csv(p, show_col_types=FALSE)) else NULL }
+kt <- function(df, cap=NULL, n=NULL){ if(is.null(df)||nrow(df)==0) return(cat("_not available_"))
+  if(!is.null(n)) df<-head(df,n)
+  df |> mutate(across(where(is.numeric), ~round(.x,3))) |> kbl(caption=cap) |>
+    kable_styling(bootstrap_options=c("striped","condensed","hover"), full_width=FALSE, font_size=12) }
+figs <- function(pat){ d<-file.path(Fg,"taskcmp"); if(!dir.exists(d)) return(character())
+  list.files(d, pattern=pat, full.names=TRUE) }
+showfig <- function(pat){ for(f in figs(pat)) cat(sprintf('\n\n![](%s)\n\n', f)) }
+```
+
+# Overview
+
+This report asks whether **audiobook listening** and **focused breathing** — two blocks of the breathing task — differ in intracranial macro-bipolar **gamma** (and related measures), **within control (OBE) subjects only**. Because every control subject performed **both** conditions, the comparison is **paired** (within-subject), which removes between-subject variance and is substantially more powerful than the earlier control-vs-Dupi (between-group) contrasts.
+
+**Sample.** 6 control subjects (TI, AS, CP, AD, BW, RX), each with both conditions; 869 good breaths (482 audiobook, 387 focus). Subject AD's two sessions are pooled to one subject. gamma metrics come from the same per-breath pipeline used for the Dupi-vs-control analysis (best macBP channel by FOOOF-flattened peak, superlet power, ridge tracking, per-breath FOOOF).
+
+**Why a sweep.** A single whole-map time-frequency cluster test found no surviving cluster, but that controls the family-wise error over ~60k pixels and can miss real, focal, or distributed effects. Here we quantify differences **many ways** — level, spread, multivariate separability, coupling, airflow-controlled, and focal ROIs — and adversarially verify the headline findings.
+
+**Reading the numbers.** With n=6, p-values are underpowered; **effect sizes (Cohen's dz) carry the signal**. dz≈0.8 is "large" but needs p≈0.03 to clear significance at n=6, so treat 0.05≤p≤0.12 large-dz results as real candidates, not nulls.
+
+```{r synthesis-callout, results="asis"}
+sy <- file.path(proj,"out","taskcmp_synthesis.md")
+if(file.exists(sy)) { cat("\n> **Bottom line (see Synthesis for detail).**\n\n"); cat(readLines(sy), sep="\n") }
+```
+
+---
+
+# Lens A — Paired univariate (the Dupi-vs-control metrics, now paired)
+
+Every per-breath gamma metric, aggregated to a subject-level mean per condition, then a paired test across the 6 subjects (paired t, Wilcoxon signed-rank, Cohen's dz; BH-FDR across all 93 metrics).
+
+```{r lensA}
+A <- rd("taskcmp_A_univariate.csv")
+kt(A |> arrange(desc(abs(dz))), "All metrics ranked by |dz| (paired audiobook − focus)", n=25)
+```
+
+```{r lensA-fig, results="asis"}
+showfig("^A_")
+```
+
+---
+
+# Lens B — Distributional / higher-moment
+
+Means can match while **variability** differs. Within each subject, the per-breath distribution of each metric is compared between conditions (log variance ratio, KS), then tested across subjects.
+
+```{r lensB}
+kt(rd("taskcmp_B_distribution.csv") |> arrange(varRatio_p_fdr), "Spread differences (log variance ratio, paired across subjects)", n=20)
+```
+
+```{r lensB-fig, results="asis"}
+showfig("^B_")
+```
+
+---
+
+# Lens C — Multivariate decoding (omnibus separability)
+
+The most sensitive "is there **any** difference" test: within each subject, cross-validated classification of condition from the gamma feature vector (leakage-controlled, with a within-subject label-permutation null). Gamma-only vs gamma+airflow feature sets isolate gamma-specific separability from the breathing manipulation.
+
+```{r lensC}
+kt(rd("taskcmp_C_decoding.csv"), "Per-subject decoding (AUC / balanced accuracy) by feature set")
+```
+
+```{r lensC-fig, results="asis"}
+showfig("^C_")
+```
+
+---
+
+# Lens D — Respiration–gamma coupling
+
+Paired tests of gamma–respiration coupling between conditions (Tort MI, resultant length, inhale/exhale ratio, preferred-phase shift).
+
+```{r lensD}
+kt(rd("taskcmp_D_coupling.csv"), "Coupling measures, paired (audiobook − focus)")
+```
+
+```{r lensD-fig, results="asis"}
+showfig("^D_")
+```
+
+---
+
+# Lens E — Airflow-controlled gamma (the key confound)
+
+Focused breathing **changes breathing**, so airflow/morphology metrics differ by design. The question is whether **gamma** differences survive after controlling for breath airflow (inhale volume/duration/peak flow, breath length) in a per-breath mixed model.
+
+```{r lensE}
+kt(rd("taskcmp_E_airflow.csv") |> arrange(cond_p_adj), "Condition effect on gamma before vs after airflow adjustment", n=25)
+```
+
+```{r lensE-fig, results="asis"}
+showfig("^E_")
+```
+
+---
+
+# Lens F — Time-frequency ROI paired contrasts
+
+A-priori time×frequency ROIs on the spectrogram z-maps, averaged per subject then paired (fewer comparisons than the whole-map cluster test, so more power for focal effects).
+
+```{r lensF}
+kt(rd("taskcmp_F_roi.csv") |> select(roi,band,n,mean_diff,dz,t_p,t_p_fdr,wilcox_p) |> arrange(t_p), "TF-ROI paired contrasts (control, n=6)")
+```
+
+```{r lensF-fig, results="asis"}
+showfig("^F_")
+```
+
+---
+
+# Whole-map cluster permutation (reference)
+
+For completeness, the family-wise-error-controlled whole-map test (paired within-subject sign-flip, Maris–Oostenveld) across low/mid/high bands. No cluster survives in any band — expected given the focal/underpowered effects above.
+
+```{r cluster, results="asis"}
+for(b in c("low","mid","high")){ f<-file.path(Fg,"scratch",sprintf("clusterperm_audio_vs_focus_%s.png",b))
+  if(file.exists(f)) cat(sprintf("\n\n![](%s)\n\n", f)) }
+kt(rd("clusterperm_audio_vs_focus_stats.csv") |> group_by(band) |> summarise(min_p=min(p_perm), n_clusters=n()), "Cluster permutation summary")
+```
+
+---
+
+# Synthesis & verdict
+
+```{r synthesis, results="asis"}
+sy <- file.path(proj,"out","taskcmp_synthesis.md")
+if(file.exists(sy)) cat(readLines(sy), sep="\n") else cat("_synthesis pending_")
+```
+
+---
+
+# Methods
+
+Data: `out/tables/taskcmp_perbreath.csv` (per-breath), `taskcmp_subject_means.csv` (subject×condition), built by `code/taskcmp_build_data.R` from the corrected breathing per-breath gamma outputs (focusedBreathing = focus | naturalFocus | slowFocus). Lenses A–E implemented in `code/taskcmp_*.R`; Lens F in `code/taskcmp_roi.m`; cluster permutation in `code/cluster_perm_audio_focus.m`. All tests paired within subject (n=6); effect size = Cohen's dz; multiple-comparison control = Benjamini–Hochberg FDR across metrics within each lens.

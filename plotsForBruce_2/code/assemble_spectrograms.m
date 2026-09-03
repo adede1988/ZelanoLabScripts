@@ -23,7 +23,7 @@ files=dir(fullfile(sdir,'*.mat'));
 % AVERAGE the z-scored maps ACROSS SUBJECTS (sessions). So we build each session's
 % within-channel baseline-z map from its sufficient stats and accumulate the sum.
 Zsum=struct(); for s=1:3, Zsum.(sets{s})=cell(nR,nC); end
-Ns=zeros(nR,nC); Ss=zeros(nR,nC); Rsp=cell(nR,nC); Nrsp=zeros(nR,nC);
+Ns=zeros(nR,nC); Ss=zeros(nR,nC); Rsp=cell(nR,nC); Nrsp=zeros(nR,nC); Subj=cell(nR,nC);
 tMs=[]; freqs=struct();
 
 for k=1:numel(files)
@@ -47,9 +47,12 @@ for k=1:numel(files)
         Zsum.(sets{s}){ri,ci}=Zsum.(sets{s}){ri,ci}+zsess;
     end
     Ns(ri,ci)=Ns(ri,ci)+o.nBreaths; Ss(ri,ci)=Ss(ri,ci)+1;
+    Subj{ri,ci}=[Subj{ri,ci}, {char(o.participant)}];
     if isempty(Rsp{ri,ci}), Rsp{ri,ci}=zeros(1,numel(tMs)); end
     Rsp{ri,ci}=Rsp{ri,ci}+o.sumRsp; Nrsp(ri,ci)=Nrsp(ri,ci)+o.nRsp;
 end
+Nsubj=zeros(nR,nC);
+for ri=1:nR, for ci=1:nC, if ~isempty(Subj{ri,ci}), Nsubj(ri,ci)=numel(unique(Subj{ri,ci})); end, end, end
 
 for s=1:3
     F=freqs.(sets{s});
@@ -65,33 +68,37 @@ for s=1:3
     rg=[]; for ri=1:nR, for ci=1:nC, if Nrsp(ri,ci)>0, rg=[rg, Rsp{ri,ci}/Nrsp(ri,ci)]; end, end, end %#ok<AGROW>
     rmin=prctile(rg,1); rmax=prctile(rg,99); if rmax<=rmin, rmax=rmin+1; end
 
-    fig=figure('Position',[30 30 2300 1950],'Color','w','Visible','off');
+    fig=figure('Units','pixels','Position',[20 20 2600 2050],'Color','w','Visible','off');
     tl=tiledlayout(nR,nC,'TileSpacing','compact','Padding','compact');
     for ri=1:nR
       for ci=1:nC
-        nexttile;
+        ax=nexttile;
         if ~isempty(maps{ri,ci})
             imagesc(tMs, F, maps{ri,ci}, [-cl cl]); axis xy; hold on;
             xline(0,'w-','LineWidth',1);
-            % respiration overlay: scale mean rsp to the freq axis
-            if Nrsp(ri,ci)>0
+            if Nrsp(ri,ci)>0    % respiration overlay scaled to freq axis
                 r=Rsp{ri,ci}/Nrsp(ri,ci);
                 ry=F(1)+(r-rmin)/(rmax-rmin)*(F(end)-F(1));
-                plot(tMs, ry, 'w-', 'LineWidth',1.0);
+                plot(tMs, ry, 'k-', 'LineWidth',1.6);
             end
-            title(sprintf('%s / %s (n=%d br, %d sess)', rows{ri}, cols{ci}, Ns(ri,ci), Ss(ri,ci)),'FontSize',12,'Interpreter','none');
+            text(tMs(1)+150, F(end), sprintf(' %d subj, %d sess', Nsubj(ri,ci), Ss(ri,ci)), ...
+                'Color','k','FontSize',18,'FontWeight','bold','VerticalAlignment','top','HorizontalAlignment','left');
         else
-            axis off; title(sprintf('%s / %s (no data)', rows{ri}, cols{ci}),'FontSize',12,'Interpreter','none');
+            imagesc(tMs, F, zeros(numel(F),numel(tMs)), [-cl cl]); axis xy;
+            text(mean(tMs), mean(F), 'no data','Color','k','FontSize',13,'HorizontalAlignment','center');
         end
-        if ci==1, ylabel('Hz','FontSize',12); end
-        if ri==nR, xlabel('ms','FontSize',12); end
-        set(gca,'FontSize',11);
+        if ri==1, title(cols{ci},'FontSize',20,'FontWeight','bold','Interpreter','none'); end
+        if ci==1, ylabel(rows{ri},'FontSize',17,'FontWeight','bold','Interpreter','none');
+        else, set(ax,'YTickLabel',[]); end
+        if ri<nR, set(ax,'XTickLabel',[]); end
+        set(ax,'FontSize',14);
       end
     end
     try, colormap(turbo); catch, colormap(jet); end
-    cb=colorbar; cb.Layout.Tile='east'; cb.Label.String='baseline-z (-500..-100 ms)'; cb.FontSize=12; cb.Label.FontSize=12;
-    title(tl, sprintf('Inhale/sniff-locked group spectrograms — %s (superlet; baseline-z; white = mean respiration)', setLabel{s}),'FontSize',16);
-    exportgraphics(fig, fullfile(fdir, sprintf('spectrograms_%s.png', sets{s})),'Resolution',140);
+    cb=colorbar; cb.Layout.Tile='east'; cb.Label.String='baseline-z (-500..-100 ms)'; cb.FontSize=15; cb.Label.FontSize=15;
+    xlabel(tl,'Time from inhale/sniff onset (ms)','FontSize',17);
+    title(tl, sprintf('Inhale/sniff-locked group spectrograms — %s (columns = group, rows = task; black = mean respiration)', setLabel{s}),'FontSize',19,'FontWeight','bold');
+    exportgraphics(fig, fullfile(fdir, sprintf('spectrograms_%s.png', sets{s})),'Resolution',130);
     close(fig);
     fprintf('wrote spectrograms_%s.png (cells with data %d/%d, clim +-%.2f)\n', sets{s}, sum(Ns(:)>0), nR*nC, cl);
 end

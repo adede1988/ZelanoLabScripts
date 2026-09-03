@@ -153,7 +153,7 @@ if(!is.null(mw) && "falloff" %in% names(mw)){
 
 # Group gamma spectrograms (inhale/sniff-locked)
 
-Superlet power, z-scored **within channel** (per session) to a **−500 to −100 ms pre-inhale baseline** via the `myChanZscore` convention (baseline pooled over that session's breaths, so no single breath dominates), then **averaged across sessions** to form each group map; −1000 to +4000 ms; 5 task rows × 5 columns (control, S2/3 responder, S1 responder, S2/3 non-responder, S1 non-responder). The **white line overlays the mean respiration waveform**. Three frequency-range sets cover the spectrum; within each set all 25 panels share one color scale. Panel labels give breath and session counts.
+Superlet power, z-scored **within channel** (per session) to a **−500 to −100 ms pre-inhale baseline** via the `myChanZscore` convention (baseline pooled over that session's breaths, so no single breath dominates), then **averaged across sessions** to form each group map; −1000 to +4000 ms; 5 task rows × 5 columns (control, S2/3 responder, S1 responder, S2/3 non-responder, S1 non-responder). The **black line overlays the mean respiration waveform**. Three frequency-range sets cover the spectrum; within each set all 25 panels share one color scale. Columns are groups, rows are tasks, and each panel is labelled with its **subject and session counts**.
 
 **Gamma band (25–58 Hz):**
 
@@ -177,7 +177,7 @@ if(hasfig("spectrograms_high.png")) knitr::include_graphics(file.path(Fg,"spectr
 
 # Per-breath gamma characterization
 
-Each breath/sniff yields a large set of gamma descriptors (see Methods). Below, each measure is plotted with **session 1/2/3/control on X**, colored by responder / non-responder / control, faceted by task; bars = session means ± SE.
+Each breath/sniff yields a large set of gamma descriptors (see Methods). Below is the **curated set of key metrics**, each plotted with **session 1/2/3/control on X**, colored by responder / non-responder / control, faceted by task; bars = session means ± SE. Every panel carries a one-line **description of how the measure is computed** (subtitle) and its **goodness statistics** (control↔Dupi and responder↔non-responder effect sizes) printed in the plot header.
 
 ```{r gamma-plots, results="asis"}
 gf <- list.files(file.path(Fg,"gamma"), pattern="^gm_.*\\.png$", full.names=TRUE)
@@ -188,7 +188,7 @@ for(g in gf){ cat(sprintf('\n\n![](%s)\n\n', g)) }
 
 # Which measures are good? (low control variability + separation / tracking)
 
-The headline question: measures with **low between-control variability** that also (1) separate control↔Dupi, (2) separate responder↔non-responder, and/or (3) track recovery across sessions. The table below ranks measures by `goodness = |max separation effect| / (1 + |control CV|)`.
+The headline question: measures with **low between-control variability** that also (1) separate control↔Dupi, (2) separate responder↔non-responder, and/or (3) track recovery across sessions. The table below ranks every measure by `goodness = |max separation effect| / (1 + |control CV|)`. This is the numeric **screen**; the corresponding plots for the full ranked set are in the next section, and each is annotated with its own goodness stats.
 
 > **Important caveat.** This `goodness` heuristic is a screen, not the verdict, and is inflated by artifacts: ridge-frequency's low CV is a **bounded-tracker artifact** (the ridge is confined to 25–58 Hz); the FOOOF-selected channel has a real gamma peak in only **39%** of recordings; and it applies no multiple-comparison control. The **Robustness analyses** section re-tests every measure with bootstrap CIs, peak-gating, airflow regression, and 1/f control — where **0 of 460** control↔Dupi separations survive as CI-significant. That section carries the conclusions.
 
@@ -203,9 +203,15 @@ if(!is.null(G)){
 }
 ```
 
+---
+
+# Full ranked metric gallery
+
+The complete set of top-ranked per-breath measures from the screening table, each plotted with the same session-1/2/3/control layout and annotated (plot header) with its control↔Dupi and responder↔non-responder effect sizes. These are the "bunch of extra metrics" behind the ranking above, collected here rather than mixed into the characterization or screening sections. Read alongside the caveat above and the Robustness analyses below.
+
 ```{r top-plots, results="asis"}
 tf <- list.files(file.path(Fg,"gamma"), pattern="^top_.*\\.png$", full.names=TRUE)
-for(g in head(tf,10)){ cat(sprintf('\n\n![](%s)\n\n', g)) }
+for(g in tf){ cat(sprintf('\n\n![](%s)\n\n', g)) }
 ```
 
 ---
@@ -264,19 +270,6 @@ if(hasfig("gamma/ap_apExp.png")) knitr::include_graphics(file.path(Fg,"gamma","a
 if(hasfig("gamma/ap_apOffset.png")) knitr::include_graphics(file.path(Fg,"gamma","ap_apOffset.png"))
 ```
 
-## z-window robustness and the "chirp"
-
-peakZ depends on the normalization window (low whole-window vs baseline-z correlation), though burst *presence* is robust. A simulation shows a broadband transient plus the ridge tracker reproduces a wandering mid-band ridge with **no oscillation present**; superlet FWHM ≈ 64–80 ms / 4 Hz. This means the descending ridge ("chirp") is not, by itself, evidence of a sweeping gamma rhythm.
-
-```{r zconc}
-kt(rd("gamma_zwindow_concordance.csv") |> mutate(across(where(is.numeric),~round(.x,3))), "Whole-window vs pre-inhale-baseline z concordance")
-kt(rd("superlet_FWHM.csv"), "Superlet effective resolution (impulse-response FWHM)")
-```
-
-```{r sim, out.width="95%"}
-if(hasfig("gamma/sim_broadband_transient.png")) knitr::include_graphics(file.path(Fg,"gamma","sim_broadband_transient.png"))
-```
-
 ---
 
 # Integrative summary
@@ -284,6 +277,35 @@ if(hasfig("gamma/sim_broadband_transient.png")) knitr::include_graphics(file.pat
 ```{r summary, results="asis"}
 sp <- file.path(proj,"out","integrative_summary.md")
 if(file.exists(sp)) cat(readLines(sp), sep="\n") else cat("_summary pending_")
+```
+
+## Most promising measures (reproduced here for reference)
+
+Collected below so the reader does not have to scroll back. The **behavioral composite** is the robust finding — it separates controls from Dupi and tracks recovery across sessions. The gamma-domain leads (**aperiodic exponent**, **absolute gamma power**, **chirp slope**) are the strongest candidates but remain **underpowered** (no control↔Dupi separation survives bootstrap CIs); they are shown as directions for follow-up, not confirmed effects.
+
+**Behavioral composite — clean control↔Dupi separation and session tracking:**
+
+```{r prom-comp, fig.show="hold", out.width="60%"}
+for(p in c("beh_composite.png","beh_composite_all3.png")) if(hasfig(p)) knitr::include_graphics(file.path(Fg,p))
+```
+
+**Aperiodic exponent — best gamma-domain separator (steeper in Dupi; separates responders↔non-responders):**
+
+```{r prom-ap, out.width="100%"}
+if(hasfig("gamma/ap_apExp.png")) knitr::include_graphics(file.path(Fg,"gamma","ap_apExp.png"))
+```
+
+**Chirp slope (200–1000 ms) — controls sweep the ridge down, Dupi stay flat:**
+
+```{r prom-chirp, out.width="100%"}
+if(hasfig("gamma/gm_chirpSlope2__mean.png")) knitr::include_graphics(file.path(Fg,"gamma","gm_chirpSlope2__mean.png"))
+```
+
+**Absolute gamma power (early window, dB) — lower in Dupi:**
+
+```{r prom-pow, out.width="100%"}
+p <- if(hasfig("gamma/top_w2_rpowDb__mean.png")) "gamma/top_w2_rpowDb__mean.png" else if(hasfig("gamma/top_w3_rpowDb__mean.png")) "gamma/top_w3_rpowDb__mean.png" else NA
+if(!is.na(p)) knitr::include_graphics(file.path(Fg,p))
 ```
 
 ---
