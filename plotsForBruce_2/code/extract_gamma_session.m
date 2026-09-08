@@ -215,9 +215,9 @@ switch taskRow
     % Newer sessions relabel focused breathing as naturalFocus / slowFocus
     % (older sessions use the literal 'focus'); match all three.
     if strcmp(taskRow,'audiobook')
-        sel = strcmpi(tcol,'audio');
+        sel = strcmpi(tcol,'audio') | strcmpi(tcol,'audiobook');
     else
-        sel = strcmpi(tcol,'focus') | strcmpi(tcol,'naturalFocus') | strcmpi(tcol,'slowFocus');
+        sel = strcmpi(tcol,'focus') | strcmpi(tcol,'naturalFocus') | strcmpi(tcol,'slowFocus') | strcmpi(tcol,'focusedBreathing');
     end
     if ~any(sel), ev=struct([]); cov=struct([]); return; end
     on = round(coerce(bd.finalOnset));

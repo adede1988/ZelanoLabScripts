@@ -2,6 +2,8 @@
 out/gamma/spectro/*.mat
 out/gamma/group_spectrograms.mat
 out/spectro2/*.mat
+# task-comparison per-breath/ridge caches (regenerable by code/taskcmp_*.m; CSV summaries are tracked)
+out/tables/*.mat
 logs/
 # transient
 *.tmp

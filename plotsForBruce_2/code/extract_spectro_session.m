@@ -79,12 +79,13 @@ switch taskRow
   case {'audiobook','focusedBreathing'}
     vn=bd.Properties.VariableNames;
     if any(strcmp(vn,'task')), tc=strtrim(string(stringcol(bd.task))); else, return; end
-    % audiobook = 'audio'; focusedBreathing = focus | naturalFocus | slowFocus
-    % (newer sessions relabel focused breathing; older use the literal 'focus').
+    % audiobook block labels: 'audio' or 'audiobook' (separatepreproc controls).
+    % focusedBreathing block labels: focus | naturalFocus | slowFocus (Dupi schemes)
+    % or the literal 'focusedBreathing' (separatepreproc controls).
     if strcmp(taskRow,'audiobook')
-        sel=strcmpi(tc,'audio');
+        sel=strcmpi(tc,'audio') | strcmpi(tc,'audiobook');
     else
-        sel=strcmpi(tc,'focus') | strcmpi(tc,'naturalFocus') | strcmpi(tc,'slowFocus');
+        sel=strcmpi(tc,'focus') | strcmpi(tc,'naturalFocus') | strcmpi(tc,'slowFocus') | strcmpi(tc,'focusedBreathing');
     end
     fo=round(coerce(bd.finalOnset));
     on=fo(sel & ~isnan(fo) & fo>0); on=on(:);

@@ -149,3 +149,5 @@ sessID,task,cohort,group,participant,sessNum,nMacBP,bestChan,bestLabel,bestPeakF
 250818_Dupi_NMH_JH_2,cueTask,Dupi,DupiS2,JH,2,5,2,macBP2,3.02524,0,0.00275903,1,1
 260608_OBE_NWU_RX_1,cueTask,OBE,Control,RX,1,4,3,macBP3,5.54575,0,9.40868e-05,0,0
 260608_OBE_NWU_RX_1,O15,OBE,Control,RX,1,5,3,macBP3,5.87065,0,0,0,0
+260625_OBE_NWU_HM_2,breathingTask,OBE,Control,HM,2,5,2,macBP2,27.8552,1,0,2,3
+260702_OBE_NWU_SP_2,breathingTask,OBE,Control,SP,2,5,3,macBP3,8.46445,0,0,0,0
