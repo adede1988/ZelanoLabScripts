@@ -1,0 +1,9 @@
+task,metric,ctrl,S1,S2,S3,d_sep,p_sep,p_sep_fdr,rho,p_rho,SDratio_ctrl_dupi,chirp_S1toS2,chirp_S2toS3
+audiobook,timeAboveMs__mean,419±59,370,383,396,-0.86,0.13,0.39,0.12,0.53,1.12,NA,NA
+audiobook,dutyCycle__mean,0.21±0.03,0.185,0.191,0.198,-0.86,0.13,0.39,0.12,0.53,1.12,NA,NA
+audiobook,chirpSlope__mean,4.47±6.2,-0.408,2.43,2.58,-0.78,0.22,0.52,0.33,0.085,1.52,2.84,0.15
+audiobook,gammaPeakPresent__mean,0.99±0.017,0.949,0.972,1,-0.7,0.082,0.36,0.42,0.022,0.34,NA,NA
+focusedBreathing,timeAboveMs__mean,426±14,380,383,390,-1.71,3.1e-4,0.029,0.06,0.75,0.32,NA,NA
+focusedBreathing,dutyCycle__mean,0.213±0.007,0.19,0.191,0.195,-1.71,3.1e-4,0.029,0.06,0.75,0.32,NA,NA
+focusedBreathing,chirpSlope__mean,3.76±6,0.331,-0.0151,-0.218,-0.93,0.12,0.37,-0.01,0.98,1.47,-0.35,-0.2
+focusedBreathing,gammaPeakPresent__mean,0.985±0.026,0.967,0.979,0.988,-0.32,0.47,0.74,0.1,0.63,0.71,NA,NA

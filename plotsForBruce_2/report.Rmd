@@ -216,6 +216,28 @@ for(g in tf){ cat(sprintf('\n\n![](%s)\n\n', g)) }
 
 ---
 
+# Breathing tasks: a gamma-bursting deficit and a chirp-slope recovery
+
+The two breathing blocks — **audiobook** (passive listening) and **focusedBreathing** — let us ask the headline question directly for a within-task, ecologically simple context: which per-breath measures both **separate Dupi from control** *and* **track across sessions**? Sweeping all `r nrow(rd("breathing_deficit_stats.csv"))/2` measures paired against each criterion, **nothing clears FDR on session tracking**, and only the focused-breathing bursting deficit clears FDR on separation. But two effects are direction-consistent and mechanistically coherent enough to flag as genuine leads — and they **dissociate by task**.
+
+```{r breathing-deficit-fig, out.width="100%"}
+if(hasfig("breathing_deficit_tracking.png")) knitr::include_graphics(file.path(Fg,"breathing_deficit_tracking.png"))
+```
+
+```{r breathing-deficit-tab}
+kt(rd("breathing_deficit_summary.csv"), "Highlighted breathing measures: control (mean±SD), Dupi session means, separation (d_sep, FDR), tracking (Spearman ρ), control/Dupi SD ratio; for chirp, the S1→S2 and S2→S3 step.")
+```
+
+**A gamma-bursting deficit (Dupi < control).** Duty cycle and time-above-threshold (fraction / ms of each breath the ridge spends at z > 3) are **lower in Dupi than control in both tasks**. It is statistically cleanest in focused breathing (d ≈ −1.7, FDR q = 0.029) — but that large effect size is **amplified by unusually tight control grouping**: the control SD is only ≈ ⅓ of the Dupi session SD (SD ratio 0.32). The audiobook deficit is more modest (d ≈ −0.9) but **variance-fair** (SD ratio ≈ 1.1). Because these are z-/threshold-based (not raw dB power), they are relatively robust to the 1/f confound. The deficit is **static** — it does not track across sessions (ρ ≈ 0.06–0.12). Read: a real, direction-consistent reduction in gamma bursting in Dupi, though individual sessions overlap and the focused-breathing effect size is partly a low-control-variance effect.
+
+**A chirp-slope recovery, in audiobook, concentrated S1→S2.** Ridge-frequency slope (0–500 ms) sits near flat in Dupi at S1 and **climbs toward the control value across sessions in audiobook** — and essentially all of the movement is **S1→S2** (Δ ≈ +2.8 Hz/s), plateauing S2→S3 (Δ ≈ +0.15). Focused breathing shows no such recovery (it drifts the other way). This is the same ridge-sweep family that separated groups in the sniff tasks, so the direction is *a priori* motivated, but it is noisy (large SE) and does not survive FDR (ρ = 0.33, p ≈ 0.09).
+
+**Periodic peak rate is ceiling-limited.** The fraction of breaths with a detectable periodic gamma bump rises toward control across sessions, but most Dupi are already **near ceiling at S1** (0.95–1.0), so the measure has little room to move and is hard to interpret as recovery.
+
+**Net.** A **gamma-bursting deficit** (Dupi < control, clearest in focused breathing) and a **chirp-slope recovery** (audiobook, early S1→S2) are the two coherent breathing-task signals — a *separation* marker and a *tracking* marker that live in different tasks. Neither is confirmed (bursting doesn't track; chirp doesn't survive correction; S3 is n = 6), but both are direction-consistent and worth powering up.
+
+---
+
 # Respiration–gamma coupling
 
 Session-level coupling of gamma amplitude to respiratory phase: Tort modulation index (MI), preferred-phase resultant length, and an inhale/exhale gamma ratio. Plotted by session/control, colored by responder status.
@@ -281,7 +303,7 @@ if(file.exists(sp)) cat(readLines(sp), sep="\n") else cat("_summary pending_")
 
 ## Most promising measures (reproduced here for reference)
 
-Collected below so the reader does not have to scroll back. The **behavioral composite** is the robust finding — it separates controls from Dupi and tracks recovery across sessions. The gamma-domain leads (**aperiodic exponent**, **absolute gamma power**, **chirp slope**) are the strongest candidates but remain **underpowered** (no control↔Dupi separation survives bootstrap CIs); they are shown as directions for follow-up, not confirmed effects.
+Collected below so the reader does not have to scroll back. The **behavioral composite** is the robust finding — it separates controls from Dupi and tracks recovery across sessions. The gamma-domain leads (**aperiodic exponent**, **absolute gamma power**, **chirp slope**, and — in the breathing tasks — a **gamma-bursting deficit** and an **early chirp-slope recovery**) are the strongest candidates but remain **underpowered** (no control↔Dupi separation survives bootstrap CIs, and no breathing measure tracks after FDR); they are shown as directions for follow-up, not confirmed effects.
 
 **Behavioral composite — clean control↔Dupi separation and session tracking:**
 
@@ -308,11 +330,17 @@ p <- if(hasfig("gamma/top_w2_rpowDb__mean.png")) "gamma/top_w2_rpowDb__mean.png"
 if(!is.na(p)) knitr::include_graphics(file.path(Fg,p))
 ```
 
+**Breathing tasks — a gamma-bursting deficit (Dupi < control, both tasks) and an early chirp-slope recovery (audiobook, S1→S2):**
+
+```{r prom-breath, out.width="100%"}
+if(hasfig("breathing_deficit_tracking.png")) knitr::include_graphics(file.path(Fg,"breathing_deficit_tracking.png"))
+```
+
 ---
 
 # Methods & reproducibility
 
-**Adding a participant** is a data-tracking-sheet edit (a row + parameters); the pipeline is sheet-driven end to end. To refresh the analysis: (1) `build_session_index.m` (inventory), (2) `run_scores.m` (behavioral + macBP selection), (3) `run_gamma_all.m` (per-breath gamma; lab, parfor), (4) `assemble_spectrograms.m`, (5) the R scripts `inventory_report.R`, `behavioral_composite.R`, `macbp_table.R`, `gamma_aggregate.R`, `coupling_aggregate.R`, and `gamma_review_response.R` (robustness), then knit `report.Rmd`. All project code lives in `plotsForBruce_2/code`; external tools (`fooof_basic`, `myChanZscore`, Superlets `faslt`, Frequency_ridge_tracking) are called in place.
+**Adding a participant** is a data-tracking-sheet edit (a row + parameters); the pipeline is sheet-driven end to end. To refresh the analysis: (1) `build_session_index.m` (inventory), (2) `run_scores.m` (behavioral + macBP selection), (3) `run_gamma_all.m` (per-breath gamma; lab, parfor), (4) `assemble_spectrograms.m`, (5) the R scripts `inventory_report.R`, `behavioral_composite.R`, `macbp_table.R`, `gamma_aggregate.R`, `coupling_aggregate.R`, `gamma_review_response.R` (robustness), and `breathing_deficit.R` (breathing-task separation/tracking), then knit `report.Rmd`. All project code lives in `plotsForBruce_2/code`; external tools (`fooof_basic`, `myChanZscore`, Superlets `faslt`, Frequency_ridge_tracking) are called in place.
 
 ```{r sessioninfo}
 cat("Superlet: fractional adaptive multiplicative, F=22:1:62 Hz, c1=3, order [3 30]; ridge band 25–58 Hz, penalty 1.0.\n")
