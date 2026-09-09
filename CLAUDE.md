@@ -27,10 +27,12 @@ shared.
 
 | Task | sheet `Task` value(s) | `outDat.task` | What's unique |
 |---|---|---|---|
-| `breathingTask` | `breathingTasks`, `waveBreathing` | `breathingTask` (legacy files: `breathing`) | paced‑breathing blocks; **ECG/HRV**, **per‑breath metrics (`bmObj`)**, **paced target‑trace alignment**, **emotion ratings**. The richest task. |
-| `cueTask` | `odorCueTask` | `cueTask` | odor cue / sniff / response TTLs; hit/miss/cr/fa behavior |
-| `threshTask` | `Threshold` | `threshTask` | PEA intensity/pleasantness threshold; 45 single‑sniff trials |
+| `breathingTask` | `breathing tasks`, `breathingTasks`, `waveBreathing` | `breathingTask` (legacy files: `breathing`) | paced‑breathing blocks; **ECG/HRV**, **per‑breath metrics (`bmObj`)**, **paced target‑trace alignment**, **emotion ratings**. The richest task. |
+| `cueTask` | `odor cue task` | `cueTask` | odor cue / sniff / response TTLs; hit/miss/cr/fa behavior |
+| `threshTask` | `threshold` | `threshTask` | PEA intensity/pleasantness threshold; 45 single‑sniff trials |
 | `O15` | `O15` | `O15` | loads genuinely raw data directly; photodiode TTLs parsed by `detect_ttls_O15` |
+
+> **Sheet `Task` strings are matched loosely — never hand‑write a literal exact match.** The *live* sheet spellings are inconsistent (verified 2026‑09‑09 against `…\Admin\Data\dataTracking.xlsx`): breathing appears as **`breathing tasks`** (with a space — the single most common, ×24), `breathingTasks` (×18) and `waveBreathing` (×17); the cue task is **`odor cue task`** (×46) — the string `odorCueTask` appears **zero** times; the threshold task is lowercase **`threshold`** (×39); O15 is `O15`. This is only safe because `applyParams`'s `canonTask` **lowercases and strips all whitespace** before matching (`breathing tasks`→`breathingtasks`→`breathing`, etc.). Any code comparing against the strings in this table verbatim will silently drop rows — always route through `applyParams`/`canonTask`.
 
 ---
 
@@ -81,8 +83,10 @@ A file is **fully processed** iff it has `outDat.moreThan1` (and, for breathing,
 
 ## 3. `dataTracking.xlsx` — the source of truth
 
-Default path `R:\Neurology\Zelano_Lab\Lab_Common\Admin\dataTracking.xlsx`, `Sheet1`,
+Default path `R:\Neurology\Zelano_Lab\Lab_Common\Admin\Data\dataTracking.xlsx`, `Sheet1`,
 **header row = row 2, data from row 3**. Read through one function, **`applyParams.m`**:
+
+> **Path moved (verified 2026‑09‑09).** The live sheet is now under `…\Admin\Data\dataTracking.xlsx`; the old `…\Admin\dataTracking.xlsx` **no longer exists**. `labPaths.m:107` still builds the *old* path, and `applyParams` then silently **falls back to a repo‑local copy without erroring** — so a run can quietly use a stale sheet. Fix `labPaths.m` (owned by the main/preprocessing agent) or pass the correct path explicitly.
 
 ```matlab
 cfg = applyParams(task, 'makeOutDat'|'main')   % Mode A: session list for a loop
@@ -279,7 +283,16 @@ sample offset) and **`finalOnset`** (phase‑refined onset sample — *use this 
 | `goodBreath` | 1/0 quality flag (from `flagBadBreaths`) |
 | `maxRR`, `minRR`, `RR_max_min` | within‑breath HRV (s) |
 
-> Empirically (a 32‑ch‑EEG Dupi breathing session) `behDat` is `[389 breaths × 33 vars]`;
+> Empirically the older layout was `[~389 breaths × 33 vars]`, but the breathing finals
+> currently on `R:` are **re‑segmented** and carry **~62 columns** (verified 2026‑09‑09:
+> `250908_OBE_NWU_AS` = `[480 × 62]`): the 33 legacy columns **plus** `manOnset` and **~28
+> `bm_*` breathmetrics** columns (`bm_inhaleVolumes`, `bm_inhaleDurations`, `bm_exhaleTroughs`,
+> `bm_peakInspiratoryFlows`, … `bm_inhaleVolumesRaw`), with a matching **`outDat.bmFeatures`**
+> struct. These re‑segmented finals were produced by the sibling repo **`zelanoLabPreprocessing`**
+> (reprocess run, ~2026‑08‑28), whereas **this** repo's `process_respiration_breathing.m` still
+> emits the 33‑column layout — so code and on‑disk data can disagree. **Address `bm_*`/`manOnset`
+> columns by name and guard on their presence** (`ismember('manOnset', behDat.Properties.VariableNames)`),
+> and record which producer wrote the file you are reading.
 > `baseEmotion` is a 1‑row table of the same `<question>_<category>` columns (the `order==0`
 > baseline) plus `task`/`noseMouth`/`shadowFile`/`warp`. The emotion column set varies by
 > the questions a session asked.
@@ -326,6 +339,37 @@ isMac  = cellfun(@(x) contains(x,'macBP'), outDat.labels);
 isRR   = cellfun(@(x) contains(x,'RRint'), outDat.labels);    % breathing
 ```
 
+### 7.1 Behavioral scoring (olfactory performance per session)
+
+**The `behDat` table inside the final `.mat` is the canonical source of truth for
+behavioral scoring.** Compute scores from it directly. (Some group-level R scripts —
+`R_groupLevel\stanfordHelpers.R` / `achemsPrep.R` / `StanfordTalkPrep.R` — read per-session
+CSV exports of `behDat` instead; those CSVs are a convenience copy, not the source. The
+formulas below match those scripts.)
+
+Because cue/thresh/O15 `behDat` is one row per **sniff**, always collapse to one row per
+trial `n` before scoring (only O15 actually has multiple sniffs per trial, but the dedup is
+harmless and correct everywhere): `T = unique(behDat(:, cols), 'stable')` keyed on `n`, or
+`splitapply(@(x) x(1), …, findgroups(behDat.n))`.
+
+**cueTask — signal detection on cue/odor match.** Signal trial = `cue == odor`; response =
+`respString` (`"Yes"`/`"No"`; drop `"SKIP"`). Re-derive outcomes from `cue`/`odor`/`respString`
+rather than trusting the stored `type` column:
+- hit = match & Yes · miss = match & No · fa = mismatch & Yes · cr = mismatch & No
+- `cueTask_HR = hits/(hits+misses)` · `cueTask_FA = fas/(fas+crs)`
+- `cueTask_d` (d′) uses the **log-linear correction** so norminv never hits ±Inf:
+  `HRadj=(hits+0.5)/(nSig+1)`, `FAadj=(fas+0.5)/(nNoise+1)`, `d = norminv(HRadj) − norminv(FAadj)`
+
+**O15 — identification score.** One `expScore` (0 / 0.5 / 1, experimenter-assigned) per
+target trial; dedup by `n` first:
+- `O15_score = sum(expScore)` · `O15_acc = O15_score / 15` (15 targets)
+
+**threshTask — mean intensity per concentration, air-calibrated.** Not a staircase
+estimate; `odor` 1=air/none, 2=low PEA, 3=high PEA (≙ `type` air/low/med). `pleasantness`
+is stored but unused in scoring:
+- `thresh_none/low/high` = mean `intensity` within each odor level
+- `thresh_low_calibrated = thresh_low − thresh_none` (likewise high) — subtracts the
+  blank-air rating as the subject's response-bias baseline; higher = better detection
 
 ---
 
@@ -337,6 +381,12 @@ isRR   = cellfun(@(x) contains(x,'RRint'), outDat.labels);    % breathing
   **`behDat.goodBreath`**. Don't trust positional indices.
 - **`task` value drift:** new files = `breathingTask`; some older finals = `breathing`.
   Handle both.
+- **`noseMouth` is empty, not `"mouth"`** (breathing; flagged by the olfactoryHRV agent, 2026‑09‑09).
+  Values are `"nose"`, `"NA"`, and `""` — no session carries an explicit `"mouth"`. Respiration is
+  recorded with a **nasal cannula**, so any detected breath with a valid signal was nasal; empty just
+  means unrecorded metadata. Filtering `noseMouth == "nose"` silently discards a large fraction of
+  breaths (measured at 31–46% across 11 sessions, concentrated in the `audio`/`focus` blocks) and can
+  collapse a session to one usable block. **Filter `~= "mouth"` instead.**
 - **Top‑level var name varies:** `outDat` (cue/thresh/O15) vs `chanDat`/`out` (breathing).
   Load via `fieldnames` (§2).
 - **EEG channels are exactly rows 1–32** and only when `hasEEG`; everything else is
