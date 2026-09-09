@@ -178,6 +178,13 @@ i.e. zero. Use the depth version, and don’t report a duration-slope change as 
 4. **`.gitignore`** — `out/spectro2/*.mat`, `out/gamma/spectro/*.mat`, and `out/tables/*.mat`
    (taskcmp's per-breath/ridge caches) are intentionally ignored (bulky regenerable
    intermediates). Don't commit `.mat` intermediates.
+5. **Cache invalidation — ONE rule for all agents.** Every agent caches extracts derived from the
+   `R:` finals, and those finals are **rewritten in place** by reprocessing runs. A cache built from
+   an earlier version silently **mixes data versions** and raises no error — this has already
+   destroyed work. **Clear the cache at the start of every run** (what `olfactoryHRV/run_all.ps1`
+   does), or stamp each source final's mtime and invalidate on change. Make it automatic, never
+   manual; a stale cache fails silently. Before a run, confirm no `preProc/*.mat` has been written
+   for several minutes (no reprocess in flight). See CLAUDE.md §8 for the canonical statement.
 
 ---
 

@@ -387,6 +387,14 @@ is stored but unused in scoring:
   means unrecorded metadata. Filtering `noseMouth == "nose"` silently discards a large fraction of
   breaths (measured at 31–46% across 11 sessions, concentrated in the `audio`/`focus` blocks) and can
   collapse a session to one usable block. **Filter `~= "mouth"` instead.**
+- **Cache rule — clear or version‑check every `R:`‑derived cache at the start of each run**
+  (shared convention, all agents). The finals on `R:` are **rewritten in place** by reprocessing
+  runs; reading them mid‑batch, or reusing a cache built from an earlier version, silently **mixes
+  data versions** and raises no error — this has already cost discarded analyses. Either **clear the
+  cache at the start of every run** (what `olfactoryHRV/run_all.ps1` does) or stamp each source
+  final's mtime and invalidate the cache when it changes. A stale cache fails **silently**, so make
+  invalidation automatic, never manual. Before a run, also confirm no `preProc/*.mat` has been
+  written for several minutes (i.e. no reprocess is in flight).
 - **Top‑level var name varies:** `outDat` (cue/thresh/O15) vs `chanDat`/`out` (breathing).
   Load via `fieldnames` (§2).
 - **EEG channels are exactly rows 1–32** and only when `hasEEG`; everything else is
