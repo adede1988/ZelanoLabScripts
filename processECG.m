@@ -1,23 +1,8 @@
 function outDat = processECG(outDat, P)
 
-    idx = cellfun(@(x) contains(x, 'ECG'), outDat.labels);
-    ECG = outDat.data(idx, :); 
-    
-    d = designfilt('bandpassiir', 'FilterOrder', 4, ...
-    'HalfPowerFrequency1', 5, 'HalfPowerFrequency2', 40, ...
-    'SampleRate', outDat.fs);
-  
-    ECG = filtfilt(d, ECG')'; 
-    
-    
-    
-    %plot for custom algorithm design: 
-    ECGz = (ECG - mean(ECG, 2)) ./ std(ECG, [], 2); 
-
-    
-    
-    
-    beatSep = outDat.fs / 20; 
+    % ECG channels -> band-passed, z-scored, with the min beat separation.
+    % (Shared with paramCheckECG so the verification figure matches detection.)
+    [ECGz, beatSep] = buildECGz(outDat);
 
 
 

@@ -1,0 +1,442 @@
+{
+  "summary": "Catalogue shared preprocessing subfunctions: shared vs task-specific, branches, redundancies",
+  "agentCount": 21,
+  "logs": [],
+  "result": {
+    "synthesis": "# Subfunction Classification Report\n\n## 1. Task-shared, fully generic\nSafe to treat as unified; never branch per-task. All variation enters via the `P` struct or `outDat` labels, not code.\n\n| Function | Notes |\n|---|---|\n| `downsample_data` | Only branch is data dimensionality (2D/3D). Hardcoded filter design, but nothing varies by task. |\n| `preprocess_eeg` | Fully task-agnostic; only runtime branch is data-driven good-channel count. `P` accepted but unused. |\n| `preprocess_macros` | No in-body task branch; behavior carried by `P.spikeClean`. Task gating lives at call sites. |\n| `preprocess_respiration_wholetrace` | Channel pick driven by `'rsp'` label + `rspIDX`/`rspFlip`. Already clean. |\n| `detect_sniffs_from_TTLs` | No in-body branch; per-task TTL shaping happens in callers (esp. thresh rebuild). |\n| `refine_onsets_with_phase` | Only `P.adjWin` varies. `P.task` unused. |\n| `detect_spikes` | Fully generic; task-specific thresh/win passed by callers. |\n| `plot_sniff_epochs` | Identical call everywhere; pure diagnostics. |\n| `parSave` | Pure save wrapper; zero branching. |\n\n## 2. Contain task-specific branches\nFunctions with real condition/task branching inside the body.\n\n| Function | Branch(es) | Recommendation |\n|---|---|---|\n| `process_respiration_breathing` | `if ismember('cyclicSigh', behDat.cndName)` merges consecutive inhales; guarded by presence of `cndName` column; relies on breathing-only `.behDat`/`.TTL`. | **Split.** Isolate the cyclicSigh merge into a clearly-named local subfunction (`mergeCyclicSighBreaths`). The else branch is a dead no-op — delete. Channel-select/flip/`breathTemplates4` are generic and can stay outside the branch. |\n| `flagBadBreaths` | `strcmp(behDat.task,'cyclicSigh')` force-accepts those breaths regardless of shape. | **Mark, don't split.** Single one-line condition-name exception; keep inline with a comment. Function is otherwise breathing-only by call site. |\n| `alignTargetBreathingTraceSimplify` | Multiple: `cndName` presence (else `startFrom=3`), `'pre'`/`'audio'` baseline zero-fill, `{fastFocus,slowFocus,naturalFocus}` focus zero-fill, and the core `shadowFile ∈ {audioResp,focusedResp}` split selecting **two distinct alignment algorithms** (+`'NA'`→`audioResp` remap, sessID-skip at call site). | **Split the two algorithms** into `buildTarget_direct` vs `buildTarget_tempoLoop` subfunctions; hoist shared CSV-load + plotting out of the branch. This is the densest task-specific logic of the set. |\n| `outMat_to_table` | No code branch on task, but the special remap keys on `'response'`@5 + `'response_str'`@6 (cueTask schema) with magic `999` sentinel and `6:8→7:9` shift. | **Treat as cueTask-specific** (Section 3). Keep as-is; it degrades safely to plain `cell2table` for other layouts. |\n\n`build_behavior_table_{cueTask,threshTask,O15}` carry hardcoded `sniffTypes`/`trialTypes` vocab and per-task `rawBeh` field names — these are *task selection by filename*, not in-body routers (see Section 3 + 4).\n\n## 3. Task-specific by nature\nEach used by exactly one task; belong wholly inside that task's section.\n\n| Function | Task | Role |\n|---|---|---|\n| `process_respiration_breathing` | breathing | Per-breath metric matrix + cyclicSigh merge |\n| `processECG` | breathing | HRV / beat detection (despite being listed \"shared\") |\n| `flagBadBreaths` | breathing | Per-breath QC |\n| `alignTargetBreathingTraceSimplify` | breathing | Shadow/paced target-trace alignment |\n| `build_behavior_table_breathingTask` | breathing | Per-breath behavior table |\n| `plotBreathLengths` | breathing | QC heatmaps |\n| `build_behavior_table_cueTask` | cueTask | Per-sniff table (`{\"cued\"}`) |\n| `outMat_to_table` | cueTask | Behavioral cell→table normalization |\n| `build_behavior_table_threshTask` | threshTask | Per-sniff table (`{air,low,med}`) |\n| `build_behavior_table_O15` | O15 | Per-sniff table (`{start,free,confirm}`) |\n| `detect_ttls_O15` | O15 | Photodiode→TTL parser; entire body encodes O15 geometry |\n\nNote: `processECG`, `flagBadBreaths`, `plotBreathLengths`, `plot_sniff_epochs` have task-agnostic bodies but `processECG`/`flagBadBreaths`/`plotBreathLengths` are called only from `breathingTaskPreProc_main.m`, so they are de-facto breathing-only.\n\n## 4. Redundancy / simplification opportunities\n\n**Highest-value (cross-function duplication):**\n- **`build_behavior_table_*` ×4 (+EmotionalMovie)** are near-identical: same first 6 columns from `sniffs` cols `1,2,3,4,6,6`, same `sniffLabel` mapping, same nested `find(behDat.n==ii)` broadcast loop. Only `sniffTypes`/`trialTypes` vocab and the `rawBeh` field list differ. **Factor into one generic builder** taking a task spec (sniffType labels + field map); leave only the vocab as the task-specific stub. The double loop is also an inefficient element-by-element grow — vectorize with logical indexing.\n- **`parSave` / `parSaveClean`** are identical except saved var name — collapse into one helper with an optional var-name arg.\n\n**Dead / commented code to delete:**\n- `detect_spikes` lines ~178-241: entire legacy per-sample loop, commented out.\n- `process_respiration_breathing`: dead else branch (computes `startIdx/endIdx`, used only in commented code); live `figure/hold/plot` will pop a figure per cyclicSigh segment in batch runs — remove or gate.\n- `alignTargetBreathingTraceSimplify`: unreachable `error(...)`+`continue`, multiple commented plotting blocks, stale docstring (`codePre` arg doesn't exist).\n- `preprocess_macros`: commented butter/gammaSig lines; `preprocess_eeg`: commented `ephysDat`/blinkIndicator append lines.\n- `outMat_to_table`: `isEmptyValue` re-runs `isempty` in an unreachable char branch (no-op).\n\n**Within-function duplication to hoist:**\n- `detect_spikes`: positive- vs negative-spike blocks are mirror copy-paste → one helper called twice.\n- `preprocess_macros`: two near-identical macro-raw plotting blocks (full vs zoom); `idx`/`macroDat` recomputed 3×; spikeClean true/false branches duplicate the channel-append + `spikeRemoval=1` tail.\n- `preprocess_eeg`: the two arms of the `>10 good chans` branch repeat badChans/append/flag bookkeeping → factor shared appends out.\n- `alignTargetBreathingTraceSimplify`: CSV-load block and plotting block copy-pasted across both shadowFile branches.\n- `detect_sniffs_from_TTLs`: cued vs free threshold-crossing `find(...)` nearly identical → one helper `(startSearch,endSearch,firstOnly)`.\n- `refine_onsets_with_phase`: fallback zero-crossing `find()` recomputes line-45 expression; three skip branches duplicate `adjust=0; finalOnset=s0; continue`.\n- `plotBreathLengths`: `idx` and `[~,order]=sort` recomputed identically; two imagesc blocks near-identical.\n\n**Latent bugs / correctness flags (surface before simplifying):**\n- **`flagBadBreaths`**: the bad-breath branch indexes the **full** `rrDat` by `bonset:boffset` (recording's opening seconds) instead of `curRR` — likely a bug; both branches probably intended `curRR`. The duplicated RR min/max block should be hoisted and computed once from `curRR`.\n- **`detect_ttls_O15`**: warm-up trim loop has commented-out `break`, so it keeps the **last** qualifying index, not the first; `ups` is not trimmed in parallel with `downs/difVals`, falling out of alignment (unused afterward, but fragile).\n- **`preprocess_macros`**: `P.spikeThresh` is in the schema/P-struct but **never used** — `detect_spikes` is called with a hardcoded literal `2`. Per-session `spikeThresh` values currently have no effect (wiring appears lost). Decide: wire it in or drop from schema.\n- **`detect_spikes`**: header claims `winSize` default 5 but no default is assigned → errors if called with 2 args.\n- **`plotBreathLengths`**: RRint plot reuses the rsp x-axis vector `-2:.002:14` (8001 pts) for a 6001-sample window → mislabeled heart-rate axis.\n- **`plot_sniff_epochs`** / `refine_onsets_with_phase`: comments say \"-1 s to +2 s\" / window docs but code uses ±2/+4 s — fix comments.\n\n**Parameterization candidates (magic numbers to surface):**\n- `preprocess_eeg`: the `32` channel count, exempt `[1 32]`, `>10` good-chan threshold.\n- `preprocess_macros`: hardcoded 6-macro assumption (`ii=2:6`, 5 bipolar names) — will error/mislabel for ≠6 macros.\n- `preprocess_respiration_wholetrace`: smoothing window `500` (×3), clip `10000`, `1 Hz` lowpass.\n- `detect_sniffs_from_TTLs`: duplicated window offsets `30/1000/300/2000` between search setup and offset bookkeeping.\n- `detect_ttls_O15`: `nan(15,20)`, `30`, `3500`, and the 20 one-by-one `free*` column assignments → build via loop/array.\n\nFiles referenced are all under `C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\`.",
+    "found": [
+      {
+        "name": "downsample_data",
+        "found": true,
+        "filePath": "C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\downsample_data.m",
+        "signature": "function outDat = downsample_data(outDat, fs_new)",
+        "inputs": "outDat (struct with .data [ch x time OR ch x time x trials], .fs scalar, optionally .tim); fs_new (target sample rate scalar, e.g. 500).",
+        "outputs": "outDat with .data resampled+filtered, .fs=fs_new, plus new fields .origFS (old fs), .downsampled=1, and .tim recomputed if it already existed. 2D input returns 2D; 3D input returns 3D.",
+        "purpose": "Resamples and cleans a multichannel (and optionally multi-trial) signal to a new sample rate. It computes rational resample factors via rat(fs_new/fs_old), normalizes input to a 3D ch x time x trials array, and loops over every channel and trial: resample(p,q), then filtfilt with a 4th-order 0.03 Hz IIR highpass, a 4th-order lowpass at the new Nyquist minus 0.1 Hz, then three iirnotch filters at 60/120/180 Hz line noise (each Q=35). It restores the original 2D shape when input was 2D and updates the struct's fs/origFS/downsampled/tim bookkeeping fields. The filter objects (highd/lowd) are designed once before the loop, but the three notch filters are recomputed identically on every channel/trial iteration.",
+        "calledByTasks": [
+          "breathingTask",
+          "cueTask",
+          "threshTask",
+          "O15"
+        ],
+        "taskSpecificBranches": [],
+        "redundancyNotes": "Fully task-agnostic: no branching on task, sessID, Type, or any task-specific channel/field names. Only branching is on data dimensionality (ndims==2 vs ==3, with an error for anything else) — structural, not task-specific. Redundancy/dead-code worth flagging for the simplify pass: (1) the three iirnotch designs (wo/bw/[b,a]=iirnotch) are inside the per-channel, per-trial double loop but depend only on fs_new — they should be hoisted out and computed once alongside highd/lowd. (2) double() is applied redundantly: sig is already cast via double(squeeze(...)) at the top of the loop, yet double(sig) is repeated in each notch filtfilt call. (3) The misleading copy-paste comments \\\"% transpose to filter along time\\\" — no transpose actually happens (filtfilt operates column-wise but sig is a row vector; works because resample/filtfilt handle vectors regardless of orientation). (4) Blank/no-op lines (the empty body after `for ii = 1:ch`, stray blank lines 70-73). None of this affects correctness; all are pure simplification opportunities. Note the filter design (0.03 Hz highpass, line-noise notches, no per-channel options) is hardcoded — if any task ever needs different filtering this is where a parameter would enter, but currently nothing varies by task."
+      },
+      {
+        "name": "preprocess_eeg",
+        "found": true,
+        "filePath": "C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\preprocess_eeg.m",
+        "signature": "function outDat = preprocess_eeg(outDat, standardEEGlocs, P)",
+        "inputs": "outDat (session struct: requires .labels, .data with first 32 rows = scalp EEG, .fs, .sessID), standardEEGlocs (table from EEG-coords CSV: .Label, .phi_deg, .theta_deg, .X_nose_m, .Y_left_m, .Z_up_m, .X2D_right, .Y2D_front), and P (the per-session param struct). NOTE: P is accepted in the signature but is NEVER referenced anywhere in the body.",
+        "outputs": "outDat with added/modified fields: .eegLocs (table of labels+3D/2D coords+theta/phi), cleaned .data(1:32,:), appended rows + labels for blinkIndicator/badTS/interpChan, .badChans, .dataLap, .dataLapFromInterp, .EEGInterpolation, .EEGCleaning, .blinkRemoval.",
+        "purpose": "Shared (task-agnostic) scalp-EEG cleaning stage in the 4-task preprocessing pipeline. It first validates that the first 32 channels of outDat.labels exactly match standardEEGlocs.Label (errors out otherwise), then builds an eegLocs coordinate table from the standard-locs CSV. It runs voltage-based noise/bad-channel detection and epoch interpolation (removeNoiseChansVolt), exempting channels 1 and 32 from being flagged bad. If more than 10 good channels survive, it performs blink removal (blinkRemoveWrapper), accumulates bad channels, computes a surface Laplacian (laplacian_perrinX) on a temporary copy in which bad channels are interpolated (interpolate_perrinX) so the spatial high-pass is not corrupted, writes the blink-cleaned broadband data back to outDat.data(1:32,:) keeping real values at bad sites, and appends blinkIndicator/badTS/interpChan as extra data rows with matching labels (sets EEGInterpolation=EEGCleaning=blinkRemoval=1, dataLapFromInterp=1). If 10 or fewer good channels remain, it skips blink removal and Laplacian (dataLap=[], dataLapFromInterp=0, blinkRemoval=0), appends only badTS/interpChan, and still sets EEGInterpolation=EEGCleaning=1. Called only when P.hasEEG is true at each call site.",
+        "calledByTasks": [
+          "breathingTask",
+          "cueTask",
+          "threshTask",
+          "O15"
+        ],
+        "taskSpecificBranches": [],
+        "redundancyNotes": "1) Unused parameter: P is in the signature but never used in the body; either wire it in (e.g. for the magic constants below) or drop it for clarity. 2) Hard-coded magic numbers that are good candidates to centralize/parameterize for the 'simplify' goal: the 32-channel count (loop `for chan=1:32`, indices `1:32`, `[1 32]`), the EXEMPT channels `[1 32]`, and the `length(chanIDX) > 10` good-channel threshold gating blink removal/Laplacian. 3) Duplicated tail code: the two arms of the `if length(chanIDX) > 10 ... else ... end` block repeat nearly identical bookkeeping (computing badChans/labels, appending badTS+interpChan rows, setting EEGInterpolation=EEGCleaning=1); only the blink/Laplacian portion and three flag/field values actually differ, so the shared appends could be factored out of the branch. 4) Commented-out dead lines remain in the else-branch (the `ephysDat`/blinkIndicator append lines). 5) The label-mismatch check `error('EEG channels not labeled as expected')` is a hard stop with no per-task context. NONE of these are task-specific — the function is fully task-agnostic; the only runtime branch is the data-driven good-channel-count test, not any task/sessID/Type/channel-name switch."
+      },
+      {
+        "name": "preprocess_macros",
+        "found": true,
+        "filePath": "C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\preprocess_macros.m",
+        "signature": "function outDat = preprocess_macros(outDat, P)",
+        "inputs": "outDat (struct with fields .labels (cell of channel-label strings), .data (chan x time matrix), .sessID (string, used only for figure titles), .figs (output dir for figures), .fs (sample rate)); P (param struct; uses .macroRemove (vector of macro-channel indices to drop, [] = none) and .spikeClean (logical)). Note: P.spikeWin is used; P.spikeThresh is NOT used inside this function despite being in the schema.",
+        "outputs": "outDat, augmented in place: appends C bipolar-rereferenced macro channels labeled {'macBP1'..'macBP5'}(1:C) to .data/.labels, plus one extra channel labeled \"spikeCleanVec\" (the spike mixVector when cleaning, else all-ones), and sets outDat.spikeRemoval = 1. Also writes 3-4 diagnostic JPGs to outDat.figs (macrosRaw.jpg, macrosRaw_zoom.jpg, and if spikeClean macroSpikeRemoval.jpg).",
+        "purpose": "Processes intracranial \"macro\" electrode channels within the shared preprocessing pipeline. It (1) selects channels whose label contains 'macro', (2) plots raw macro traces (full and a 50000:55000 zoom window) for QC, highlighting any channel slated for removal, (3) optionally drops user-specified macro channels (P.macroRemove), (4) performs sequential bipolar rereferencing across the remaining macro channels (chan_i - chan_{i+1}), producing C = nMacros-1 bipolar channels, and (5) if P.spikeClean is true, splits each bipolar signal into a >10 Hz high-pass component and low-frequency residual, z-scores the high part, detects spikes (detect_spikes with hardcoded threshold 2 and window P.spikeWin), runs ICA-targeted spike flagging/removal (ica_flag_spikes_targeted), recombines with the low-frequency residual, and saves a before/after QC figure centered on the lowest-spike-density window. The cleaned (or raw bipolar) channels plus a spikeCleanVec are appended to outDat. Hardcodes that exactly 6 macro channels are expected (plot loops ii=2:6; newLabs has 5 bipolar names).",
+        "calledByTasks": [
+          "breathingTask (guarded by P.hasMacros in breathingTaskPreProc_main.m:63)",
+          "cueTask (unconditional, cueTaskPreProc_main.m:62)",
+          "threshTask (unconditional, threshPreProc_main.m:49)",
+          "O15 (unconditional, O15PreProc_main.m:51) - but note P.spikeClean defaults false for O15, so the bipolar-only branch runs",
+          "emotionalMovie (unconditional, emotionalMoviePreProc_main.m:39; not one of the 4 named tasks)"
+        ],
+        "taskSpecificBranches": [
+          {
+            "desc": "No task/sessID/Type branching INSIDE the function. The only runtime branch is on P.spikeClean (per-session param), which gates spike removal vs raw bipolar-only output. P.spikeClean defaults true for all tasks except O15 (false) per applyParams.m:165, so the task-specific behavior is carried entirely by the P struct, not by code in this file.",
+            "evidence": "preprocess_macros.m:48 `if P.spikeClean` ... :107 `else` ... :122 `end`; applyParams.m:165 `P.spikeClean = bool_or(rows{ri, cSpkC}, ~isO15);`"
+          },
+          {
+            "desc": "Task-specific gating lives at the CALL SITES, not in this function: breathingTask wraps the call in `if P.hasMacros` (P.hasMacros is a breathing-only schema column), whereas cue/thresh/O15/emotionalMovie call it unconditionally.",
+            "evidence": "breathingTaskPreProc_main.m:63 `if P.hasMacros, outDat = preprocess_macros(outDat, P); end` vs cueTaskPreProc_main.m:62 / threshPreProc_main.m:49 / O15PreProc_main.m:51 `outDat = preprocess_macros(outDat, P);`"
+          }
+        ],
+        "redundancyNotes": "Several cleanup opportunities. (1) DEAD PARAM: P.spikeThresh is part of the schema/P struct but is never used here; detect_spikes is called with a hardcoded literal 2 (line 67), so per-session spikeThresh values have no effect in the current implementation (legacy getSessionParams/scratch files still set it, suggesting an intended-but-lost wiring). (2) DUPLICATED PLOTTING: lines 4-17 and 20-34 are near-identical macro-raw plotting blocks differing only in the time window (full vs 50000:55000) and title/filename - extractable into one helper called twice. (3) REDUNDANT RECOMPUTE: `idx = cellfun(...'macro')` and `macroDat = outDat.data(idx,:)` are computed three times (lines 3/5, 21, 36/37) when once would suffice. (4) HARDCODED 6/5: the plot loops assume exactly 6 macro channels (ii=2:6) and newLabs lists 5 bipolar names ({'macBP1'..'macBP5'}); newLabs is correctly truncated to (1:C) but the plot loop is not channel-count-aware and will error or mislabel if a session has != 6 macros. (5) DUPLICATED TAIL: the two branches (spikeClean true/false) each independently append channels, set the spikeCleanVec label, and set outDat.spikeRemoval=1; the common append logic could be unified. (6) commented-out dead butter/gammaSig lines 49-50. (7) outDat.spikeRemoval is set to 1 even in the non-spikeClean branch (line 119), which is arguably mislabeled since no spike removal occurred."
+      },
+      {
+        "name": "process_respiration_breathing",
+        "found": true,
+        "filePath": "C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\process_respiration_breathing.m",
+        "signature": "function outDat = process_respiration_breathing(outDat, P)",
+        "inputs": "outDat (struct with fields .labels, .data, .fs, .behDat (table), .TTL); P (param struct with fields .rspIDX, .rspFlip)",
+        "outputs": "outDat with a new field outDat.bmObj (the breath-metric matrix, 14 columns documented in comments)",
+        "purpose": "Extracts the respiration channel from outDat.data (rows whose label contains 'rsp'), selects the P.rspIDX-th respiration row, applies the P.rspFlip sign, then runs breathTemplates4(rspDat, fs) to produce a per-breath metric matrix bmObj (onset/peak/end Y and time, length, amplitude, exhale peak, condition, index). It then optionally post-processes 'cyclicSigh' condition segments: for each behavioral condition block (delimited by TTL onsets per behDat.order), if the block's cndName is 'cyclicSigh' it merges pairs of consecutive inhales that occur within 3 s of each other into a single breath (rewriting peak/end/length/amp/exhale columns and deleting the merged-away rows), and discards lone inhales more than 3 s apart. Non-cyclicSigh blocks are left untouched (their plotting code is commented out). The merged result is stored as outDat.bmObj.",
+        "calledByTasks": [
+          "breathingTask"
+        ],
+        "taskSpecificBranches": [
+          {
+            "desc": "Branches on the behavioral condition name 'cyclicSigh' in outDat.behDat.cndName to apply consecutive-inhale merging logic specific to the cyclic-sigh condition of the breathing task; the else branch (other conditions) does nothing active.",
+            "evidence": "line 31-32: if ismember('cyclicSigh', outDat.behDat.cndName(orderIdx(ii)))  ... else (line 95) only commented-out plotting"
+          },
+          {
+            "desc": "Guards the whole condition-segmentation block on presence of the 'cndName' column in behDat, so the function degrades to plain breathTemplates4 output when that column is absent.",
+            "evidence": "line 24: if ismember('cndName', outDat.behDat.Properties.VariableNames)"
+          },
+          {
+            "desc": "Relies on breathing-task-specific outDat fields .behDat (with .order, .cndName) and .TTL to delimit condition segments; these are not generic to all four tasks.",
+            "evidence": "lines 25-26 outDat.behDat.order; line 29 length(outDat.TTL); line 36/38 outDat.TTL(outDat.behDat.order(...))"
+          }
+        ],
+        "redundancyNotes": "Hard-coded sampling-rate literals: lines 41/46/47/48 use fs (good) but the commented-out non-cyclicSigh block (lines 107-111) hard-codes 500 instead of fs, an inconsistency to clean up if that code is ever revived. Large blocks of dead/commented code: lines 42-44 (figure/hold/plot left active and will pop a figure per cyclicSigh segment — likely unwanted in batch runs), lines 56/58 commented scatter calls, lines 105-112 fully commented non-cyclicSigh branch. The else branch (lines 95-113) computes startIdx/endIdx but uses them only in commented code, so it is effectively a no-op — could be deleted entirely. The startIdx==0 -> 1 guard (lines 102-104) exists only in the dead else branch, not in the live cyclicSigh branch, which is an inconsistency (the live branch at line 38/40 could index rspDat(0:...) if startIdx is 0). Column-by-column manual merge (lines 63-88) is verbose and could be vectorized. The 14-column bmObj layout is documented twice (lines 9-22 and inline 60-91). Overall the only task-specific logic worth concentrating is the cyclicSigh merge block; everything else (channel select, flip, breathTemplates4 call) is task-agnostic and could move outside any task-specific section."
+      },
+      {
+        "name": "preprocess_respiration_wholetrace",
+        "found": true,
+        "filePath": "C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\preprocess_respiration_wholetrace.m",
+        "signature": "function [R] = preprocess_respiration_wholetrace(outDat)",
+        "inputs": "outDat struct. Reads: outDat.labels (cell of channel-label strings), outDat.data (channels x samples matrix), outDat.rspIDX (which respiration channel to pick among the 'rsp'-labeled rows), outDat.rspFlip (+1/-1 sign flip), outDat.fs (sampling rate).",
+        "outputs": "R struct with 5 fields: R.rspDat (selected, flipped raw respiration trace), R.smoothR (Gaussian-smoothed trace), R.testSig (deflection-detection metric, named field 'testSig'), R.analytic (smoothed + lowpassed Hilbert analytic signal), R.rspPhase (instantaneous respiration phase = angle of analytic).",
+        "purpose": "Computes a whole-trace respiration representation used by the non-breathing tasks (cue, thresh, O15) and also called in breathingTaskPreProc_main and emotionalMovie/scratch scripts. It (1) selects the respiration channel: finds rows whose label contains 'rsp', then indexes into that subset with outDat.rspIDX, and multiplies by outDat.rspFlip to orient the signal; (2) Gaussian-smooths the trace over ~0.6 s; (3) builds a \"deflection detect\" onset metric by taking a windowed (~0.06 s) squared difference times the smoothed signal, clipping to [0,10000], then smoothing (window 500); (4) computes the analytic signal via hilbert(), smooths it (window 500), lowpasses at 1 Hz, and takes the phase angle. Returns all intermediate signals plus the phase in R. The phase/onset outputs feed downstream onset refinement (refine_onsets_with_phase) and behavior-table building.",
+        "calledByTasks": [
+          "breathingTask",
+          "cueTask",
+          "threshTask",
+          "O15"
+        ],
+        "taskSpecificBranches": [],
+        "redundancyNotes": "Function is fully task-agnostic: no switch/if on task, sessID, or Type, and no hard-coded task-specific channel/field names — channel selection is driven entirely by outDat.labels containing 'rsp' plus outDat.rspIDX/rspFlip, which are set per-session upstream (applyParams/assemble), so this is already a clean shared helper needing no task-specific section. Minor cleanup opportunities (non-task): (a) several magic numbers are hard-coded rather than derived from fs or named params — the smoothing window 500 (samples, used 3x), clip ceiling 10000, lowpass cutoff 1 Hz, the 0.6 s and 0.06 s window scalars; these are fs-implicit and would be clearer as named locals. (b) R.testSig is the deflection metric but the field name 'testSig' reads as scratch/debug naming inconsistent with the descriptive comment at call sites ('onset_metric'); consider renaming for clarity. (c) Trailing blank lines 31-39 are dead whitespace. (d) Note 'analytic' is smoothed along dim 1 then lowpassed on a complex signal — intentional but worth a comment. No duplicated logic or dead code branches."
+      },
+      {
+        "name": "detect_sniffs_from_TTLs",
+        "found": true,
+        "filePath": "C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\detect_sniffs_from_TTLs.m",
+        "signature": "function [outSniffs] = detect_sniffs_from_TTLs(R, P, outDat)",
+        "inputs": "R: respiration-features struct from preprocess_respiration_wholetrace, used fields: R.testSig (1D signal threshold-crossed to find sniff onsets), R.smoothR (smoothed respiration, plotting only). P: param struct, used fields: P.cuedBackBuff, P.respThresh, P.fs_target. outDat: used fields: outDat.TTL (table; col1 trialStart, col2 buttonpress, col3:end sniff target indices), outDat.sessID (plot title), outDat.figs (output folder for per-trial jpgs).",
+        "outputs": "outSniffs: a 30x7 numeric matrix (preallocated 30 rows, filled rows only). col1 = sniff onset index into data; col2 = trial number; col3 = sniff-within-trial number; col4 = offset from TTL; col6 = sniff type (1=start, 2=free, 3=confirm); col5 and col7 are left as zeros (col7 commented as \"adjustment for phase align\" but never written). Also writes one JPG per trial (sniffsTrialN.jpg) to outDat.figs as a side effect.",
+        "purpose": "Given a per-trial table of TTL-marked sniff target indices, locates the actual respiration sniff-onset sample near each target by detecting upward threshold crossings of R.testSig past P.respThresh. It distinguishes three positional classes within each trial: the first target and the last target are treated as \"cued\" sniffs expected AFTER the TTL (type 1 = start, type 3 = confirm), searched in a window from target-30-cuedBackBuff to target+2000-30 (~4s), taking the first crossing. All middle targets are \"free\" sniffs expected BEFORE the TTL (type 2), searched from target-30-1000 to target-30+300 (~2s); when multiple crossings exist it picks the one with the largest local rise (testSig at +/-15 samples around each candidate). Found onsets are recorded with trial number, within-trial index, type, and an offset-from-TTL value (computed differently for free vs cued types). Finally it renders a diagnostic figure per trial overlaying smoothed respiration, TTL xlines, detected sniff xlines (green), and testSig on a right y-axis, saved as JPG.",
+        "calledByTasks": [
+          "cueTask",
+          "threshTask",
+          "O15"
+        ],
+        "taskSpecificBranches": [],
+        "redundancyNotes": "The two threshold-crossing detections (cued branch lines 28-30 and free branch lines 42-44) are nearly identical `find(testSig(a:b-1)<thr & testSig(a+1:b)>thr)` expressions differing only in window bounds and whether the first vs all crossings are kept; could be factored into a single local helper taking (startSearch,endSearch,firstOnly). Two dead commented-out lines (45: val clamping; 50-52 region has live code but lines 45-46 commented). The offset computation in col4 (lines 74-78) hardcodes the same window-offset constants (-30-1000 for free, -30-cuedBackBuff for cued) that were already used to build startSearch above (lines 26,39,77 vs 39,75) — these magic offsets (30, 1000, 300, 2000) are duplicated between the search-window setup and the offset bookkeeping and between the two branches; consolidating window definitions would remove the duplication. The output is documented as having 7 columns and col7 is described (\"adjustment for phase align\") but col5 and col7 are never assigned. The big plotting loop (lines 90-115) is independent of the detection loop and is pure diagnostics — a natural candidate to split out or gate behind a flag during simplification. NOTE on task-specificity: the function body itself contains NO branching on task/sessID/Type; it is fully task-agnostic. All task shaping happens in the CALLERS: threshPreProc_main.m rebuilds outDat.TTL into a fixed 45-trial table (columns start=sniff-1000, trial, sniff) immediately before the call (lines 55-59), so for threshTask every trial has exactly one target — meaning the tt==1 && tt==length(targets) condition makes that single target type 1 (start), never reaching free/confirm branches. cueTask and O15 pass outDat.TTL through unchanged from assemble_outDat_all/detect_ttls_O15, giving multi-target trials that exercise all three types. The downstream sniffs matrix is consumed by task-specific build_behavior_table_{cueTask,threshTask,O15}. So when concentrating task-specific code, the per-task TTL shaping (especially the thresh rebuild block) belongs in the callers/assemble layer, not here."
+      },
+      {
+        "name": "refine_onsets_with_phase",
+        "found": true,
+        "filePath": "C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\refine_onsets_with_phase.m",
+        "signature": "function outDat = refine_onsets_with_phase(outDat, R, P)",
+        "inputs": "outDat (struct with .fs and .behDat table containing .sniffOnset sample indices at downsampled Fs); R (struct: .rspDat, .smoothR smoothed respiration, .rspPhase = angle of analytic signal, all 1xT at outDat.fs); P (struct: P.adjWin = onset backtrack window length in samples). Note: P.adjWin is the only P field actually read — P.task is NOT used.",
+        "outputs": "outDat with two new/updated columns in outDat.behDat: .adjust (signed sample offset relative to sniffOnset) and .finalOnset (refined onset sample index, clipped to [1,T]).",
+        "purpose": "Refines coarse sniff onset estimates using the precomputed respiration phase. For each sniff it cuts a segment from -2 s to +4 s around the coarse onset (preSamp=round(2*fs), postSamp=round(4*fs)), finds upward zero-crossings of the phase (phaseSeg goes negative-to-nonnegative), prefers the first crossing after t=0 (falls back to any crossing), biases ~10 samples earlier as a peak index, then over two adjacent adjWin-length windows of the smoothed respiration (separated by a 20-sample gap) computes the difference left-right and takes the argmin as the refined onset within the segment. Converts that to a signed delta relative to the coarse onset and stores adjust/finalOnset. Has several graceful guard/skip paths (non-finite or <=0 onset, segment too short, peakIdx<21, no zero-crossings) that leave adjust=0 and finalOnset=s0.",
+        "calledByTasks": [
+          "cueTask",
+          "threshTask",
+          "O15"
+        ],
+        "taskSpecificBranches": [],
+        "redundancyNotes": "Fully task-agnostic: no branching on task, sessID, Type, or task-specific channel/field names anywhere in the body; the only per-task variation enters via the numeric P.adjWin value. Called identically in cueTaskPreProc_main.m:77, threshPreProc_main.m:70, O15PreProc_main.m:74 (and the _dev/run_*.m mirrors); NOT used by breathingTask. Minor redundancy/cleanup opportunities (not task-related): the fallback zero-crossing search at line 51 recomputes the exact same find() expression already evaluated at line 45 (could compute once and reuse before the >preEff filter); the three skip branches each duplicate the same two-line 'adjust=0; finalOnset=s0; continue' assignment (could be a small local helper or restructured). The header comment documents R.rspDat as an input but it is never read in the body (only R.smoothR and R.rspPhase are used) — candidate to drop from the contract. Index arithmetic at lines 68-79 (adjWinEff, the 20-sample gap, the peakIdx-(adjWinEff+20)+minidx onset mapping) is subtle and worth a clarifying comment if simplified. No dead code otherwise."
+      },
+      {
+        "name": "processECG",
+        "found": true,
+        "filePath": "C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\processECG.m",
+        "signature": "function outDat = processECG(outDat, P)",
+        "inputs": "outDat (struct: .data [chan x time], .labels {cellstr}, .fs, .sessID, .figs [figure output dir]); P (param struct: P.getBeats [function handle], P.rspIDX [int], P.rspFlip [+/-1]).",
+        "outputs": "outDat, mutated: adds outDat.heartBeats (beat sample indices) and appends one row to outDat.data plus the label 'RRint' (interpolated interbeat-interval timeseries). Also writes 3 diagnostic .jpg figures to outDat.figs (ECG_beatDetect, interbeatHist, RespirationHeart).",
+        "purpose": "Computes heart-rate variability from the ECG channels for the breathing task. It (1) finds all channels whose label contains 'ECG', bandpass-filters them (4th-order IIR, 5-40 Hz at outDat.fs) with filtfilt, and z-scores them per channel to make ECGz; (2) detects beats by calling the session-specific handle P.getBeats(ECGz, beatSep) where beatSep = fs/20; (3) selects the respiration channel (channels whose label contains 'rsp', then the P.rspIDX-th one) and flips it by P.rspFlip; (4) converts beat indices to times, builds an interbeat-interval histogram, auto-estimates plausible min/max IBI bounds (a sliding histogram over 0.2:0.05:10 s, locating the mode and the surrounding bins with count<5; falls back to min 0.6 s if empty) and discards beats outside that range; (5) linearly interpolates the cleaned interbeat intervals into a full-length RRint timeseries and appends it as a new data row labeled 'RRint'. Saves three QC plots along the way.",
+        "calledByTasks": [
+          "breathingTask"
+        ],
+        "taskSpecificBranches": [],
+        "redundancyNotes": "No task/sessID/Type switch lives inside this function; it is fully task-agnostic in body. All per-session variation is externalized: the only beat-detection variation enters via the P.getBeats closure (built from beatSpec by applyParams.m:179 / getSessionParams_breathingTask.m, ultimately detectBeats), and respiration-channel selection/sign via the scalar P.rspIDX and P.rspFlip. So for the \"concentrate task-specific code\" goal there is effectively nothing to wall off here beyond noting the P.getBeats / P.rspIDX / P.rspFlip dependency.\n\nMinor cleanup opportunities (none task-related): (a) the variable `idx` is reused three times for unrelated purposes (ECG channel mask line 3, rsp channel mask line 52, histogram-mode index line 77) — confusing; rename. (b) `minVal`/`maxVal` are also reused for two unrelated meanings (plot y-limits lines 38-39 vs IBI bounds lines 78/82). (c) Hard-coded plotting windows (100000:110000, 100000:150000) will error on recordings shorter than ~150k samples — these are pure-QC figures and could be guarded or factored into a helper. (d) The commented-out `rspDatz` line (56) is dead. (e) `process_respiration_breathing`/`processECG` both produce figures into outDat.figs with a similar pattern; figure-saving boilerplate could be factored, but that is cross-function. (f) `contains(x,'ECG')` / `contains(x,'rsp')` label matching is the implicit channel-naming contract — worth a comment, not a branch. Despite being listed as a \"shared pipeline helper\" in CLAUDE.md, processECG is in practice only invoked from breathingTaskPreProc_main.m (line 91); the other three task mains do not call it, so it could arguably be treated as breathing-specific."
+      },
+      {
+        "name": "flagBadBreaths",
+        "found": true,
+        "filePath": "C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\flagBadBreaths.m",
+        "signature": "function outDat = flagBadBreaths(outDat)",
+        "inputs": "outDat struct. Reads: outDat.labels (cell of channel names; matched by contains for 'rsp' and 'RRint'), outDat.data (channels x time), outDat.rspIDX (which rsp channel), outDat.rspFlip (+/-1 sign), outDat.fs (sample rate), outDat.behDat (behavior table with per-breath rows; uses .finalOnset, .length, .task).",
+        "outputs": "Same outDat with new/updated columns added to outDat.behDat per breath row: .goodBreath (1 good / 0 bad), .maxRR, .minRR, .RR_max_min (RR-interval variability over the breath window).",
+        "purpose": "Per-breath quality-control pass run in the breathingTask pipeline. For each row of outDat.behDat it extracts a 20 s respiration window (anchored 2 s before finalOnset out to ~18 s after) plus the matching RR-interval (heartbeat) segment, Gaussian-smooths the respiration trace (window = fs/2), and applies a shape-based quality test: the breath's onset and offset smoothed values must sit between the 5th and 95th percentile thresholds, and the up/down peak and up/down trough crossings of those thresholds must not be spread more than fs samples apart (the tooFar anonymous helper) — i.e. essentially one clean inhale/exhale excursion. Breaths passing are marked goodBreath=1; cyclicSigh-labeled breaths are always accepted regardless of shape. It also records RR min/max and their range over the breath, computed from the breath window when good and from the full RR series when bad. Breaths too near the recording start/end or longer than 18 s are skipped entirely (no goodBreath written).",
+        "calledByTasks": [
+          "breathingTask"
+        ],
+        "taskSpecificBranches": [
+          {
+            "desc": "Branches on the per-breath behavior-table field outDat.behDat.task being the string 'cyclicSigh' — such breaths bypass the entire shape quality test and are force-accepted as good. This is the only task/condition-name branch in the function. 'cyclicSigh' is a breathing-task trial type, not one of the four pipeline task names. Comment notes the same may later be needed for slow breathing.",
+            "evidence": "line 74-75: ... ~tooFar(downTroughIdx) || strcmp(outDat.behDat.task(bb), 'cyclicSigh') %just take all cyclic sighs, might have to do similar for slow breathing"
+          }
+        ],
+        "redundancyNotes": "(1) The RR min/max/RR_max_min block is duplicated verbatim in both the good (lines 84-89) and bad (lines 98-103) branches, differing only in source array: good uses curRR (the windowed segment) indexed bonset:boffset, bad uses the full-length rrDat indexed bonset:boffset. Indexing the full rrDat by bonset:boffset (~fs*2 .. fs*2+bL*fs, i.e. small offsets from start of recording) looks like a likely bug — it reads the recording's opening seconds rather than this breath's window; both branches probably intended curRR. This duplicate block could be hoisted out of the if/else and computed once from curRR. (2) First two lines (idx=contains 'rsp'; rspDat=data(idx,:)) then immediately re-derive rspDat=squeeze(rspDat(outDat.rspIDX,:)); the intermediate full rsp-channel slice plus the commented-out z-score block (lines 5-6) are leftover/dead. (3) The variable name idx is reused for five different meanings (rsp mask, rspIDX, RRint mask, finalOnset sample, loop), which obscures intent. (4) endPnt/startPnt arithmetic (idx + fs*20 - fs*2, then endPnt - fs*20 + 1) is a convoluted way to express a fixed 20 s window starting 2 s before onset. (5) tooFar uses diff(idx) > outDat.fs but the comment says 'pairs 1s apart' — threshold is fs samples (=1 s), consistent, but the crossing-detection uses smoothRsp(bonset+1:boffset+1) which can index one sample past boffset. None of these are task-specific; aside from the single 'cyclicSigh' branch the function is task-agnostic and keys entirely off generic outDat fields (rspIDX/rspFlip/fs/labels/behDat), so for the breathingTask-only refactor the only thing to mark as task/condition-specific is the cyclicSigh acceptance branch."
+      },
+      {
+        "name": "alignTargetBreathingTraceSimplify",
+        "found": true,
+        "filePath": "C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\alignTargetBreathingTraceSimplify.m",
+        "signature": "function [outDat, targTraces] = alignTargetBreathingTraceSimplify(outDat, targTraceDir)",
+        "inputs": "outDat (struct with fields: .sessID, .behDat [table], .labels, .data, .rspIDX, .rspFlip, .fs, .TTL [condition-boundary sample indices], .figs [output figure dir]); targTraceDir (folder path to per-session psychopy/target CSV recordings).",
+        "outputs": "outDat (same struct, with one new flattened channel appended: outDat.data gains a row and outDat.labels gains 'targTrace'); targTraces ([time x condition] matrix of aligned target traces, built per-condition then horizontally concatenated). Side effect: saves one JPG per shadow condition ('shadowResp<cndi>.jpg') to outDat.figs.",
+        "purpose": "Builds per-condition \"target\" breathing traces for the breathingTask shadow/paced conditions and aligns them to the neuralynx respiration recording, then appends the concatenated target trace as a new channel 'targTrace' in outDat. It extracts the respiration channel (selected via outDat.rspIDX and sign-corrected via outDat.rspFlip from the 'rsp'-labelled rows), uses outDat.TTL boundaries to segment each condition, loads a session-specific psychopy CSV (<sessID>_<shadowFile>_recording.csv) per condition, resamples/normalizes the target and voltage traces to the ephys sampling rate, z-scores everything, and plots respiration-vs-target overlays. Conditions that are baseline ('pre'/'audio') or free-breathing focus tasks get zero-filled target traces. Two distinct alignment algorithms are used depending on the shadowFile type (a direct time-warp interp vs. a tempo-scaled loop/repeat construction). Final concatenation is padded/truncated defensively to match outDat.data width.",
+        "calledByTasks": [
+          "breathingTask"
+        ],
+        "taskSpecificBranches": [
+          {
+            "desc": "Hard-coded sessID skip at the CALL SITE (not in this function): in breathingTaskPreProc_main.m the function is bypassed entirely for one session because of target-trace problems.",
+            "evidence": "breathingTaskPreProc_main.m:84  if strcmp(S.id, '250811_Dupi_NMH_TPB_1') ... else [outDat,targTraces]=alignTargetBreathingTraceSimplify(...)"
+          },
+          {
+            "desc": "Branch on presence of behDat 'cndName' column to decide how many leading baseline conditions to zero-fill and where to start (startFrom). The else-branch hard-codes startFrom=3 and zero-fills conditions 1 and 2 (legacy/older sessions without cndName).",
+            "evidence": "L33 if ismember('cndName', outDat.behDat.Properties.VariableNames) ... L50 else startFrom=3; targTraces{1}=zeros(...); targTraces{2}=zeros(...)"
+          },
+          {
+            "desc": "Branch on condition-name string values 'pre'/'audio' (baseline conditions) to zero-fill and advance startFrom.",
+            "evidence": "L40 if strcmp(OrderCndNames{startFrom},'pre') || strcmp(OrderCndNames{startFrom},'audio')"
+          },
+          {
+            "desc": "Branch on behDat.task values {'fastFocus','slowFocus','naturalFocus'} (free-breathing focus tasks) to zero-fill the target trace and skip alignment.",
+            "evidence": "L69 if ismember(tmpBehDat.task(idx), {'fastFocus','slowFocus','naturalFocus'})  targTraces{cndi}=zeros(...)"
+          },
+          {
+            "desc": "Branch on behDat.shadowFile values: NOT in {'audioResp','focusedResp'} -> direct time-warp interp algorithm (uses targTbl.target); else (audioResp/focusedResp) -> tempo-scaled loop/repeat algorithm (uses targTbl.warp/.FPS/.trialTim/.timestamp). Also remaps shadowFile=='NA' to 'audioResp'.",
+            "evidence": "L74 if ~ismember(tmpBehDat.shadowFile{idx}, {'audioResp','focusedResp'}) [direct interp] ... L146 else [tempo-scaled loop]; L77/L148 if strcmp(sfName,'NA') sfName='audioResp'"
+          },
+          {
+            "desc": "Channel/field-name coupling: respiration extracted by matching labels containing 'rsp', then indexed by outDat.rspIDX and multiplied by outDat.rspFlip — breathingTask-specific channel selection convention.",
+            "evidence": "L17 cellfun(@(x) contains(x,'rsp'), outDat.labels); L19 rspDat(outDat.rspIDX,:); L20 .* outDat.rspFlip"
+          },
+          {
+            "desc": "CSV filename built from sessionID (outDat.sessID) with two fallback naming patterns ('<id>_<sf>_recording.csv' vs '<id><sf>_recording.csv') via try/catch — accommodates session-specific filename quirks.",
+            "evidence": "L83/L88 sprintf('%s_%s_recording.csv',sessionID,sfName) catch sprintf('%s%s_recording.csv',...)"
+          }
+        ],
+        "redundancyNotes": "Substantial duplication and dead code. (1) The CSV-load block (try/catch with two filename patterns, NA->audioResp remap, readtable, zero-voltage-row removal) is copy-pasted verbatim in both shadowFile branches (L74-96 vs L146-167) and could be hoisted above the branch. (2) The plotting block (figure setup, 3-line z-scored overlay, labels/legend/title, saveas to shadowResp<cndi>.jpg) is duplicated across both branches (L126-144 vs L235-259) with only minor differences (3 traces vs 2). (3) Redundant z-scoring: target_resampled and voltages_resampled are normalized at L112-120, then re-z-scored at L122-124 into z_target/z_psychopy; the earlier normalization of target_resampled is effectively undone/overwritten. (4) Dead/unreachable code: 'error(...)' then 'continue' (L66-67) — continue never runs; commented-out alternate computations (L28-29, L264-269, L277-280) and a large commented-out per-condition plotting loop (L302-343). (5) targ_len is computed but unused in the first branch (L99/L102) since seg length drives everything. (6) The docstring is stale: it documents a 'codePre' input that doesn't exist (the real second arg is targTraceDir) and a fixed [nCond x nSamples] zeros target matrix that the code no longer uses. (7) The final append uses a try/catch with ad-hoc pad/truncate to reconcile target length vs outDat.data width, indicating fragile length assumptions worth normalizing. For the refactor: the two shadowFile algorithms are the core task-specific logic and should be isolated into clearly-marked helper sections (e.g. buildTarget_direct vs buildTarget_tempoLoop), with the shared CSV-load and plotting code factored out."
+      },
+      {
+        "name": "build_behavior_table_breathingTask",
+        "found": true,
+        "filePath": "C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\build_behavior_table_breathingTask.m",
+        "signature": "function outDat = build_behavior_table_breathingTask(outDat, bmObj)",
+        "inputs": "outDat (struct with .fs sampling rate, .data [channels x time], .behDat original behavior table aka tmpBehDat); bmObj = [nBreaths x 14+] breath-marker matrix. Note: caller passes outDat.bmObj as the bmObj argument.",
+        "outputs": "outDat with .behDat replaced by a fresh per-breath table and a new .baseEmotion table (baseline emotion row for order==0).",
+        "purpose": "Rebuilds outDat.behDat from the breath-mark matrix bmObj and the original behavioral table (tmpBehDat = the incoming outDat.behDat). It (1) constructs a per-breath table by mapping fixed bmObj columns to named fields: onset time col2 -> sniffOnset/finalOnset (converted from seconds to sample indices via a time axis tim = (1:nSamp)/fs), condition col12, onset-Y col1 -> Yonset, peak-Y col3 -> inhaleMax, peak time col4 -> inMaxTim, end-Y col5 -> Yend, end time col6 -> endTim, length col7, amplitude col8 -> amp, exhale-peak-Y col10 -> exhaleMin, exhale-peak time col11 -> exMinTim, index col14 -> index. Time-to-index conversion uses arrayfun(@(x) find(x <= tim, 1), ...). (2) Integrates emotion/behavioral metadata: for each condition cndi = 1:max(condition), it finds breaths of that condition, pulls the matching tmpBehDat rows (tmpBehDat.order == cndi), copies task/noseMouth/shadowFile/warp, and adds one dynamic column per unique Q_short value named [Q_short '_' type] holding tmp.rsp. (3) Builds outDat.baseEmotion the same way for the baseline row (order == 0).",
+        "calledByTasks": [
+          "breathingTask"
+        ],
+        "taskSpecificBranches": [],
+        "redundancyNotes": "No branching on task/sessID/Type inside this function; it is itself the breathingTask-specific behavior-table builder (one of four per-task build_behavior_table_* helpers) and is called exactly once, from breathingTaskPreProc_main.m line 90 as build_behavior_table_breathingTask(outDat, outDat.bmObj). Redundancy/cleanup opportunities for the planned simplification: (1) The time-to-sample-index conversion `arrayfun(@(x) find(x <= tim, 1), bmObj(:,COL))` is repeated 5 times (cols 2, 4, 6, 11; col 2 used for two fields). This is the same operation and could be a single local helper (e.g. sec2idx) or a vectorized lookup. (2) The emotion-integration block (the `for q = 1:length(Qs)` loop building varName = [Qs{q} '_' tmp.type{ii}] and assigning tmp.rsp) is duplicated almost verbatim between the per-condition loop (lines ~102-109) and the baseline baseEmotion block (lines ~123-130); these could share one helper. (3) `cellfun(@(x) strcmp(Qs{q}, x), tmp.Q_short)` could be `strcmp(Qs{q}, tmp.Q_short)` directly (strcmp is already vectorized over cell arrays), removing the cellfun wrapper. (4) Dynamic-field assignment `outDat.behDat.(varName)(idx) = tmp.rsp(ii)` grows the table column-by-column with dynamically-named variables that depend on the data (unique Q_short values), which makes the output schema data-dependent — worth noting for any downstream code that expects fixed columns. (5) The header doc-comment lists bmObj columns but omits col 9 (peak idx in rspSig2) and col 13, and the function never reads col 9 or col 13 — minor doc/data drift, not a bug. Dependencies that are load-bearing for breathingTask: tmpBehDat must have columns order, task, noseMouth, shadowFile, warp, Q_short, type, rsp; bmObj must have >=14 columns with the documented layout."
+      },
+      {
+        "name": "build_behavior_table_cueTask",
+        "found": true,
+        "filePath": "C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\build_behavior_table_cueTask.m",
+        "signature": "function behDat = build_behavior_table_cueTask(sniffs, rawBeh)",
+        "inputs": "sniffs: numeric matrix, one row per detected sniff. Columns used: (:,1) sniff onset, (:,2) trial num n, (:,3) within-trial sniff index, (:,4) TTL offset, (:,6) sniff type code (integer index into sniffTypes). Column 5 is unused. rawBeh: struct of per-trial behavioral data with fields .n, .cue, .odor, .response, .response_str (cell), .type, indexed by trial.",
+        "outputs": "behDat: MATLAB table, one row per sniff, columns sniffOnset, n, wiTriali, TTLoffSet, sniffType, sniffLabel, plus per-trial fields broadcast onto each of that trial's sniffs: cue, odor, response, respString, type.",
+        "purpose": "Merges sniff-onset detections (sniffs matrix) with per-trial behavioral metadata (rawBeh) into a single per-sniff table for the cueTask pipeline. It copies sniff-level columns straight from the sniffs matrix, maps the numeric sniff-type code to a readable label via the local sniffTypes list, then loops over trials and, for every sniff belonging to trial ii (matched by behDat.n == ii), broadcasts that trial's cue/odor/response/response_str/type values onto each sniff row. Missing response strings are filled with \"SKIP\".",
+        "calledByTasks": [
+          "cueTask"
+        ],
+        "taskSpecificBranches": [
+          {
+            "desc": "Hard-coded sniffTypes label list — cueTask defines only a single label \"cued\", so sniffType code must always be 1 (sniffs(:,6)). This is the cueTask-specific vocabulary; threshTask/O15/breathing siblings will have different label sets. Any code expecting sniffType>1 would index out of bounds here.",
+            "evidence": "line 7: sniffTypes = {\"cued\"};  used at line 15: behDat.sniffLabel = [sniffTypes{sniffs(:,6)}]'"
+          },
+          {
+            "desc": "cueTask-specific behavioral fields read from rawBeh: cue, odor, response, response_str, type. These field names are particular to the cueTask behavioral CSV schema; other tasks' build_behavior_table_* read different fields.",
+            "evidence": "lines 19-27: behDat.cue=rawBeh.cue(ii); behDat.odor=rawBeh.odor(ii); behDat.response=rawBeh.response(ii); rawBeh.response_str{ii}; behDat.type=string(rawBeh.type(ii))"
+          },
+          {
+            "desc": "Empty-response-string handling substitutes literal \"SKIP\" — a cueTask convention for trials with no behavioral response string.",
+            "evidence": "lines 22-26: if ~isempty(rawBeh.response_str{ii}) ... else behDat.respString(idx(jj)) = \"SKIP\";"
+          }
+        ],
+        "redundancyNotes": "No branching on task/sessID/Type-as-router; the function is already single-task by filename. Minor simplification opportunities for the planned refactor: (1) the nested double loop (over trials ii, then over that trial's sniff indices jj) assigns the same scalar to every matched row one element at a time — it could be vectorized with logical indexing (e.g. behDat.cue(behDat.n==ii) = rawBeh.cue(ii)) or, better, a single join/ismember mapping from trial index to sniff rows, eliminating both loops. (2) sniffLabel and the per-trial broadcast both re-derive a trial->rows mapping that find(behDat.n==ii) recomputes each iteration. (3) sniffs column 5 is silently skipped (only 1-4 and 6 used), which is a latent index assumption worth a comment when concentrating task-specific code. (4) The structure (sniff-level columns straight-copy, then numeric-code->label lookup, then per-trial broadcast loop) is near-identical across the build_behavior_table_* siblings (breathingTask, threshTask, O15, EmotionalMovie all exist); the shared skeleton could be factored into a common helper that takes a task-specific sniffTypes list and a task-specific field list, leaving only the cueTask vocabulary (sniffTypes={\\\"cued\\\"}; fields cue/odor/response/response_str/type) as the marked task-specific section. No dead code beyond the unused column 5 and the trailing blank lines."
+      },
+      {
+        "name": "build_behavior_table_threshTask",
+        "filePath": "C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\build_behavior_table_threshTask.m",
+        "found": true,
+        "signature": "function behDat = build_behavior_table_threshTask(sniffs, rawBeh)",
+        "inputs": "sniffs: numeric matrix, one row per sniff. Columns used: col1=sniff onset sample, col2=trial number (n), col3=within-trial sniff index, col4=offset from TTL, col6=sniff type code (integer index into sniffTypes). rawBeh: the behavioral struct (raw.beh) with per-trial fields trialNum, Odor, pleasantness, intensity (Odor is an integer 1..3 indexing trialTypes).",
+        "outputs": "behDat: a MATLAB table, one row per sniff, with columns sniffOnset, n, wiTriali, TTLoffSet, sniffType, sniffLabel, plus per-trial joined columns odor, pleasantness, intensity, type.",
+        "purpose": "Builds a per-sniff behavior table for the thresh task by copying sniff-detection columns out of the numeric `sniffs` matrix into a labeled table, then joining each sniff to its trial's behavioral metadata. It loops over every trial in rawBeh, finds the sniff rows whose trial number `n` matches, and stamps the odor, pleasantness, intensity, and a human-readable trial `type` onto those rows. The sniff type code (col6) is also mapped to a readable string via the hard-coded sniffTypes list. The result (outDat.behDat) feeds the downstream thresh-task analysis.",
+        "calledByTasks": [
+          "threshTask"
+        ],
+        "taskSpecificBranches": [
+          {
+            "desc": "Hard-coded trialTypes label map specific to thresh task; rawBeh.Odor (an integer) indexes into it to set behDat.type.",
+            "evidence": "trialTypes = {'air', 'low', 'med'};  ...  behDat.type(idx(jj)) = string(trialTypes{rawBeh.Odor(ii)});"
+          },
+          {
+            "desc": "Hard-coded sniffTypes label list (single entry 'cued') indexed by sniffs col6 to produce sniffLabel. Task-specific assumption that all sniffs are cued.",
+            "evidence": "sniffTypes = {\"cued\"}; ... behDat.sniffLabel = [sniffTypes{sniffs(:,6)}]';"
+          },
+          {
+            "desc": "Trial loop bound and joined fields use thresh-specific rawBeh field names: rawBeh.trialNum (loop length), rawBeh.Odor, rawBeh.pleasantness, rawBeh.intensity. Capitalized 'Odor' differs from cueTask's lowercase 'odor'.",
+            "evidence": "for ii = 1:length(rawBeh.trialNum) ... behDat.odor=rawBeh.Odor(ii); behDat.pleasantness=rawBeh.pleasantness(ii); behDat.intensity=rawBeh.intensity(ii);"
+          }
+        ],
+        "redundancyNotes": "The function is nearly a structural duplicate of build_behavior_table_cueTask.m (and the O15/breathing siblings): identical header comment, identical sniffTypes={\"cued\"}, identical first 6 column assignments (sniffOnset/n/wiTriali/TTLoffSet/sniffType/sniffLabel from sniffs cols 1,2,3,4,6,6), and the same nested trial loop with `idx = find(behDat.n==ii)`. The only real differences are which rawBeh fields get joined and the trialTypes map. This shared skeleton is a prime candidate for a single generic builder with a task-specific spec for (a) which rawBeh columns to copy and (b) the trialTypes/sniffTypes label maps. Minor issues: trialTypes is defined but the trialTypes/Odor mapping is the sole task-specific use; the table columns odor/pleasantness/intensity/type are grown row-by-row inside the double loop (preallocation-free, O(n*trials) find calls) rather than vectorized; there are ~25 trailing blank lines. The inner jj-loop over idx is redundant since all idx rows of a trial get the same scalar value (could be assigned in one vectorized statement behDat.odor(idx)=...)."
+      },
+      {
+        "name": "build_behavior_table_O15",
+        "found": true,
+        "filePath": "C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\build_behavior_table_O15.m",
+        "signature": "function behDat = build_behavior_table_O15(sniffs, rawBeh)",
+        "inputs": "sniffs: numeric matrix, one row per detected sniff. Columns used: (:,1)=sniffOnset, (:,2)=trial num n, (:,3)=within-trial sniff index, (:,4)=TTL offset, (:,6)=sniffType integer code (1/2/3 indexing into sniffTypes). Column 5 is unused. rawBeh: behavioral struct (passed as raw.beh by caller) with per-trial fields .target (cell), .response (cell), .expScore (numeric). Trial count is taken from length(rawBeh.target).",
+        "outputs": "behDat: MATLAB table, one row per sniff, with columns: sniffOnset, n, wiTriali, TTLoffSet, sniffType (int), sniffLabel (string from sniffTypes), and the O15 behavioral columns target (string), response (string), expScore (numeric). Assigned to outDat.behDat in O15PreProc_main.m.",
+        "purpose": "Joins per-sniff detection output with per-trial behavioral data for the O15 task. It copies the six sniff-level columns out of the sniffs matrix into a table, maps the integer sniffType code to a readable label via the local sniffTypes list {\"start\",\"free\",\"confirm\"}, then loops over trials (ii) and, for every sniff row whose trial number n matches ii, broadcasts that trial's target, response, and expScore onto those rows. Pure data assembly: no file I/O, no plotting, no parameter loading.",
+        "calledByTasks": [
+          "O15"
+        ],
+        "taskSpecificBranches": [
+          {
+            "desc": "The whole function IS the O15-specific variant; task selection happens by filename, not by an in-function branch. The caller O15PreProc_main.m calls this _O15 file directly. Each of the 4 tasks (breathingTask, cueTask, threshTask, O15) plus EmotionalMovie has its own build_behavior_table_<task>.m, so there is no task/sessID/Type switch inside the function.",
+            "evidence": "O15PreProc_main.m:71  outDat.behDat = build_behavior_table_O15(sniffs, raw.beh);"
+          },
+          {
+            "desc": "O15-specific sniffType label vocabulary, hardcoded. Differs per task (cueTask uses {\"cued\"}). sniffs(:,6) must be in 1..3 to index this.",
+            "evidence": "sniffTypes = {\"start\", \"free\", \"confirm\"};  ...  behDat.sniffLabel = [sniffTypes{sniffs(:,6)}]';"
+          },
+          {
+            "desc": "O15-specific behavioral field names read from rawBeh and written to behDat: target, response, expScore. These are unique to O15 (cueTask reads cue/odor/response/response_str/type; threshTask differs again). Trial-count loop bound is rawBeh.target (vs rawBeh.n in cueTask).",
+            "evidence": "for ii = 1:length(rawBeh.target) ... behDat.target = string(rawBeh.target{ii}); behDat.response = string(rawBeh.response{ii}); behDat.expScore = rawBeh.expScore(ii);"
+          }
+        ],
+        "redundancyNotes": "Heavy structural duplication across the 5 build_behavior_table_*.m siblings (breathingTask, cueTask, threshTask, O15, EmotionalMovie). Lines 7-15 (table construction from sniffs columns 1,2,3,4,6 plus the sniffLabel mapping) are essentially identical across variants; only the sniffTypes vocabulary and the per-trial behavioral columns differ. This is the prime candidate for the planned \"concentrate task-specific code\" pass: a shared core could build the common 6 columns and the sniffLabel, with each task supplying only (a) its sniffTypes cell array and (b) a small spec of which rawBeh fields to broadcast and how to coerce them (string vs numeric). Other notes: the nested for ii / for jj loop is an inefficient row-by-row broadcast that grows the table column element-by-element (could be vectorized, e.g. map trial->value then index by behDat.n); column 5 of sniffs is unused (consistent with siblings); ~25 lines of trailing blank lines are dead whitespace boilerplate copied across all variants. No task/sessID branching to untangle inside this file itself."
+      },
+      {
+        "name": "detect_ttls_O15",
+        "found": true,
+        "filePath": "C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\detect_ttls_O15.m",
+        "signature": "function [outTTLs, raw] = detect_ttls_O15(raw, P)",
+        "inputs": "raw (struct from raw_O15.mat): raw.labels (cell of channel-label strings), raw.data (channels x time matrix), raw.fs_raw (raw sampling rate), raw.sessID (string, used in plot title only), raw.paths.fig (output figure dir). P (param struct from applyParams/getSessionParams_O15): P.pd.zthresh, P.pd.maxPulseSamp, P.pd.minPulseSamp, P.pd.trialSplitSamp (photodiode pulse-classification thresholds), P.ttl.removeTrialMarksIdx (indices of aberrant trial TTLs to drop), P.ttl.expectedTrialCount (sanity-check count), P.fs_target (target fs for converting TTL sample indices to downsampled timebase).",
+        "outputs": "outTTLs: 15-row MATLAB table with columns trialStart, buttonPress, confirmSniff, free1..free17 (sample indices in the fs_target timebase; NaN where no sniff). raw: returned with NaNs in raw.data and the photodiode channel interpolated/filled (mutated copy).",
+        "purpose": "O15-only ingestion helper that parses the photodiode \"event\" channel into the experiment's TTL structure. It locates the photodiode channel by finding the raw.labels entry containing 'event', checks/fills missing samples (errors if >4000 NaNs; otherwise linear+nearest fillmissing on both the photodiode vector and all of raw.data along time), z-scores the photodiode, and detects falling edges (downs) and rising edges (ups) against P.pd.zthresh. Pulse width (ups-downs) is used to (a) drop pulses wider than P.pd.maxPulseSamp, (b) trim a leading warm-up region via a 4-pulse-within-3500-samples heuristic, (c) drop pulses narrower than P.pd.minPulseSamp, and (d) split remaining marks into trialMarks (width < P.pd.trialSplitSamp) vs sniffMarks (width > trialSplitSamp). De-duplicates trial marks closer than raw.fs_raw, removes operator-specified aberrant trial marks (P.ttl.removeTrialMarksIdx), and collapses paired confirmatory sniffs (sniffMarks closer than fs_raw -> confirmMarks). Asserts the trial count equals P.ttl.expectedTrialCount. Saves a QC figure (TTLs.jpg) of the photodiode with all marks overlaid. Then hard-codes the trial structure: 30 trialMarks split into 15 trialStarts (odd) and 15 buttonPresses (even), 15 confirmMarks, and up to 17 free sniffs per trial gathered between each trialStart and its buttonPress. All indices are rescaled from raw.fs_raw to P.fs_target and emitted as the table.",
+        "calledByTasks": [
+          "O15"
+        ],
+        "taskSpecificBranches": [
+          {
+            "desc": "Entire function is O15-only; called solely from the O15 path (O15PreProc_main.m and the O15 branch of assemble_outDat_all.m at line 151). There is no `task`/`Type` switch inside the function, but its whole body encodes O15 experiment structure.",
+            "evidence": "assemble_outDat_all.m:151 `[TTL, raw] = detect_ttls_O15(raw, P);` (O15 branch only); CLAUDE.md: 'O15 only detect_ttls_O15(raw,P)'"
+          },
+          {
+            "desc": "Photodiode channel selected by label-string match on 'event' (O15-specific channel naming convention).",
+            "evidence": "idx = cellfun(@(x) contains(x, 'event'), raw.labels); photoDiode = raw.data(idx, :);"
+          },
+          {
+            "desc": "Hard-coded O15 trial geometry: exactly 30 trial marks -> 15 trials, with trialStarts = odd marks (1:2:30) and buttonPresses = even marks (2:2:30); output table fixed at 15 rows.",
+            "evidence": "trialStarts = trialMarks(1:2:30); buttonPresses = trialMarks(2:2:30); TTLs = nan(15, 20); for triali = 1:15"
+          },
+          {
+            "desc": "Hard-coded maximum of 17 free sniffs per trial, materialized as explicitly named table columns free1..free17 (cols 4-20).",
+            "evidence": "TTLs = nan(15, 20); outTTLs.free1 = TTLs(:,4); ... outTTLs.free17 = TTLs(:,20);"
+          },
+          {
+            "desc": "TTL pulse-class thresholds and the aberrant-mark removal / expected-trial-count checks are all O15-experiment parameters pulled from P.pd.* and P.ttl.*.",
+            "evidence": "P.pd.zthresh/maxPulseSamp/minPulseSamp/trialSplitSamp; if ~isempty(P.ttl.removeTrialMarksIdx); if length(trialMarks) ~= P.ttl.expectedTrialCount"
+          }
+        ],
+        "redundancyNotes": "Several brittle/dead/duplicated spots worth flagging for the simplify pass: (1) The leading-warm-up trim loop `for di = 5:length(downs)` has a commented-out `break`, so it keeps overwriting `starti` and effectively returns the LAST (not first) index satisfying the 4-pulses-within-3500-samples condition — likely a latent bug or at least non-obvious intent. (2) After that loop, `downs(1:starti)` and `difVals(1:starti)` are trimmed but `ups` is NOT trimmed in parallel, so `ups` falls out of index-alignment with `downs`/`difVals` from this point on; `ups` is unused afterward, but the earlier paired `downs(...)=[]/ups(...)=[]` maintenance becomes pointless. (3) `idx` is reused for three unrelated purposes (label mask, sniff-dedup indices, per-trial sniff gather), reducing readability. (4) The TTL matrix is built with magic dimensions `nan(15,20)` and the 17 free columns are assigned one-by-one (20 literal lines) instead of a loop or table-from-array; this is the clearest simplification target. (5) `trialSplitSamp` comparison is applied to `difVals` whose length was trimmed alongside `downs`, but `difVals` was never trimmed when `downs(difVals<minPulseSamp)=[]` removed entries earlier in the same step (they are trimmed together there, OK) — worth a careful re-check during refactor. (6) The hard-coded `30` (=2*expectedTrialCount=15) and `3500` are magic numbers tied to the experiment that should become named P fields if this is to be generalized. None of these block correctness for the validated O15 sessions, but the warm-up loop and the `ups` mis-alignment are the two I'd scrutinize before simplifying."
+      },
+      {
+        "name": "plot_sniff_epochs",
+        "found": true,
+        "filePath": "C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\plot_sniff_epochs.m",
+        "signature": "function [epochs, t, hFig] = plot_sniff_epochs(outDat, R)",
+        "inputs": "outDat (struct): uses outDat.fs (sampling rate), outDat.behDat (a table; requires the 'finalOnset' variable holding sample indices at fs), and outDat.figs (a directory path for saving the figure). R (struct): uses R.smoothR, a 1xT smoothed respiration trace at the same Fs as outDat.fs.",
+        "outputs": "epochs (nSniff x nSamp matrix of the respiration trace epoched around each onset, with NaNs where the window exceeds trace bounds); t (1 x nSamp time axis in seconds, spanning -1 s to +2 s); hFig (figure handle). Side effect: creates a figure and saves it as 'allSniffs.jpg' into outDat.figs.",
+        "purpose": "Epochs the smoothed respiration trace R.smoothR around each sniff onset (outDat.behDat.finalOnset) and plots all sniff-aligned epochs in gray plus their grand mean in black, with a dashed vertical line at t=0. Onsets are rounded and filtered to finite, positive values. The epoch window is hard-coded as pre = round(2*fs) and post = round(4*fs) samples (header comments say -1 s to +2 s, but offs = -pre:post with these values actually spans -2 s to +4 s, while t is built from the same offs/fs — a minor internal inconsistency worth noting during simplification). Indices are built vectorized as onsets + offs; out-of-bounds samples are masked to NaN. Uses nanmean for the mean trace. Saves the resulting figure to outDat.figs as 'allSniffs.jpg'.",
+        "calledByTasks": [
+          "breathingTask",
+          "cueTask",
+          "threshTask",
+          "O15",
+          "emotionalMovie (extra pipeline; called in emotionalMoviePreProc_main.m)",
+          "scratch/dev scripts: scratchMacroCleanFig.m, scratchGrantFig.m, _dev/run_thresh_main.m, _dev/run_O15.m, _dev/run_cue_main.m"
+        ],
+        "taskSpecificBranches": [],
+        "redundancyNotes": "Fully task-agnostic: no branching on task, sessID, Type, or task-specific channel/field names; every caller invokes it identically as plot_sniff_epochs(outDat, R). Notable issues for the simplify pass: (1) comment/code mismatch on the window — comments claim -1 s to +2 s but pre=round(2*fs)/post=round(4*fs) yield -2 s to +4 s; pick one and make comments match. (2) Header documents three return values (epochs, t, hFig) but all production callers invoke it with no outputs purely for the figure/save side effect, so the return values are effectively dead in practice. (3) nanmean is from the Statistics Toolbox; could use mean(epochs,1,'omitnan') to drop the dependency. (4) Output field name asymmetry: figures are saved to outDat.figs here, whereas some pipeline code uses outDat.fig / S.figPath elsewhere — confirm the field name is consistent. The window bounds (2 s pre / 4 s post) are the only candidate constants to surface if epoching is ever made task-aware, but currently they are shared across all tasks."
+      },
+      {
+        "name": "plotBreathLengths",
+        "found": true,
+        "filePath": "C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\plotBreathLengths.m",
+        "signature": "function [] = plotBreathLengths(outDat, R)",
+        "inputs": "outDat (struct with fields: .behDat table [columns sniffOnset, goodBreath, length], .sessID, .figs path, .labels cell array, .data matrix); R (struct with field .rspDat, the whole-trace preprocessed respiration signal from preprocess_respiration_wholetrace).",
+        "outputs": "No return value. Side effects only: writes two JPG figures to outDat.figs — 'breathLengths.jpg' (respiration traces) and 'HeartByBreathLengths.jpg' (heart-rate/RR traces).",
+        "purpose": "Diagnostic plotting helper for the breathing pipeline. For every \"good\" breath (behDat.goodBreath==1) it extracts a fixed-length epoch of the respiration trace (R.rspDat, window x-1000:x+7000 samples around each sniff onset) and an epoch of the heart-rate trace (the 'RRint' row of outDat.data, window x-1000:x+5000), stacks them into matrices, sorts rows by breath length (behDat.length), and renders each as an imagesc heatmap (time-from-onset on x, breaths-sorted-by-length on y). Two figures are saved: one showing variability in breath lengths, one showing heart rate across breaths. Pure visualization/QC; produces no data used downstream.",
+        "calledByTasks": [
+          "breathingTask"
+        ],
+        "taskSpecificBranches": [],
+        "redundancyNotes": "No explicit task/sessID/Type branching, so the function body itself is task-agnostic — but it is only ever called from breathingTaskPreProc_main.m (line 102), so it is de facto breathing-task-only and belongs entirely inside the breathingTask-specific section. Internal duplication worth noting for the simplify pass: lines 3 and 22 recompute the identical `idx = outDat.behDat.sniffOnset(outDat.behDat.goodBreath==1)`; lines 10 and 30 recompute the identical `[~, order] = sort(lenVals)` (lenVals is unchanged between them); the two figure/imagesc/title/saveas blocks are near-identical and could be a small local helper. Channel coupling: the heart-rate epoch depends on a label literally named 'RRint' (idx = find(strcmp(... 'RRint' ...)) over outDat.labels) — if no 'RRint' label exists rrDat is empty and the second plot breaks, so this is an implicit dependency on the breathing pipeline having run processECG. Hardcoded magic numbers: the x-axis vector -2:.002:14 (implies a 0.002 s / 500 Hz sample step and 8001 columns) matches the rspDat window (x-1000:x+7000 = 8001 samples) but is REUSED unchanged for the RRint plot whose window is x-1000:x+5000 = 6001 samples, so the heart-rate plot's x-axis labels are mismatched/wrong (axis spans -2..14 over only 6001 columns). caxis([-100,100]) is applied only to the first plot. Commented-out z-scoring at line 26 is dead code. Note 'redoAGAIN'/filename-quirk conventions do not apply here."
+      },
+      {
+        "name": "detect_spikes",
+        "found": true,
+        "filePath": "C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\detect_spikes.m",
+        "signature": "function [flags, prominence] = detect_spikes(data, threshold, winSize)",
+        "inputs": "data: C x T x N (Channels x Time x Trials), or 2D C x T (auto-reshaped to N=1). threshold: scalar or Cx1 vector applied to the moving (max-min) range. winSize: odd-integer centered window length for movmax/movmin (header says default 5, but no default is actually assigned in the body, so it is effectively required).",
+        "outputs": "flags: binary C x T x N (squeezed to C x T when input was 2D), 1 = confirmed spike sample. prominence: same shape, per-spike local SNR-like prominence (from local_prominence_snr), 0 where no spike.",
+        "purpose": "Detects sharp spike-like deflections in EEG/macro electrode data. Step 1: a centered moving range (movmax - movmin over winSize along time, dim 2) is thresholded to get candidate samples. Step 2: per channel, robust amplitude limits are set from the 10th/90th percentiles of the channel data; candidates above the upper percentile are positive spikes, below the lower are negative. Step 3: for each spike it finds the bracketing threshold-crossing \"shoulders\" (left mid->high crossing via cummax of a crossing-index map, right high->mid crossing via reversed cummin), discards spikes whose shoulders are too narrow (shoulder index equals the spike index), and computes a prominence/local-SNR for the survivors via local_prominence_snr (using a 50-sample flank and a per-channel global-MAD floor at 30%). Negative spikes are handled by a near-identical mirrored block. A large legacy per-sample loop doing the same thing is commented out at the bottom.",
+        "calledByTasks": [
+          "breathingTask",
+          "cueTask",
+          "threshTask",
+          "O15"
+        ],
+        "taskSpecificBranches": [],
+        "redundancyNotes": "1) The positive-spike block (lines ~65-108) and negative-spike block (~112-154) are near-identical copy-paste differing only in comparison direction (upper/lower, gt/lt), shoulder crossing definitions, and the 'pos'/'neg' tag; could be refactored into one helper called twice. 2) Lines 178-241 are a large block of dead/commented-out legacy per-sample for-loop code (the old k=1:T implementation) that should be deleted. 3) chGlobalMAD is computed in its own for-loop (lines 42-46) that could be vectorized. 4) Header documents a winSize default of 5 but no default is assigned in the body (the 'Defaults' comment at line 18 has no code under it) - latent bug if called with 2 args. 5) Unused locals: 'right'/'left' assigned at lines 31-32 are used, but origIs2D path is fine; outDetections is a separate accumulator from 'detections' which is slightly confusing naming. NOTE for the concentrate-task-specific-code effort: this function is fully task-agnostic - no branching on task/sessID/Type/channel names. The only task-specific coupling is external: callers pass task/session-specific spikeThresh and spikeWin (preprocess_macros.m passes hardcoded 2; cueTaskPreProc.m, O15PreProc.m, threshPreProc.m, BreathingTaskPreProc_scratch.m pass spikeThresh/spikeWin variables that originate from applyParams/dataTracking.xlsx). Nothing inside detect_spikes needs to move into a task-specific section."
+      },
+      {
+        "name": "outMat_to_table",
+        "found": true,
+        "filePath": "C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\outMat_to_table.m",
+        "signature": "function T = outMat_to_table(outMat, datalabel)",
+        "inputs": "outMat: Nx1 cell array; each cell holds a 1x8 or 1x9 cell array (one behavioral trial's values). datalabel: 1x9 cell array of column labels (expected to contain 'response' at position 5 and 'response_str' at position 6).",
+        "outputs": "T: a MATLAB table of size [numel(outMat) x 9] whose VariableNames are derived from datalabel (run through matlab.lang.makeValidName + makeUniqueStrings). Empty trailing cells are left blank.",
+        "purpose": "Converts a nested cell array of per-trial behavioral data (outMat) into a flat 9-column table, naming columns from datalabel. It enforces one special normalization rule: when datalabel has 'response' at column 5 AND 'response_str' at column 6, then for any row whose 'response' value (row{5}) is empty, it overwrites response with the sentinel 999, drops the 'response_str' value (sets it to []), and shifts the remaining values (old positions 6:8) right into positions 7:9. This realigns trials that were recorded without a response so that columns stay consistent across the whole table. The helper isEmptyValue treats [], '', \"\", NaN, and NaT as empty. Used only by the cueTask pipeline to turn the saved behDat.outMat / behDat.datalabel into behDat tables.",
+        "calledByTasks": [
+          "cueTask"
+        ],
+        "taskSpecificBranches": [
+          {
+            "desc": "The function is task-agnostic at the code level (no branch on task/sessID/Type). However, its core special rule keys on the column-label strings 'response' (must be at index 5) and 'response_str' (must be at index 6). These are cueTask behavioral-data labels, so the function is implicitly cueTask-specific: with any other datalabel layout, useSpecialRule is false and the function degrades to a plain cell2table.",
+            "evidence": "idxResponse = find(strcmpi(datalabel,'response'),1); idxResponseStr = find(strcmpi(datalabel,'response_str'),1); useSpecialRule = ~isempty(idxResponse) && ~isempty(idxResponseStr) && idxResponse==5 && idxResponseStr==6;"
+          },
+          {
+            "desc": "Empty-response remap uses hard-coded cueTask-shaped magic constants: sentinel value 999 written into the response column, and the fixed index reshuffle row(6:8) -> row(7:9). These positions assume the 9-column cueTask trial layout.",
+            "evidence": "endVals = row(6:8); row{5} = 999; row{6} = []; row(7:9) = endVals;"
+          }
+        ],
+        "redundancyNotes": "Dead/redundant code in isEmptyValue: the first `tf = isempty(v)` already handles the '' empty-char and []-content cases, then the `if ~tf && ischar(v)` branch re-runs `tf = isempty(v)` which can never flip tf to true at that point (a non-empty char is not empty) -- that branch is a no-op and can be deleted. The numeric/datetime/string branches are reachable and meaningful. nCols is hard-coded to 9 and also enforced via the datalabel numel==9 check, so the two must stay in sync; the `k = min(numel(row), nCols)` guard makes the function silently truncate rows longer than 9 rather than error. Several callers (cueTaskPreProc.m, cueTask_makeOutDat.m) invoke it in near-identical behDat1/behDat2 pairs, and there are stale duplicate copies in cueTask_makeOutDat.asv and _dev/run_cue_make.m that call it the same way -- candidates for the task-specific section consolidation. Minor: respVal is initialized to [] then conditionally overwritten, which is fine but slightly convoluted."
+      },
+      {
+        "name": "parSave",
+        "found": true,
+        "filePath": "C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\parSave.m",
+        "signature": "function [] = parSave(fn, chanDat)",
+        "inputs": "fn = output file path (char); chanDat = the data variable/struct to save",
+        "outputs": "none (writes a .mat file to disk as a side effect)",
+        "purpose": "A 3-line generic helper that saves its second argument to disk as a v7.3 .mat file: save(fn, 'chanDat', '-v7.3'). The variable is always stored under the literal name 'chanDat' inside the file regardless of what was passed in. It exists as a standalone function (rather than an inline save call) so it can be invoked from inside parfor loops, where MATLAB forbids calling save directly. There is no logic beyond the single save call: no validation, no branching, no return value.",
+        "calledByTasks": [
+          "breathingTask",
+          "shared/all-tasks"
+        ],
+        "taskSpecificBranches": [],
+        "redundancyNotes": "Fully task-agnostic; contains zero branching on task, sessID, Type, or any task-specific channel/field name. It is a pure save wrapper. A near-duplicate sibling exists: parSaveClean.m (function [] = parSaveClean(fn, cleanDat) -> save(fn, 'cleanDat', '-v7.3')) is identical in logic, differing only in the saved variable's name ('cleanDat' vs 'chanDat'). The two could be collapsed into one helper that takes the data plus an optional variable name, or by standardizing on a single stored variable name. Call sites: parSave is used in breathingTask_makeOutDat.m:582, breathingTaskPreProc_main.m:110, and the shared splitToSingleChan_allTasks.m:248; parSaveClean is used in splitToSingleChan_allTasks.m:166. None of the callers depend on parSave doing anything task-specific. For the refactor this function needs no task-section markers; the only cleanup worth flagging is the parSave/parSaveClean duplication."
+      }
+    ],
+    "missing": []
+  }
+}

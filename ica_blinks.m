@@ -137,25 +137,48 @@ zMax = (max(blinkGuess) - mean(blinkGuess)) ./ std(blinkGuess);
 if zMax > 2
     [~, S.knownIC] = max(blinkGuess);
 end
+
+% Manual override for batch re-runs: force a specific blink IC via env var
+% (used to reprocess a session whose auto-selection was ambiguous).
+envIC = str2double(getenv('ZLP_BLINK_IC'));
+if ~isnan(envIC) && envIC >= 1 && envIC <= K
+    S.knownIC = round(envIC);
+end
 % -------------------- Plot all ICs & select one --------------------
 %% ADDED: quick visualization and selection prompt
 if isempty(S.knownIC)
-    if ~isempty(plotK)
+    isBatch = batchStartupOptionUsed || ~usejava('desktop');
+    if plotK > 0 && isBatch
+        % Non-interactive run and no IC clearly matches the blink channel:
+        % signal ambiguity so the caller can save a review plot and skip this
+        % session (instead of hanging on input() or silently skipping blink
+        % removal). Return the candidate activations for plotting.
+        out.A = A; out.W = W; out.S = Sact;
+        out.X = X; out.Xclean = A*Sact + chMeans;
+        out.data_clean = reshape(out.Xclean, C, T, N) + trialMeans;
+        out.means = chMeans;
+        out.badICs = [];
+        out.ambiguous = true;
+        out.candIdx  = plotidx;
+        out.candSact = Sact(plotidx,:);
+        out.blinkSig = zd1;
+        return;
+    elseif plotK > 0
         figure('Name','ICA activations (z-scored)','Color','w');
         for ic = 1:plotK
             ax = subplot(plotK,1,ic);
             zic = (Sact(plotidx(ic),:) - mean(Sact(plotidx(ic),:))) / ...
                 max(std(Sact(plotidx(ic),:)), eps);
             plot(zic); xlim([1 Ssamples]);
-            hold on 
+            hold on
             plot(zd1)
-    
+
             ylabel(sprintf('IC %d',plotidx(ic)));
             if ic==1
-                title('Choose blink-like IC (then close figure)'); 
+                title('Choose blink-like IC (then close figure)');
             end
             if ic==plotK
-                xlabel('Samples'); 
+                xlabel('Samples');
             end
             grid(ax,'on');
         end
@@ -168,7 +191,7 @@ if isempty(S.knownIC)
         badIC = [];
     end
 else
-    badIC = S.knownIC; 
+    badIC = S.knownIC;
 end
 if isempty(badIC) || badIC<1 || badIC>K
     % nothing to remove

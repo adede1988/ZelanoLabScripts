@@ -1,23 +1,18 @@
+% TASK-SPECIFIC ingestion (photodiode/TTL + behavior .mat -> <id>_cueTaskPreProc.mat).
+% The whole body below is cueTask-specific; for a new task write a new
+% <task>_makeOutDat.m. Only the header (labPaths + the applyParams cfg block)
+% is shared boilerplate.
+
 clear
-
-behDatPath = 'R:\Neurology\Zelano_Lab\Lab_Common\OBE_task_backup\tasks\olf_cuetask\results\olf_cuetask_results';
-codePre = 'C:\Users\Adam\Documents\GitHub\'; %HOME COMPUTER PATH
-codePre = 'G:\My Drive\GitHub\'; 
-
-% addpath([codePre 'HpcAccConnectivityProject/helperFuncs'])
-% addpath(genpath([codePre 'myFrequentUse']))
-addpath(genpath([codePre 'ZelanoLabScripts']))
-% addpath([codePre 'myFrequentUse/export_fig_repo'])
-% addpath(genpath('C:\Users\Adam\Documents\eeglab2026.0.0')) ## HOME
-% COMPUTER PATH! 
-addpath(genpath("C:\Users\dtf8829\Documents\eeglab2025.0.0"))
-
-% addpath([codePre 'fieldtrip-20230118'])
-% addpath([codePre 'emotionDecoding'])
-% addpath([codePre 'slowBreathing'])
+% ---- machine paths (everything machine-specific comes from labPaths) ----
+addpath(fileparts(mfilename('fullpath')));   % ensure labPaths() is reachable
+L          = labPaths();
+codePre    = L.codePre;
+behDatPath = L.behCue;
+addpath(genpath(L.repo))
+addpath(genpath(L.eeglab))
 
 set(0, 'defaultfigurewindowstyle', 'docked')
-% ft_defaults
 
 %% 
 

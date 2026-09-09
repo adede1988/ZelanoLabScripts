@@ -1,0 +1,962 @@
+{
+  "summary": "Design panel: vet MATLAB implementation of the 5 hard chirp-analysis components against the spec anti-bias rules",
+  "agentCount": 6,
+  "logs": [],
+  "result": {
+    "designs": [
+      {
+        "component": "TFR + ridge extraction: chirp_tfr_faslt.m (FASLT power TFR 20-70 Hz) and chirp_ridge.m (tfridge ridge tracking on 25-58 Hz with iterative surrogate-gated peeling, transition-window derivation, ridge-power-dip statistic, and subject-average f_hi/f_lo anchors)",
+        "functionSignature": "function tfr = chirp_tfr_faslt(epochs, fs, cfg)  % and  function R = chirp_ridge(tfr, cfg)  -- where cfg may be shared; anchors via function A = chirp_ridge_anchors(meanTFR, tfr.freqs, cfg)",
+        "steps": [
+          "chirp_tfr_faslt INPUTS: epochs = [nSamp x nTrial] real broadband signal (already epoched [-1,+3]s around finalOnset WITH extra filter/TFR pad beyond, demeaned/detrended per epoch upstream in 6.1); fs=500; cfg fields flo=20, fhi=70, df<=1 (so Nf = round((fhi-flo)/df)+1 ~= 51 at 1 Hz), c1=3, olo=3, ohi=30, mult=1, trimSamp = pad samples to strip off each end after transform.",
+          "chirp_tfr_faslt KERNEL CACHE: nfaslt rebuilds the wavelet bank on every call, which is the per-trial cost. Build the bank ONCE per channel: persistent/cached struct keyed on (fs,flo,fhi,Nf,c1,olo,ohi,mult). Either (a) precompute the cxmorlet set with the same linspace(flo,fhi,Nf) + ceil(linspace(olo,ohi,Nf)) order schedule that nfaslt uses and convolve directly, or (b) wrap nfaslt but memoize the `wavelets` cell + `padding` across trials. Spec 6.2 mandates caching across trials within a channel; do NOT call vanilla nfaslt in the trial loop without caching.",
+          "chirp_tfr_faslt TRANSFORM: for each trial column, wt = nfaslt(sig', fs, [flo fhi], Nf, c1, [olo ohi], mult) giving POWER [Nf x nSamp] (magnitude^2, geometric-mean pooled across superlet orders -- it is NOT analytic; never derive phase/envelope from it, per KEY API FACT). Stack into P [Nf x nSamp x nTrial]. Trim the pad: P = P(:, trimSamp+1:end-trimSamp, :). Build time vector t relative to finalOnset (0 = onset).",
+          "chirp_tfr_faslt OUTPUTS struct tfr: .power [Nf x nT x nTrial], .meanPower = mean over trials (power-averaged, preserves induced gamma -- spec 6.3), .freqs (linspace flo..fhi, Nf), .t (s rel onset), .fs, .cfg, .included (trial mask passed through). Provide tfr.bandMask = freqs>=25 & freqs<=58 for the ridge stage.",
+          "chirp_ridge INPUT: a single-trial (or the trial-averaged) power TFR slice restricted to the ridge band 25-58 Hz: tfm = tfr.power(bandMask,:,trial) (or meanPower for anchors). Convert to a tfridge-friendly magnitude: tfridge tracks the MAX-energy path, so pass tfm directly (already power); use f = freqs(bandMask).",
+          "chirp_ridge PRIMARY RIDGE: [fhat, iRidge, ~] = tfridge(tfm, f, penalty, 'NumRidges',1, 'NumFrequencyBins', nbins). penalty: tfridge penalizes per-step frequency jumps by penalty*(freqDiff^2)/(meanFreq*dt-ish); set penalty so a physiological downchirp (Df up to ~10 Hz over ~0.5-1 s, i.e. <=~20 Hz/s -> <=0.04 Hz/sample at fs=500) is NOT penalized but spurious jumps to a noise peak are. Recommend penalty in the range that suppresses >5 Hz single-sample jumps: start penalty ~= 1 (with f in Hz, df<=1) and CALIBRATE in Phase 0 against the single nonlinear-sweep sims so the recovered ridge tracks the true IF within ~1 Hz. NumFrequencyBins (smoothing/forbidden-zone half-width) ~= 2 bins (~2 Hz) -- enough to bridge a 1-sample dropout without letting the ridge wander across a 5-10 Hz gap. Read ridgePower(t) = tfm(iRidge(t), t) along the path.",
+          "chirp_ridge SECOND-RIDGE PEELING: after extracting ridge 1, zero out (peel) its TF support: for each t, set tfm(max(1,iRidge(t)-W) : min(end,iRidge(t)+W), t) = 0, with peeling band-removal half-width W = ceil(peelHz/df) and peelHz ~= 4 Hz (so ~+-4 Hz, full notch ~8 Hz < the 5-10 Hz Df so a genuine second tone survives but the primary ridge's main lobe is removed). Re-run tfridge(NumRidges 1) on the peeled TFR -> candidate ridge 2 (f2hat, ridgePower2).",
+          "chirp_ridge SURROGATE SIGNIFICANCE for ridge 2: generate Nsurr (200-1000) per-trial FFT phase-randomized surrogates of the broadband-band signal that produced this trial (NOT of the TFR -- randomize the time-domain signal's FFT phases preserving magnitude), push each through chirp_tfr_faslt (reuse cached kernels) + the SAME peel+re-extract, and record the peeled-ridge integrated energy (sum of ridgePower2 over the transition window). Keep ridge 2 only if observed peeled-ridge energy > 95th percentile of the surrogate distribution. nRidgesSig = 1 + (ridge2 significant). Spec 6.4 + Appendix surrogate spec.",
+          "chirp_ridge TRANSITION WINDOW: derive from fhat(t) on the primary ridge. Smooth fhat (e.g. movmedian ~50-100 ms). Define transition = the contiguous span where |d fhat/dt| exceeds a small threshold (frequency is actively changing) OR, equivalently, the span between where smoothed fhat crosses near f_hi and near f_lo. Concretely: tStart = first time fhat drops below f_hi - 1 Hz; tEnd = first time fhat reaches within 1 Hz of f_lo (its late plateau). Clip to the post-onset region (t>0). Store transitionWin = [tStart tEnd] (s). A long stationary low-freq tail is EXCLUDED (spec 6.0). Also compute coexistWin (full span where a 2nd ridge is present/significant) for the beat test handoff.",
+          "chirp_ridge POWER-DIP STATISTIC: along the primary ridge, powerDipStat = min(ridgePower within transitionWin) / mean([max(ridgePower in a pre-transition flank), max(ridgePower in a post-transition flank)]). A sequential hi->lo HANDOVER (two tones, not one sweep) produces a power dip at the crossover -> powerDipStat << 1; a single continuous chirp keeps power up -> powerDipStat ~ 1. Flanks = short windows (~150 ms) just before tStart and just after tEnd within the burst.",
+          "chirp_ridge_anchors (subject-average): trace tfridge ONCE on tfr.meanPower (band-limited 25-58 Hz). f_hi = ridge frequency at the ~20th-percentile transition time, f_lo = at the ~80th-percentile transition time; clamp BOTH to [27,56] Hz. These are rough (onset jitter smears the average inward -> they read INWARD of the true extremes) and feed ONLY the phase-test crossing times, the spatial band centers, and figure annotations; the chirplet never uses them (spec 6.4).",
+          "OUTPUT ASSEMBLY: chirp_ridge returns per-trial struct matching spec 7.1 sub.ridge.trial(i): {fhat[], ridgePower[], nRidgesSig, ridgeOverlap, powerDipStat, transitionWin, burstTruncated, included}. ridgeOverlap = fraction of the trial duration where ridge2 is significant AND within Df of ridge1's band (the coexistence fraction). burstTruncated is passed in from epoching (O15 next-onset truncation, spec 2.3). included = trial QC mask from upstream. Anchors returned separately (per channel/subject), stored in sub.phaseTest.params.{f_hi,f_lo}."
+        ],
+        "params": [
+          {
+            "name": "FASLT flo / fhi",
+            "value": "20 / 70 Hz",
+            "rationale": "Spec 6.2: pad beyond the 25-58 Hz ridge band for context so the ridge band has no edge artifact at 25 or 58."
+          },
+          {
+            "name": "FASLT df (freq step)",
+            "value": "1 Hz (Nf = 51 over 20-70)",
+            "rationale": "Spec: freq step <=1 Hz. 1 Hz resolves a 5-10 Hz Df everywhere and keeps the kernel bank small enough to cache."
+          },
+          {
+            "name": "FASLT base cycles c1",
+            "value": "3",
+            "rationale": "Spec 6.2 base cycles ~3; matches nfaslt's c1 semantics (n_cyc = i_ord*c1 with mult=1)."
+          },
+          {
+            "name": "FASLT order [olo ohi], mult",
+            "value": "[3 30], mult=1 (multiplicative)",
+            "rationale": "Spec: adaptive order ~3-30. Multiplicative superresolution gives the smooth high-resolution sweep the spec asks for; low order at low freq, high order toward 70 Hz."
+          },
+          {
+            "name": "Ridge band",
+            "value": "25-58 Hz",
+            "rationale": "Spec 6.4: tfridge runs within 25-58 Hz (the OB gamma band, below line noise)."
+          },
+          {
+            "name": "tfridge penalty",
+            "value": "~1 (f in Hz), calibrate in Phase 0",
+            "rationale": "Must permit a real downchirp (<=~20 Hz/s) yet forbid jumps across the 5-10 Hz gap to a noise peak. Calibrated against single nonlinear-sweep sims to track true IF within ~1 Hz (spec 5.4)."
+          },
+          {
+            "name": "tfridge NumRidges / NumFrequencyBins",
+            "value": "NumRidges=1 (extract sequentially via peeling); NumFrequencyBins~=2 bins (~2 Hz)",
+            "rationale": "Spec 6.4 requires PEELING (not NumRidges=2), because a simultaneous 2nd ridge must be surrogate-gated, not just the 2nd-strongest path. 2-bin smoothing bridges single-sample dropouts without letting the ridge cross the Df gap."
+          },
+          {
+            "name": "Peeling band-removal half-width W (peelHz)",
+            "value": "+-4 Hz (full notch ~8 Hz)",
+            "rationale": "Wide enough to remove the primary ridge main lobe, narrow enough that a genuine 2nd tone separated by 5-10 Hz survives the peel."
+          },
+          {
+            "name": "Surrogates",
+            "value": "200-1000 per-trial FFT phase-randomized, 95th-pctile threshold",
+            "rationale": "Appendix + spec 6.4: time-domain phase randomization preserves the power spectrum, so a 2nd ridge surviving means genuine extra TF structure, not chance."
+          },
+          {
+            "name": "Anchor percentiles & clamp",
+            "value": "f_hi at 20th-pctile transition time, f_lo at 80th; clamp [27,56] Hz",
+            "rationale": "Spec 6.4: rough anchors from the subject-average ridge; clamp keeps them inside the analysis band away from the 25/58 edges."
+          },
+          {
+            "name": "Transition detection threshold",
+            "value": "fhat crosses f_hi-1 Hz to within 1 Hz of f_lo plateau (movmedian ~75 ms smooth)",
+            "rationale": "Spec 6.0: transition = frequency-changing region only; excludes the stationary low-freq tail that would just add noise/atoms to phase + chirplet tests."
+          }
+        ],
+        "pitfalls": [
+          "Do NOT derive phase or envelope from the FASLT output -- it is geometric-mean-pooled POWER, not an analytic signal. Phase/envelope MUST come from hilbert() of the 25-58 Hz bandpassed broadband signal (KEY API FACT + anti-bias rule (a)). chirp_tfr_faslt returns power only; the phase test (6.5) takes fhat from THIS ridge as the IF source, never dphi/dt.",
+          "Anti-bias (a): fhat from this ridge is the power-based IF that the phase test integrates. If anyone wires dphi/dt of the broadband Hilbert phase in as fhat, resid==0 and the test is vacuous. The ridge IS the independent f-hat; document ifSource='ridgePower' in sub.phaseTest.params.",
+          "tfridge tracks the MAXIMUM-energy path and will happily snap to a transient noise peak; if penalty is too low the ridge fragments, too high it ignores a real downchirp. This is the single most important Phase-0 calibration; verify on the nonlinear single-sweep sims before trusting any real ridge.",
+          "Kernel caching is load-bearing: nfaslt rebuilds the entire wavelet cell + recomputes padding on every call. With surrogates (200-1000) x trials (40 cue) x sessions, calling vanilla nfaslt per surrogate is the batch bottleneck the spec flags for the lab desktop. Cache the bank keyed on (fs,flo,fhi,Nf,c1,olo,ohi,mult).",
+          "Peeling width must be < Df: if W (full notch) >= the 5-10 Hz gap, peeling the primary ridge also erases a genuine second tone and you will never find nRidgesSig=2 -> biases toward 'single'. Keep full notch ~8 Hz at most and confirm against Phase-0 dual sims that true 2nd ridges survive.",
+          "Transition window must EXCLUDE the stationary low-frequency tail (a 3 s burst often plateaus). Feeding the tail to the phase/chirplet tests adds noise and atoms (spec 6.0, 6.7). The dip statistic flanks must sit inside the burst, not in baseline (pick them adjacent to tStart/tEnd, within the gamma-present span).",
+          "powerDipStat denominator: if a flank max is taken from a near-silent region it explodes the ratio. Anchor flanks to the burst envelope (where ridgePower is still substantial), and guard against div-by-~0 / empty transition windows (set powerDipStat=NaN, mark trial not-included for the dip read).",
+          "Surrogate ridge energy must be integrated over the SAME transition window as the observed trial, using the SAME peel+re-extract, or the 95th-pctile threshold is not comparable. Reuse cached kernels for the surrogate TFRs.",
+          "Anchors are deliberately rough/inward-biased (onset jitter smears the subject-average ridge). Do not treat f_hi/f_lo as ground truth Df; the chirplet engine must never consume them (spec 6.4), and the beat test should derive |f_hi-f_lo| with that caveat noted.",
+          "burstTruncated (O15 next-onset cut, spec 2.3) must propagate into ridge output so a coexistence/transition window cut short by truncation is not mistaken for a genuinely brief one in the beat/chirplet downstream."
+        ],
+        "mapsToHypothesis": "\"This component is upstream of the adjudicating tests; it does not itself emit single/dual but supplies the substrate. Its discriminating outputs: (1) nRidgesSig -- a surrogate-significant SECOND ridge coexisting with the first leans DUAL (two simultaneous slowly-varying components, the spec 0.1 reframing); a single tracked ridge that smoothly descends leans SINGLE. (2) powerDipStat << 1 (deep along-ridge power dip in the transition) is the sequential hi->lo HANDOVER signature -> leans DUAL; powerDipStat ~ 1 (power sustained through the descent) -> SINGLE. (3) The fhat(t) ridge is the engine of the PRIMARY single-channel test (phase continuity 6.5, confirms SINGLE) -- a clean single ridge feeds a concentrated phase residual. The transitionWin/coexistWin gate every other test. A NULL second ridge is inconclusive (could be single, or probe/resolution can't separate) -> contributes to 'undecidable' when other tests are mixed, per spec 0.2/8.1. No p-value is emitted here and none should be multiplied with downstream tests -- this is the same data viewed upstream.\"",
+        "outputs": [
+          "sub.ridge.trial(i).fhat -- [1 x nT] primary ridge frequency Hz vs t (the power-based IF source for the phase test 6.5)",
+          "sub.ridge.trial(i).ridgePower -- [1 x nT] power along the primary ridge",
+          "sub.ridge.trial(i).nRidgesSig -- 1 or 2 (1 + surrogate-significant second ridge)",
+          "sub.ridge.trial(i).ridgeOverlap -- fraction of trial where a significant 2nd ridge coexists within Df of ridge1 (coexistence fraction)",
+          "sub.ridge.trial(i).powerDipStat -- min along-ridge power in transition / mean of flanking maxima (sequential-handover signature)",
+          "sub.ridge.trial(i).transitionWin -- [tStart tEnd] s rel finalOnset (frequency-changing span; used by chirplet 6.7 + phase 6.5)",
+          "sub.ridge.trial(i).burstTruncated -- logical, propagated from O15 next-onset epoch truncation",
+          "sub.ridge.trial(i).included -- logical trial QC mask from upstream (never shape-based)",
+          "sub.phaseTest.params.f_hi / f_lo -- subject-average ridge anchors, clamped [27,56] Hz (feed phase crossing times, spatial bands, figure annotations only)",
+          "tfr.meanPower / tfr.power / tfr.freqs / tfr.t -- the FASLT power TFR (power-averaged across trials) consumed by the single-trial spectrograms (6.3), the temporal-decoupling band envelopes (6.9), and the spatial band powers (6.8)"
+        ]
+      },
+      {
+        "component": "chirp_phase_test.m — segmented phase-continuity test (spec 6.5), the PRIMARY single-channel discriminator. Per OB-channel (bestMac), per-trial: compare the broadband-gamma Hilbert phase increment against the ridge-IF-predicted increment over short consecutive sub-windows of the transition window; concentrated near-zero residual across trials => strong-for-single, dispersed => inconclusive. Asymmetric (spec 0.2): a positive (concentrated) result confirms single; a null never confirms dual.",
+        "functionSignature": "function sub = chirp_phase_test(epochs, fhat, ridgeT, transWin, fs, cfg)\n% INPUTS\n%   epochs   : [nSamp x nTrial] sniff-locked broadband epochs of ONE OB channel\n%              (bestMac), already padded beyond [-1,+3]s for edge-free filtering\n%              (trim handled internally via cfg.trimSamp). Samples @ fs=500.\n%   fhat     : [nT x nTrial] POWER-ridge instantaneous frequency f-hat(t) (Hz)\n%              from tfridge on the FASLT power TFR (chirp_ridge_extract.m). MUST be\n%              the power ridge, NEVER dphi/dt (rule a). NaN where no ridge.\n%   ridgeT   : [1 x nT] time axis (s, 0 = finalOnset) on which fhat is sampled.\n%   transWin : [tStart tEnd] (s) per-trial OR [nTrial x 2] transition window from\n%              the ridge (§6.4); phase test runs only inside it.\n%   fs       : 500.\n%   cfg      : struct of params (see PARAMS). Carries beatNullTimes per trial\n%              (from chirp_beating) for optional slip-latency tagging; may be [].\n% OUTPUT (maps to spec 7.1 sub.phaseTest)\n%   sub.params, sub.trial(i), sub.summary  (see OUTPUTS)\n",
+        "steps": [
+          "VALIDATE INPUTS / GUARD vacuity (rule a): assert fhat was passed as a separate power-ridge array and is NOT derived from the epoch phase. Hard-error if size(fhat,2)~=size(epochs,2) or if cfg.ifSource is not the literal 'ridgePower'. This is the single most important guard: using dphi/dt as f-hat makes resid identically 0 and the test vacuous.",
+          "BANDPASS broadband-gamma: filt = ft_preproc_bandpassfilter(epochs', fs, [25 58], [], 'firws')' (zero-phase FIR, transition handled by firws; operate on the PADDED epoch so filter edge transients live in the pad). No in-band notch (58 Hz ceiling clears line noise). Demean+detrend each column first.",
+          "ANALYTIC SIGNAL: z = hilbert(filt); phi = unwrap(angle(z)) per trial (column-wise unwrap over the full padded epoch BEFORE trimming, so unwrap has no edge break). env = abs(z) retained only for optional existence gate (step 4). Trim the pad to the analysis span using cfg.trimSamp so phi/ridge share a sample grid.",
+          "OPTIONAL existence gate (rule b: response-EXISTENCE only, never shape): if cfg.requireResponse, mark trial included=false when median in-transition broadband-gamma power < cfg.minRespZ * baseline (baseline = pre-sniff [-0.5 -0.1]s). This only avoids computing phase on pure noise; a kept-but-noisy trial is acceptable (it just adds residual dispersion). Do NOT reject on chirp/ridge shape.",
+          "RESAMPLE f-hat onto the epoch sample grid: interp1(ridgeT, fhat(:,i), tEpoch, 'linear') so phiPred can be integrated at sample resolution. Drop trial (included=false, reason='noRidge') if fhat is NaN over >cfg.maxRidgeGap of the transition window.",
+          "DEFINE per-trial transition window [t0 t1] from transWin(i,:); clamp to where fhat is finite. Skip trial if (t1-t0) < cfg.minTransSec (too short to host even one sub-window).",
+          "TILE the transition window into consecutive non-overlapping sub-windows of length cfg.subWinSec (~0.15 s = ~4-8 gamma cycles). Each sub-window short enough that integrated IF-bias accumulation << 1 cycle (long-burst correction: NEVER one t_hi->t_lo increment across the whole multi-second transition).",
+          "PER SUB-WINDOW k: phiObsInc(k) = phi(end_k) - phi(start_k) (observed unwrapped Hilbert phase increment, in rad). phiPredInc(k) = 2*pi * trapz(tEpoch(idx_k), fhat_i(idx_k)) (predicted increment from integrating the POWER ridge IF over the sub-window). resid(k) = wrapToPi(phiObsInc(k) - phiPredInc(k)).",
+          "PER-TRIAL SUMMARY: store subWinResid (vector over k). Compute mean resultant length meanRbar = abs(mean(exp(1i*resid))) across that trial's sub-windows (circular concentration of the residual). Record nSub used.",
+          "SLIP-LATENCY tagging (localizes beating, distinct from dispersion): flag sub-windows whose |resid| exceeds cfg.slipThresh rad as phase slips; store slipLatencies = sub-window center times. If cfg.beatNullTimes(i) provided, additionally record whether slips coincide (within cfg.slipTolSec) with beat nulls — two beating oscillators produce slips LOCALIZED to beat nulls; a single oscillator stays concentrated in EVERY sub-window.",
+          "POOL across trials for the session-level residual concentration: collect ALL sub-window residuals from all included trials into one vector R. Rbar = abs(mean(exp(1i*R))). Rayleigh test (rayleigh_z = nR*Rbar^2, rayleigh_p). V-TEST against preferred direction 0 (we predict concentration AT zero residual, not just non-uniformity): vtest_p_vs0 = V-test of R against mu0=0.",
+          "PER-SESSION PERMUTATION NULL (absorbs n-dependence per spec 8): for b=1..cfg.nPerm, rotate each trial's residual vector by an independent uniform random phase offset (resid + 2*pi*rand, then wrapToPi) -> null Rbar_b. perm_z = (Rbar_obs - mean(Rbar_null)) / std(Rbar_null); perm_p = (1+sum(Rbar_null>=Rbar_obs))/(1+nPerm). Rotation preserves within-trial residual STRUCTURE but destroys the at-zero alignment, giving the correct H0 (single oscillator => alignment at 0 => high perm_z).",
+          "WRITE sub.phaseTest.params / .trial(i) / .summary (spec 7.1). Set nUsed = #included trials. GROUP HOOK: the driver collects perm_z per session; group test (spec 8) is a one-sample t of perm_z>0 across sessions PLUS a group V-test against 0; non-significant => inconclusive (NOT dual). Also save the per-trial figure overlay hook (resid vs sub-window time) under singleTrialSpectrograms/ if cfg.saveFigs."
+        ],
+        "params": [
+          {
+            "name": "ifSource",
+            "value": "'ridgePower'",
+            "rationale": "Hard literal flag asserted at entry. Documents and ENFORCES rule (a): f-hat is the power-based ridge, never dphi/dt of the broadband phase. Any other value errors."
+          },
+          {
+            "name": "filtBand",
+            "value": "[25 58] Hz",
+            "rationale": "Broadband-gamma FIR passband (spec 6.1 / appendix). 58 Hz ceiling clears line noise so no in-band notch is needed; matches the chirplet/ridge band."
+          },
+          {
+            "name": "filtType",
+            "value": "'firws'",
+            "rationale": "ft_preproc_bandpassfilter firws = zero-phase FIR; no phase distortion of the Hilbert phase (any IIR group delay would corrupt phiObsInc)."
+          },
+          {
+            "name": "subWinSec",
+            "value": "0.15",
+            "rationale": "~150 ms consecutive sub-windows = ~4-8 gamma cycles; short enough that integrated IF-bias accumulation is << 1 cycle (a 0.5 Hz IF bias over 0.15 s = 0.075 cycle vs 1.5 cycles over 3 s). The core long-burst correction (spec 6.5)."
+          },
+          {
+            "name": "minTransSec",
+            "value": "0.30",
+            "rationale": "Require >=2 sub-windows of transition before a trial can contribute, so per-trial Rbar is not a single-point artifact."
+          },
+          {
+            "name": "trimSamp",
+            "value": "round([-1.0 3.0]*fs) relative to onset, with >=0.5 s pad each side already present",
+            "rationale": "Filter+Hilbert run on the padded epoch; trim AFTER unwrap so edge transients and unwrap breaks stay in the discarded pad (spec 2.3 'pad beyond, then trim')."
+          },
+          {
+            "name": "requireResponse",
+            "value": "true",
+            "rationale": "Optional existence-only gate (rule b). Excludes pure-noise trials from phase computation; never rejects on chirp shape (which would bias toward single)."
+          },
+          {
+            "name": "minRespZ",
+            "value": "1.0",
+            "rationale": "Existence threshold: median in-transition gamma power must exceed 1 SD over the pre-sniff baseline. Loose on purpose — only screens truly absent responses."
+          },
+          {
+            "name": "maxRidgeGap",
+            "value": "0.25",
+            "rationale": "Drop a trial if the power ridge is NaN over >25% of its transition window (no reliable f-hat to integrate)."
+          },
+          {
+            "name": "slipThresh",
+            "value": "pi/2 rad",
+            "rationale": "A sub-window residual past +-90 deg is a phase slip; used to localize discontinuities at beat nulls (the dual signature) rather than to reject."
+          },
+          {
+            "name": "slipTolSec",
+            "value": "0.05",
+            "rationale": "Window for matching a slip latency to a beat null from chirp_beating; ~half a beat period at Df=5-10 Hz."
+          },
+          {
+            "name": "nPerm",
+            "value": "1000",
+            "rationale": "Per-session permutation null (rotate residuals to uniform). 1000 gives stable perm_z and perm_p resolution ~1e-3; matches surrogate count used elsewhere in the spec."
+          },
+          {
+            "name": "beatNullTimes",
+            "value": "[] (optional, per-trial cell from chirp_beating)",
+            "rationale": "If supplied, enables slip-vs-beat-null coincidence tagging; absent => slips still recorded by latency, just not cross-referenced."
+          },
+          {
+            "name": "saveFigs",
+            "value": "false",
+            "rationale": "Off in batch; driver flips on for the one profiled session to emit resid-vs-time overlays under singleTrialSpectrograms/."
+          }
+        ],
+        "pitfalls": [
+          "VACUOUS-TEST TRAP (the spec's #1 anti-bias rule): if f-hat is taken as dphi/dt of the same broadband phase, phiPredInc == phiObsInc and resid == 0 for every trial, making the test always 'single'. The ifSource='ridgePower' assert and the separate-array fhat input exist solely to prevent this — do not 'simplify' by deriving f-hat inside the function.",
+          "UNWRAP ACROSS EDGES: unwrap must run on the full padded epoch before trimming. Unwrapping a trimmed segment can insert a spurious 2*pi jump at the boundary, corrupting phiObsInc of the first sub-window.",
+          "CUMULATIVE IF-BIAS (long-burst): integrating a biased ridge IF over a multi-second window wraps phase (0.5 Hz over 3 s = 1.5 cycles). Never compute a single increment across the whole transition; the sub-window tiling is mandatory, not cosmetic.",
+          "RIDGE/PHASE GRID MISMATCH: fhat is sampled on ridgeT (often coarser than fs); interp1 onto the epoch sample grid before trapz, otherwise phiPredInc is integrated on the wrong abscissa.",
+          "SHAPE-BASED REJECTION (rule b): do not drop 'messy' or non-chirp-looking trials. Only the existence gate is allowed. Removing dispersed-residual trials would manufacture a single-oscillator result.",
+          "P-VALUE MULTIPLICATION (spec 0.2): this test is asymmetric and shares data with the other tests. Report perm_z / vtest_p as ONE element of the per-session verdict vector; do NOT combine it multiplicatively with beating/spatial p-values.",
+          "n-DEPENDENCE: raw Rayleigh z scales with n(sub-windows), which differs across sessions (variable burst length). Use the per-session permutation perm_z (rotation null) as the session summary fed to the group test, not raw Rayleigh z.",
+          "FIRWS TRANSITION WIDTH: leaving the firws transition band default can pass low-frequency drift into the 'gamma' phase; demean+detrend first and verify the realized passband edges on a Phase-0 synthetic single chirp."
+        ],
+        "mapsToHypothesis": "POSITIVE (strong-for-SINGLE): residuals concentrated near 0 in EVERY sub-window -> high session Rbar, significant V-test against 0, large positive perm_z; at group level a significant one-sample t of perm_z>0 plus group V-test against 0 => 'single' contribution to the verdict vector. NULL (dispersed residuals, perm_z ~ 0, n.s. V-test): INCONCLUSIVE, never 'dual' — dispersion is also produced by a single oscillator with variable timing/noise (spec table, 0.2). DUAL SIGNATURE (supporting, not from dispersion alone): phase slips LOCALIZED to beat nulls (slipLatencies coinciding with chirp_beating null times) lean dual; without that localization a null reads as inconclusive. UNDECIDABLE: mixed across sub-windows/trials, or the regime is Phase-0-flagged undecidable -> contributes 'undecidable' to the per-session verdict (spec 0.2/8.1). This test alone can confirm single but can never, by itself, confirm dual.",
+        "outputs": [
+          "sub.phaseTest.params = { f_hi, f_lo, subWinLen (=subWinSec), filterSpec (=[25 58]+firws), ifSource='ridgePower' } (spec 7.1)",
+          "sub.phaseTest.trial(i) = { subWinResid[ (rad, per sub-window) ], meanRbar (per-trial circular resultant length), slipLatencies[ (s, sub-window centers exceeding slipThresh; flagged if coincident with beatNull) ], included (logical; reason recorded when false: noRidge/tooShort/noResponse) } (spec 7.1)",
+          "sub.phaseTest.summary = { nUsed (# included trials), Rbar (pooled over all sub-windows), rayleigh_z, rayleigh_p, vtest_p_vs0 (V-test against mu0=0), perm_z (rotation-null z, the n-robust session summary fed to group t-test), perm_p } (spec 7.1)",
+          "Per-trial figure hook (when cfg.saveFigs): resid-vs-sub-window-time overlay saved as sub-<sessID>_ch-<chi>_trial-<NNN>_phase.png under <id>/singleTrialSpectrograms/ (spec 2.5)"
+        ]
+      },
+      {
+        "component": "chirp_beat_test.m / chirp_temporal_decoup.m / chirp_spatial.m (cueTask, fs=500). Three new functions under helperFuncs\\. Designed against spec sections 6.6 (envelope beating), 6.9 (temporal decoupling), 6.8 (spatial profile), output contract 7.1, anti-bias rules (a)-(e). Engines: nfaslt(input[buf x samp],Fs,[flo fhi],Nf,c1,[olo ohi],mult)->POWER[F x T]; phase/envelope from hilbert() of ft_preproc_bandpassfilter('firws',25-58). Channel selection by contains(label,'macBP'), never row index. Verdicts ASYMMETRIC: beat+ => dual, spatial-dissimilar => dual, decoupled latency => leans dual; nulls inconclusive; mixed => 'undecidable'.",
+        "functionSignature": "[beat, dec, spat] from three functions:\n1) function beat = chirp_beat_test(bb, env, ridge, fs, cfg)  % bb=broadband-gamma epochs[nSamp x nTrial] (25-58 FIR), env=abs(hilbert(bb)) precomputed or []=> compute internally; ridge=per-trial struct array with .transitionWin .fhat (for coexistWin/anchors); cfg has fBeat anchor (|f_hi-f_lo|), envFitOrder, hpCutoff(<=3 or NaN), baselineWin, matchedPowerWin, surrogateSpec, minBeatCycles\n2) function dec = chirp_temporal_decoup(tfr, freqs, times, ridge, fHi, fLo, cfg)  % tfr=per-trial FASLT power[F x T x nTrial] (or cell), freqs/times axes, fHi/fLo anchors, cfg.band(+-Hz) .smoothMs\n3) function spat = chirp_spatial(epochMacBP, macLabs, goodMac, contactGeom, fs, fHi, fLo, cfg)  % epochMacBP=[nMacBP x nSamp x nTrial] all macBP* channels, goodMac=logical over macBP passing QC, contactGeom=numeric pair-position/spacing, cfg.fHiBand .fLoBand .earlyWin .lateWin",
+        "steps": [
+          "chirp_beat_test (spec 6.6, rule d): for each trial, take env=abs(hilbert(bb)) restricted to the COEXISTENCE window (ridge.transitionWin extended to full two-component span, NOT the stationary tail). Demean.",
+          "Remove onset/offset SHAPE only: subtract a fitted low-order polynomial (cfg.envFitOrder, default 2-3) — OR the Model-A reconstruction envelope if available. Do NOT high-pass at 10 Hz. If filtering at all, hpCutoff must be < min Df (<=3 Hz); default cfg.hpCutoff=NaN (no HP). resid = env - fittedTrend.",
+          "Spectrum of resid (pwelch or single-window FFT given long window; zero-pad for bin resolution). fBeat anchor = |f_hi - f_lo| from cfg. modSNR = power in fBeat bin / mean(power in flanking bins excluding fBeat +-1 bin). modIndex = peak-to-trough depth of resid normalized by mean env (AM depth at fBeat).",
+          "Require nBeatCycles = (coexistWin duration)*fBeat >= cfg.minBeatCycles (default 2); set included=false and record nBeatCycles if too short (a truncated window cannot masquerade as brief — carry burstTruncated from ridge).",
+          "deepNullPeriodicity: detect deep periodic nulls directly — find local minima of env, test their spacing concentrates at 1/fBeat (resultant length of null-interval phases). Comparable-amplitude dual => deep regular nulls.",
+          "Repeat the SAME resid-spectrum pipeline in the baseline window (pre-sniff) and a matched-power later window; store modSNR_baseline, modSNR_matchedPower as contrasts (beat must exceed both controls to count as dual evidence).",
+          "Surrogates (cfg.surrogateSpec, ~200-1000 per-trial FFT phase-randomization of bb): recompute env-resid spectrum; modSNR significant if > 95th pct of surrogate modSNR at fBeat. Populate sub.beating.trial(i) {fBeat,modSNR,modIndex,nBeatCycles,deepNullPeriodicity,modSNR_baseline,modSNR_matchedPower,included}.",
+          "chirp_temporal_decoup (spec 6.9): per trial build band-limited power envelopes at f_hi and f_lo by integrating tfr power over freqs in [fHi-band,fHi+band] and [fLo-band,fLo+band] (band default +-2-3 Hz), then smooth (cfg.smoothMs).",
+          "Find peak LATENCY of the hi-band envelope (latHi) and lo-band envelope (latLo) within the transition window relative to onset; latDiff=latLo-latHi. Store per trial {latHi,latLo,latDiff,included}. included=false if either band has no suprathreshold peak (existence-only gate, rule b — never shape-based).",
+          "Group/session summary: across included trials corrHiLo = Pearson corr(latHi,latLo); varLatDiff = var(latDiff). Rigid coupling (corr->1, low var) leans single; decoupled (corr below Phase-0 single-chirp calibration, high var) leans dual. Store {corrHiLo,varLatDiff,nUsed}.",
+          "chirp_spatial (spec 6.8, gated): eligibility first — nGoodContacts=sum(goodMac & on-bulb & adequately spaced from contactGeom). eligible = nGoodContacts>=2 (>=3 preferred). Record spatial.eligible,nGoodContacts,contactSpacing ALWAYS, even when ineligible (so group can distinguish 'not assessed' from 'matched' — spec 8.1).",
+          "If eligible: for each good macBP contact and each trial, compute early-high-band power = mean tfr power in fHiBand over earlyWin, and late-low-band power = mean tfr power in fLoBand over lateWin (per-contact FASLT or bandpassed-hilbert power).",
+          "Per trial form profileHi (vector over good contacts of early-hi power) and profileLo (vector of late-lo power); normalize each vector. profileSim = correlation (and cosine) of profileHi vs profileLo across contacts. Two generators => low sim; one oscillator predicts identical early/late topography => high sim.",
+          "Spatial summary: meanProfileSim across trials, nUsed; carry eligible,nGoodContacts,contactSpacing. Note bipolar caveat in a field/comment: a null (high sim) on coarse/few contacts is WEAK dual-against evidence (macBP is itself a spatial high-pass), so geometry travels with the verdict.",
+          "All three return structs shaped to merge into sub.beating / sub.temporalDecoup / sub.spatial (spec 7.1) with .params .trial(i) .summary; each trial row also keyed for the tidy CSVs (session,channel,trial,task,sniffLabel) by the caller."
+        ],
+        "params": [
+          {
+            "name": "cfg.envFitOrder (beat)",
+            "value": "2 or 3",
+            "rationale": "Low-order polynomial removes the gamma burst onset/offset SHAPE (a slow <<Df trend) without touching a 5-10 Hz beat. Spec rule d forbids a 10 Hz HP; a 2nd-3rd order poly is the spec's named alternative."
+          },
+          {
+            "name": "cfg.hpCutoff (beat)",
+            "value": "NaN (no HP); if any, <=3 Hz",
+            "rationale": "Spec rule d: NEVER 10 Hz (would destroy the 5-10 Hz beat). Long window gives ~1/T resolution so a plain detrended spectrum isolates Df; any HP cutoff must be below min Df (3 Hz)."
+          },
+          {
+            "name": "cfg.minBeatCycles (beat)",
+            "value": "2",
+            "rationale": "Spec 6.6/appendix: require >=2 beat cycles in the coexistence window before trusting modSNR; fewer cannot establish periodicity. nBeatCycles = coexistDur*fBeat."
+          },
+          {
+            "name": "cfg.surrogateSpec (beat)",
+            "value": "200-1000 FFT phase-randomizations, 95th pctile",
+            "rationale": "Spec appendix; per-trial phase-randomization preserves power spectrum, destroys phase structure -> null distribution for modSNR at fBeat without assuming Gaussian noise."
+          },
+          {
+            "name": "fBeat anchor (beat)",
+            "value": "|f_hi - f_lo| from subject-average TFR ridge, clamped [27,56]->Df",
+            "rationale": "Spec 6.4: anchors are read once from the subject-average power-TFR ridge; they feed the beat fBeat bin. Df likely 5-10 Hz (spec 0.3)."
+          },
+          {
+            "name": "cfg.band (decoup)",
+            "value": "+-2 to 3 Hz around fHi/fLo",
+            "rationale": "Spec 6.8/appendix spatial-band default reused for the band-limited envelopes; wide enough to capture the component, narrow enough to separate a 5-10 Hz gap."
+          },
+          {
+            "name": "cfg.smoothMs (decoup)",
+            "value": "~30-50 ms",
+            "rationale": "Smooth the band-limited power envelope so peak-latency is robust to single-cycle ripple without blurring the hi-vs-lo latency gap."
+          },
+          {
+            "name": "cfg.earlyWin / cfg.lateWin (spatial)",
+            "value": "early ~20th-pctile, late ~80th-pctile of transition",
+            "rationale": "Spec 6.4 anchor times: f_hi read early, f_lo read late; the spatial bands use the matching early/late windows so hi/lo topographies are read where each dominates."
+          },
+          {
+            "name": "spatial eligibility (spatial)",
+            "value": ">=2 well-separated good macBP (>=3 preferred)",
+            "rationale": "Spec 6.8 gate; recorded as first-class output (eligible,nGoodContacts,contactSpacing) so the group step never conflates 'not assessed' with 'matched' (spec 8.1)."
+          },
+          {
+            "name": "FASLT range/order (shared TFR input)",
+            "value": "20-70 Hz, c1~3, order 3-30, df<=1 Hz",
+            "rationale": "Spec 6.2: pad beyond 25-58 for context; nfaslt returns POWER, so envelope/phase for the beat test come from hilbert() of the bandpassed signal, never from FASLT (key API fact)."
+          }
+        ],
+        "pitfalls": [
+          "BEAT: do NOT high-pass the envelope at 10 Hz (spec rule d) — it annihilates a 5-10 Hz beat. Remove only the onset/offset shape with a low-order poly (or Model-A reconstruction); any filter cutoff < min Df (<=3 Hz).",
+          "BEAT/all: envelope and phase must come from hilbert() of the bandpassed broadband signal. nfaslt returns POWER (magnitude^2, geometric-mean pooled) — taking 'phase' or a clean analytic envelope from FASLT is wrong (key API fact).",
+          "PHASE coupling (sibling test, respect here): never derive f-hat from dphi/dt of the broadband phase; the beat/decoup tests assume f_hi/f_lo come from the power-based ridge (rule a). Anchors clamp to [27,56].",
+          "QC: no shape-based trial rejection anywhere (rule b) — would bias toward 'single'. Only an existence gate (any gamma response) sets included=false; a response-free trial may stay and just add noise.",
+          "BEAT minimum cycles: a truncated coexistence window (O15 next-onset cut, burstTruncated) must NOT be scored as a genuinely brief overlap — carry burstTruncated and require nBeatCycles>=2 honestly (spec 2.3).",
+          "SPATIAL: always record eligible/nGoodContacts/contactSpacing even when ineligible, so group logic separates 'not assessed' from 'profiles matched' (spec 8.1). Never average absent-spatial with negative-spatial.",
+          "SPATIAL bipolar caveat: macBP referencing is itself a spatial high-pass; a high-similarity (null) result on few/coarse contacts is WEAK against dual — geometry must travel with the verdict (spec 6.8).",
+          "ASYMMETRY: beat-absent / sim-high / latency-coupled are INCONCLUSIVE, not proof of single. Do not multiply these p-values as independent (spec 0.2) — return per-test directional evidence for the verdict vector.",
+          "Channels by label (contains(...,'macBP')), never fixed row index — montages vary by session (CLAUDE.md, spec 2.2). Scalp/EEG rows 1-32 are EXCLUDED from spatial (spec 6.8).",
+          "Epoch on behDat.finalOnset not sniffOnset; pad beyond [-1,+3] s for edge-free filtering/Hilbert then trim (spec 2.3); behDat is a TABLE — index by name."
+        ],
+        "mapsToHypothesis": "BEAT (chirp_beat_test): a clean beat at fBeat=|f_hi-f_lo| with modSNR > surrogate-95th AND > baseline/matched-power contrasts AND >=2 cycles AND deep periodic nulls => STRONG for DUAL (two coexisting components). Absent beat => INCONCLUSIVE (a single oscillator also has slow AM); never read as 'single'. SPATIAL (chirp_spatial): on an ELIGIBLE session, low hi-vs-lo profileSim (below the within-component split-half ceiling) => STRONG for DUAL (distinct hi/lo topographies). High sim => INCONCLUSIVE (one generator, OR probe/bipolar can't resolve — weak given the bipolar high-pass caveat). Ineligible => 'spatial: not assessed' (distinct state, never folded in). DECOUPLE (chirp_temporal_decoup): corr(latHi,latLo) below the Phase-0 single-chirp calibration and var(latDiff) above it => LEANS DUAL; rigid coupling (corr~1, low var) => leans single. Per-session these three feed the verdict vector with phase/chirplet: defensible single = matched spatial + rigid coupling + no beat (+ concentrated phase + single trajectory); defensible dual = beat present + distinct spatial + decoupled latency (+ two parallel trajectories); mixed or undecidable-regime => report 'undecidable' (spec 0.2, 8.1).",
+        "outputs": [
+          "sub.beating.params {coexistWin, envFitOrder, hpCutoff(<=3 or none), surrogateSpec}",
+          "sub.beating.trial(i) {fBeat, modSNR, modIndex, nBeatCycles, deepNullPeriodicity, modSNR_baseline, modSNR_matchedPower, included}",
+          "sub.beating.summary {nUsed, medianLogSNR, fracSig, sepBeatSlope}",
+          "sub.temporalDecoup.trial(i) {latHi, latLo, latDiff, included}",
+          "sub.temporalDecoup.summary {corrHiLo, varLatDiff, nUsed}",
+          "sub.spatial.params {fHiBand, fLoBand, earlyWin, lateWin}",
+          "sub.spatial.trial(i) {profileHi[over macBP], profileLo[over macBP], profileSim, included}",
+          "sub.spatial.summary {eligible(bool), nGoodContacts, contactSpacing, meanProfileSim, nUsed}"
+        ]
+      },
+      {
+        "component": "MPACT chirplet trajectory-geometry discriminator (spec 6.7) — chirp_chirplet.m",
+        "functionSignature": "function out = chirp_chirplet(seg, fs, transWin, cfg)\n% seg      : real 1xN broadband-gamma epoch (25-58 Hz FIR-bandpassed, demeaned/detrended), fs=500\n% transWin : [t0 t1] in seconds rel. epoch start = the TRANSITION window from ridge (spec 6.4/6.0); chirplet runs ONLY here\n% cfg      : struct of params (see params[]); honors cfg.surrSpec, cfg.Q, cfg.c_tol, cfg.Neff_mode etc.\n% out      : per-trial struct -> sub.chirplet.trial(i) fields (spec 7.1)\n% NOTE: call mp_adapt_chirplets DIRECTLY (NOT mp_act_signal: it pops a figure; NOT mle_adapt_chirplets: latent EM bug).",
+        "steps": [
+          "PATH SETUP (once, by driver not here): addpath(genpath('C:\\Users\\Adam\\Documents\\GitHub\\mpact')); register in setup_chirpAnalysis_paths.m / labPaths block so home (Documents\\GitHub) and lab (G:\\My Drive\\GitHub) resolve identically. chirp_chirplet.m lives in helperFuncs\\.",
+          "INPUT WINDOWING: crop seg to transWin samples idx = round(transWin*fs)+1 (clamp to [1 N]); demean+detrend the crop. Record Ntrans=numel(crop). Guard: if Ntrans < cfg.minTransSamp (default 0.15*fs=75) return out.included=false (transition too short to fit; do NOT fabricate atoms).",
+          "ANALYTIC SIGNAL DECISION: build x = hilbert(crop) and feed the ANALYTIC signal to mp_adapt_chirplets (do NOT pass the raw real signal). Rationale: mp_chirplet atoms are complex one-sided (fc in [0,2pi] rad/sample, vub(2)=2*pi); a real signal has +/- frequency images that the MP would fit with mirror-image atoms (negative fc near 2*pi) and spurious cr, corrupting the geometry read. crop is already 25-58 Hz bandpassed so hilbert is clean. (mp_act_signal analytifies internally for exactly this reason; we replicate it but skip its figure + keep the analytic x to bypass the buggy MLE path.)",
+          "FIT: P = mp_adapt_chirplets(x, Q, M, D, i0, radix, 'no', mnits, level, 'RefineAlgorithm','expectmax', 'PType','Oneill'). Q=cfg.Q (default 3 -> allow a curved single sweep to use 2-3 LINKED atoms per rule c; never 0 -> ginput). verbose='no' MANDATORY. P is Q-by-5 O'Neill rows [A tc fc cr d].",
+          "CONVERT EACH ATOM TO PHYSICAL UNITS: tc_s = (P(:,2)-1)/fs + transWin(1) (tc is sample index within crop, 1-based -> seconds rel. epoch). fc_Hz = P(:,3)*fs/(2*pi). chirp_Hz_per_s = P(:,4)*fs^2/(2*pi). sigma_s = P(:,5)/fs (Gaussian std). amp = abs(P(:,1)); phase = angle(P(:,1)). energyFrac per atom = |A_k|^2 / sum(|A_k|^2) (atoms ~orthonormal in make_chirplets).",
+          "ATOM SIGNIFICANCE via phase-randomized surrogates (spec 6.7, rule c uses these for atom keep): generate cfg.nSurr (default 200) FFT-phase-randomized surrogates of crop (preserve magnitude spectrum, randomize phase, enforce conjugate symmetry, ifft -> real, re-hilbert); fit Q=1 chirplet to each; collect surrogate single-atom |A|^2 energyFrac of total signal energy. Keep real atoms whose energyFrac exceeds the 95th percentile of the surrogate distribution. nAtomsSig = count kept. Atoms below threshold are dropped before geometry classification.",
+          "FILTER TO GAMMA-BAND ATOMS: discard kept atoms whose fc_Hz outside [22 62] (out-of-band MP artifacts) before trajectory metric. Sort surviving atoms by tc_s ascending.",
+          "TRAJECTORY-CONNECTIVITY METRIC (rule c: GEOMETRY not count). With nAtomsSig>=2 sorted by tc: for each consecutive pair (j,j+1) compute (a) temporal adjacency/overlap = whether their +/-1*sigma supports touch: gap_s = tc_s(j+1)-tc_s(j); overlapSpan = min(tc+sigma)-max(tc-sigma); (b) freq step df = fc_Hz(j+1)-fc_Hz(j); (c) chirp-sign agreement = sign(chirp_Hz_per_s(j))==sign(chirp_Hz_per_s(j+1)) and both<=0 (downchirp). CHAIN edge exists (single-like link) iff atoms are temporally adjacent (gap_s <= cfg.chainGap, default 1.5*median(sigma_s)) AND freq descends (df < -cfg.dfMin, default -1 Hz) AND chirp rates same sign. PARALLEL edge (dual-like) iff atoms temporally OVERLAP (overlapSpan>0 i.e. coexist) AND |fc difference| > cfg.dualDf (default 3 Hz, the regime min Df) AND both |chirp_Hz_per_s| <= c_tol. trajConnectivity = (#chain edges)/(#chain + #parallel edges) in [0,1] (1=fully chained, 0=fully parallel); store also nChainEdges, nParallelEdges.",
+          "CLASSIFY (single|dual|ambig): SINGLE if nAtomsSig==1 with chirp_Hz_per_s<=-cfg.crMin (one descending atom) OR (nAtomsSig>=2 AND trajConnectivity>=cfg.trajThiSingle (default 0.66) AND no parallel coexisting pair). DUAL if exists >=1 parallel edge: two near-constant-freq (|chirp|<=c_tol) atoms with distinct fc (>dualDf) that temporally COEXIST (overlapSpan>0). AMBIG otherwise (mixed, or atoms neither clearly chained nor clearly parallel, or only 1 atom with |chirp|<crMin i.e. a flat single tone -> cannot distinguish from one of a pair => ambig, report undecidable per rule e).",
+          "STRUCTURAL BIC corroboration (Model-A vs Model-B; spec 6.7, only as corroboration). Model A = REFIT with Q=1, c free -> reconstruct xA=make_chirplets(Ntrans,Pa); errA = norm(x-xA)^2. Model B = REFIT with Q=2 then PROJECT each atom's cr toward 0 if |chirp_Hz_per_s|<=c_tol (enforce near-constant-freq) and require distinct fc; reconstruct xB; errB = norm(x-xB)^2. Neff = number of gamma cycles in window = (mean fc_Hz)*Ntrans/fs (NOT raw samples, rule c). BIC_A = Neff*log(errA/Neff) + kA*log(Neff); BIC_B likewise with kB; kA=5 (1 atom x 5 params), kB=10. dBIC = BIC_A - BIC_B (>0 favors B/dual). Store c1=chirp_Hz_per_s of the Model-A atom (the chirp-reality check; expect <0 for a real downchirp).",
+          "DERIVE f1,f2,tSep,overlap for output: if dual -> f1,f2 = the two parallel atoms' fc_Hz (hi,lo), tSep = tc_s difference, overlap = overlapSpan (s). If single -> f1=fc of first(early/high) atom, f2=fc of last(late/low) atom along the chain, tSep=span, overlap=NaN. Always store full atoms matrix [tc_s fc_Hz chirp_Hz_per_s sigma_s amp phase energyFrac].",
+          "RETURN out struct with all spec-7.1 fields; set out.included=true. The driver loops trials (parfor on lab desktop), preallocates sub.chirplet.trial(i)=out, and computes sub.chirplet.summary across trials (medianC1, fracDownchirp, fracSingleTraj, fracDualTraj)."
+        ],
+        "params": [
+          {
+            "name": "Q",
+            "value": "3",
+            "rationale": "Allow up to 3 atoms so a curved (nonlinear) SINGLE sweep can be traced by 2-3 LINKED linear atoms without forcing the classifier to call it dual; geometry (chaining) not count is the discriminator (rule c, spec 6.7). Q>0 mandatory or mp_adapt_chirplets calls ginput and hangs."
+          },
+          {
+            "name": "M",
+            "value": "64",
+            "rationale": "Newton-Raphson refinement resolution; MPACT default, adequate at fs=500 over a sub-second transition window. No reason to deviate."
+          },
+          {
+            "name": "D",
+            "value": "5",
+            "rationale": "Depth of the Bultan MP dictionary scale decomposition; MPACT default. Controls coarse-grid scale coverage; sigma at burst scales (tens-hundreds ms) is well inside radix^D scales at fs=500."
+          },
+          {
+            "name": "i0",
+            "value": "1",
+            "rationale": "First level to rotate chirplets; MPACT default. Rotation from level 1 lets even short atoms acquire chirp, needed to detect the descending sweep."
+          },
+          {
+            "name": "radix",
+            "value": "2",
+            "rationale": "Scale radix; MPACT default dyadic dictionary. Fine enough given Newton-Raphson refines off the coarse grid."
+          },
+          {
+            "name": "verbose",
+            "value": "'no'",
+            "rationale": "MANDATORY: 'yes'/'vv' print per-atom tables; combined with Q=0 ginput these block an unattended parfor batch. 'no' keeps the lab-desktop run silent."
+          },
+          {
+            "name": "mnits",
+            "value": "5",
+            "rationale": "Max EM refinement iterations; MPACT default. EM (expectmax) refines all atoms jointly each pass; 5 converges on clean band-limited segments. Raise to ~8 in Phase-0 if atom params drift."
+          },
+          {
+            "name": "level",
+            "value": "2",
+            "rationale": "MLE difficulty level (passed through but unused on the expectmax branch we take); leave at default 2."
+          },
+          {
+            "name": "RefineAlgorithm",
+            "value": "'expectmax'",
+            "rationale": "Use EM (em_chirplets) joint refinement — robust and the documented MPEM path. AVOID 'maxlikeliest'/mle_chirplets and the wrapper mle_adapt_chirplets (latent EM bug per shared context)."
+          },
+          {
+            "name": "PType",
+            "value": "'Oneill'",
+            "rationale": "Return atoms in O'Neill [A tc fc cr d] format so the documented conversions fc_Hz=fc*fs/2/pi, chirp_Hz_per_s=cr*fs^2/2/pi apply directly. Cohen format would change the unit map."
+          },
+          {
+            "name": "analyticInput",
+            "value": "true (feed hilbert(crop))",
+            "rationale": "MP atoms are one-sided complex (fc in [0,2pi], vub=2*pi); a real input spawns mirror-frequency atoms that corrupt the trajectory geometry. crop is 25-58 Hz bandpassed so hilbert is clean. Mirrors mp_act_signal's internal analytify, but we keep control to skip its figure and the MLE path."
+          },
+          {
+            "name": "c_tol",
+            "value": "10 Hz/s  (=> |cr| <= 10*2*pi/fs^2 = 2.51e-4 rad/sample^2 at fs=500)",
+            "rationale": "spec Appendix default (small |c|, 10-20 Hz/s). An atom flatter than this counts as near-constant-freq for the Model-B / parallel-pair (dual) test; over a 1-3 s window 10 Hz/s drifts <30 Hz, below the regime, so it reads as a tone not a sweep."
+          },
+          {
+            "name": "crMin",
+            "value": "5 Hz/s (single-atom downchirp threshold)",
+            "rationale": "An atom must descend faster than ~5 Hz/s (lower bound of the likely 5-10 Hz Df over a ~1 s transition) to count as a genuine sweep when classifying a lone atom; below it a single atom is a flat tone => ambig (cannot rule out being one of a dual pair)."
+          },
+          {
+            "name": "dualDf",
+            "value": "3 Hz",
+            "rationale": "Two coexisting near-flat atoms must differ in fc by > 3 Hz (the regime minimum Df, spec 0.3) to be a credible hi/lo dual pair rather than one component split by fit noise."
+          },
+          {
+            "name": "dfMin",
+            "value": "1 Hz",
+            "rationale": "Consecutive chained atoms must step DOWN in fc by > 1 Hz to count as a descending-chain edge (single-like); smaller steps are within fit jitter."
+          },
+          {
+            "name": "chainGap",
+            "value": "1.5 * median(sigma_s) (adaptive)",
+            "rationale": "Two atoms are temporally adjacent (chain) if their centers are within ~1.5 atom-widths; scales with the fitted Gaussian widths rather than a fixed ms so it adapts to burst length."
+          },
+          {
+            "name": "trajThiSingle",
+            "value": "0.66",
+            "rationale": "trajConnectivity (chain/(chain+parallel) edges) >= 0.66 with no coexisting parallel pair => single. Two-thirds-chained tolerates one stray atom in a 3-atom curved sweep."
+          },
+          {
+            "name": "nSurr",
+            "value": "200",
+            "rationale": "spec Appendix (200-1000 phase-randomized surrogates, 95th pctile). 200 gives a stable 95th-percentile energy threshold; bump toward 1000 in Phase-0 if the threshold is noisy. Each surrogate is a cheap Q=1 fit."
+          },
+          {
+            "name": "minTransSamp",
+            "value": "75 (=0.15 s at fs=500)",
+            "rationale": "Below ~150 ms the transition cannot resolve a 5 Hz Df (Rayleigh, spec 0.3) so a chirplet fit is meaningless; return included=false rather than fabricate geometry (rule b: no shape-based selection, but a hard existence/length guard is permitted)."
+          }
+        ],
+        "pitfalls": [
+          "Q=0 => mp_adapt_chirplets calls ginput(1) and BLOCKS forever in a headless parfor batch. ALWAYS pass Q>0 (we use 3).",
+          "Calling mp_act_signal instead of mp_adapt_chirplets pops a figure per trial (show_decomp) — fatal across thousands of trials on the lab desktop. Call mp_adapt_chirplets directly.",
+          "mle_adapt_chirplets / RefineAlgorithm 'maxlikeliest' has a latent EM-branch bug (shared context) — use 'expectmax'.",
+          "UNIT TRAP: tc is a 1-based SAMPLE index within the cropped transition window assuming fs=1, NOT seconds and NOT relative to the epoch. Convert tc_s=(tc-1)/fs+transWin(1). fc is rad/sample (0..2pi) NOT Hz; cr is rad/sample^2. Forgetting the fs^2 in chirp_Hz_per_s=cr*fs^2/2/pi makes chirp rates off by 250000x.",
+          "fc near 2*pi (i.e. ~fs Hz) is a NEGATIVE-frequency mirror atom from feeding a real (not analytic) signal — guard by analytic input + the [22 62] Hz gamma-band atom filter.",
+          "Atom COUNT is NOT the discriminator (rule c): a single nonlinear sweep legitimately needs 2-3 atoms. Classifying on nAtomsSig>=2 => dual would re-introduce the exact single-vs-dual bias the spec forbids. Classify on chain-vs-parallel GEOMETRY (coexistence + flatness), not count.",
+          "BIC must use Neff = number of gamma CYCLES in the window, not raw sample count — oscillatory residuals are autocorrelated and raw-N BIC is wildly overconfident toward more atoms (rule c, spec 6.7).",
+          "Do NOT impose any shape-based trial rejection here (rule b); the only permitted gate is the minTransSamp length/existence guard. Selecting clean-looking chirps biases toward single.",
+          "make_chirplets normalizes each atom (unit norm) and applies a periodization 'PeriodEff' by default; reconstruct with the SAME default ('PeriodEff',true) used internally so errA/errB are consistent with how MP fit them.",
+          "The transition window (NOT the full coexistence/burst window) is the fit domain (spec 6.0): forcing atoms across a long stationary low-freq tail adds spurious flat atoms that the parallel-edge test would misread as a dual second component.",
+          "A lone flat atom (|chirp|<crMin, nAtomsSig==1) must be classified AMBIG, not single — a single constant-frequency tone is indistinguishable from one member of a dual pair on this test (report undecidable, rule e), not evidence for one oscillator."
+        ],
+        "mapsToHypothesis": "\"GEOMETRY, not count (rule c). SINGLE (positive for one-oscillator): significant atoms chain end-to-end into one continuous DESCENDING trajectory (temporally adjacent, fc steps down, chirp rates same negative sign) -> trajConnectivity>=0.66, fracSingleTraj high at group level, and the Model-A chirp c1<0 (real downchirp). DUAL (positive for two-oscillator): >=1 pair of near-constant-frequency atoms (|chirp|<=c_tol) at distinct fc (>dualDf) that TEMPORALLY COEXIST (overlapSpan>0) -> a parallel edge, fracDualTraj high, dBIC>0 favoring Model-B where Phase-0 licenses the structural test. UNDECIDABLE/INCONCLUSIVE (null per rule e): a lone flat atom, mixed chain+parallel edges, or transition too short (included=false) => classification 'ambig'; reported as undecidable, NEVER folded into single or dual. This test is asymmetric (spec 0.2): a clean connected descending chain confirms single; clean coexisting parallel tones confirm dual; everything else is mute. Group adjudication reads fracSingleTraj vs fracDualTraj per session into the verdict vector, not a single p-value.\"",
+        "outputs": [
+          "atoms : Nsig-by-7 matrix [tc_s, fc_Hz, chirp_Hz_per_s, sigma_s, amp, phase, energyFrac] (sub.chirplet.trial(i).atoms)",
+          "nAtomsSig : number of atoms surviving the surrogate-95pct significance + gamma-band filter",
+          "trajConnectivity : chainEdges/(chainEdges+parallelEdges) in [0,1] (1=single-like chain, 0=dual-like parallel)",
+          "classification : 'single' | 'dual' | 'ambig'",
+          "c1 : chirp rate (Hz/s) of the Model-A single free-c atom (the chirp-reality check; <0 = genuine downchirp)",
+          "errA : Model-A residual energy norm^2 (1 atom, free c)",
+          "errB : Model-B residual energy norm^2 (2 near-constant-freq atoms, |c|<=c_tol, distinct fc)",
+          "dBIC : BIC_A - BIC_B with Neff=#gamma cycles (>0 favors dual/Model-B)",
+          "f1 : early/high atom center freq (Hz)",
+          "f2 : late/low atom center freq (Hz)",
+          "tSep : temporal separation of the two relevant atoms (s)",
+          "overlap : coexistence span of the parallel pair (s); NaN for a single chain",
+          "included : logical; false when transition window < minTransSamp (guard, not shape rejection)"
+        ]
+      },
+      {
+        "component": "Phase-0 validation harness (spec 5) — chirp_synth_trial.m (synthesizer) + chirp_phase0_harness.m (sweep driver + per-test sensitivity/specificity/curve emitter), plus the REAL-DATA burst-length measurement (measure_burst_lengths.m). Gates all interpretation of the Phase-1 battery. New files under helperFuncs\\; outputs to a new chirpAnalysis\\phase0\\ dir. Synth signals are pushed through the SAME Phase-1 test functions (phase continuity §6.5, envelope beating §6.6, chirplet geometry §6.7, ridge §6.4, temporal decoupling §6.9) so the harness measures the actual estimators, not re-implementations.",
+        "functionSignature": "[trial, gt] = chirp_synth_trial(family, cfg)  % family in {'singleLin','singleNL','dualIndep','dualLocked'}; cfg has fs, overlapMs, Df, ampRatio, fLo, snrDb, burstMs, padMs, fastDropMs, rngSeed. Returns trial.x [1 x Nsamp] (broadband-gamma signal embedded in pink+white noise at empirical SNR, t=0 at sniff onset) and gt (ground-truth struct: family, isDual logical, fHi, fLo, ifTrue(t), coexistWin [t0 t1] s, transitionWin, envTrue, ampHi, ampLo, phaseHi, phaseLo, nGammaCyclesOverlap).  // SWEEP DRIVER: results = chirp_phase0_harness(sweepCfg)  // sweepCfg has overlapGrid=[50 100 200 500 1000 2000] ms, DfGrid=[3 5 7 10] Hz, ampRatioGrid={[1 1],[2 1],[4 1]}, nTrialsPerCell, families, snrDb (from real data), burstLenSampler (from measure_burst_lengths), testBatteryFcns (handles to the Phase-1 functions), outDir, rngSeed, useLabDesktop. Returns/writes results struct + CSV/PNG deliverables.  // REAL DATA: bl = measure_burst_lengths(chanDat_or_outDat, cfg) -> per-trial burst start/stop/length + cross-trial summary used to set burstLenSampler & snrDb.",
+        "steps": [
+          "chirp_synth_trial — TIME BASE: build t from -padMs..(burstMs+padMs) at fs=500 (pad >= longest FASLT/FIR support so later trim is edge-free; default padMs=600). Sniff onset = t=0. All trial families embed the gamma signal starting at t=0 inside a noise floor that exists across the whole epoch (so pre-onset baseline window for beat control exists).",
+          "chirp_synth_trial family 'singleLin': ONE oscillator, IF(t) linear from fHi=fLo+Df down to fLo over the burst (downchirp, c<0). Signal = ampHi*cos(2*pi*cumtrapz(t,IF)+phi0). This is the canonical true-single. Envelope = logistic onset (rise ~80 ms) * logistic offset at burst end.",
+          "chirp_synth_trial family 'singleNL': ONE oscillator, mildly nonlinear downchirp = fast exponential drop over cfg.fastDropMs (e.g. 300-500 ms) from fHi to near fLo, then a low-frequency plateau at fLo for the remainder (matches spec 5(i): 'fast drop -> low-frequency plateau'). Single connected IF trajectory, monotone non-increasing. This is the family that must be recovered as ONE connected chirplet trajectory even if it needs 2-3 linked atoms (validates geometry-not-count, spec 6.7 / deliverable 3b).",
+          "chirp_synth_trial family 'dualIndep': TWO fixed/slowly-varying tones, fHi=fLo+Df and fLo, with INDEPENDENT random phases (phaseHi, phaseLo drawn iid each trial). Each tone gated by its own logistic on/off envelope; the ON-overlap of the two envelopes spans exactly cfg.overlapMs centered in the burst (hi tone earlier-weighted, lo tone later-weighted, but they COEXIST for overlapMs). Sum = ampHi*cos(2*pi*fHi*t+phaseHi).*envHi + ampLo*cos(2*pi*fLo*t+phaseLo).*envLo. Record coexistWin = the overlap span; nGammaCyclesOverlap = overlapMs/1000 * mean([fHi fLo]). This is the canonical true-dual the beat/spatial/phase tests must catch once overlap >> 1/Df.",
+          "chirp_synth_trial family 'dualLocked': degenerate dual — same as dualIndep but phaseHi/phaseLo are deterministically phase-locked (fixed offset, NOT redrawn per trial). This is the hard case that mimics a chirp; used to map where every test (including phase continuity) goes inconclusive. Small set per spec.",
+          "chirp_synth_trial NOISE & SNR: add colored noise to hit cfg.snrDb where SNR = 10*log10(var(gammaSignal_in_band)/var(noise_in_25-58band)). Use pink (1/f) + white mix so the in-band noise statistics resemble real broadband gamma background; measure noise power inside 25-58 Hz after FIR so the SNR is defined in-band. Default snrDb taken from measure_burst_lengths on real trials (peak gamma power vs pre-onset baseline power, in dB).",
+          "chirp_synth_trial AMP RATIO: ampHi/ampLo = cfg.ampRatio (1:1 -> deepest beat nulls / hardest spatial; 4:1 -> dominant component, beat shallow). For single families ampRatio is ignored (one component) — record NaN so sweep cells for single families are not double-counted.",
+          "chirp_synth_trial GROUND TRUTH: return gt with everything a test needs to be scored without re-deriving: isDual, fHi, fLo, the true IF(t) (for ridge RMSE), coexistWin & transitionWin (so harness can feed the SAME windows the Phase-1 ridge would derive AND a 'cheat' window to separate window-finding error from test error), per-component envelopes, and nGammaCyclesOverlap (feeds Neff for chirplet BIC scoring).",
+          "chirp_phase0_harness SWEEP: triple-nested loop over overlapGrid x DfGrid x ampRatioGrid; inner loop nTrialsPerCell synthetic trials per family. For single families, overlap axis is interpreted as 'transition duration' and ampRatio is fixed/NaN (single families still swept over Df=full sweep extent and burst length so single-specificity is measured across the same regime). Seed RNG per (cell,trial,family) deterministically from rngSeed for reproducibility.",
+          "chirp_phase0_harness RUN BATTERY: push EVERY synthetic trial through the ACTUAL Phase-1 functions via testBatteryFcns handles — ridge extraction (FASLT nfaslt 20-70 Hz then DP ridge), phase continuity (segmented ~150 ms sub-windows, f-hat = power-based ridge IF, NEVER dphi/dt — assert this), envelope beating (no >3 Hz HP, env spectrum over coexistWin, modSNR at |fHi-fLo|), chirplet geometry (MPACT mp_adapt_chirplets verbose='no' Q>0, classify single/dual by trajectory connectivity not atom count), temporal decoupling (per-trial latHi/latLo). Cache the FASLT kernel set across trials within a cell (same fs/freq grid).",
+          "chirp_phase0_harness SCORING (deliverable 1): for each test x each (overlap,Df,ampRatio) cell compute SENSITIVITY = P(test fires its positive call | family is the one it confirms) and SPECIFICITY = P(test stays null | family is the OTHER hypothesis), respecting test asymmetry (spec 0.2): beat & spatial-proxy & decoupling are scored as dual-detectors (positive on dualIndep, must be null on singleLin/singleNL); phase continuity is scored as a single-detector (concentrated residual on single, dispersed on dual). Store as tables indexed by (test, overlap, Df, ampRatio, family).",
+          "chirp_phase0_harness BEAT-MINIMUM-OVERLAP CURVE (deliverable 2): for dualIndep, per Df, find the smallest overlapMs at which >=2 beat cycles are detected AND modSNR exceeds the surrogate 95th pctile in >=X% of trials. Expect recovery once overlapMs >> 1000/Df. Emit beat_min_overlap_vs_Df curve (and its dependence on ampRatio).",
+          "chirp_phase0_harness CHIRPLET SINGLE-BIAS CURVE (deliverable 3): on dualIndep trials, plot fraction classified 'single' (Model-A reflexively winning) vs overlap, per Df — must DROP toward 0 once overlap >> 1/Df (bias gone). Separately, on singleNL trials, confirm fraction classified as ONE connected trajectory stays HIGH even though 2-3 atoms are used (report nAtomsSig distribution alongside trajConnectivity to prove the discriminator is geometry, not count).",
+          "chirp_phase0_harness PHASE-SEGMENTATION CHECK (deliverable 4): on singleLin/singleNL, compare meanRbar of segmented (~150 ms) vs a single t_hi->t_lo increment across the whole transition; confirm segmented stays concentrated (Rbar high) while unsegmented collapses for transitions > ~1 s (cumulative IF-bias wraps). On dualIndep, confirm phase slips localize to beat nulls (cross-correlate per-sub-window residual magnitude with envelope-null times).",
+          "chirp_phase0_harness MINIMUM-COEXISTENCE TABLE (deliverable 5): collapse the sensitivity surfaces into, per test, the minimum overlapMs (per Df, per ampRatio) at which sensitivity>=0.8 & specificity>=0.8. This is the number that bounds the project. Overlay the REAL burst/overlap-length distribution from measure_burst_lengths so each test's teeth-vs-regime is visible at a glance.",
+          "chirp_phase0_harness OUTPUTS: write phase0_sensitivity.csv (one row per test x cell x family), beat_min_overlap.csv, chirplet_bias.csv, phase_segmentation.csv, min_coexistence.csv to outDir=chirpAnalysis\\phase0\\; save PNGs: per-test sensitivity/specificity heatmaps (overlap x Df), beat-minimum-overlap curve, chirplet single-bias curve + singleNL connectivity panel, phase segmented-vs-unsegmented panel, and the min-coexistence-vs-real-burst overlay. Save the full results struct as phase0_results.mat (-v7.3).",
+          "measure_burst_lengths (REAL DATA): epoch the OB bestMac channel around behDat.finalOnset ([-1 +3] s, O15 truncate at next finalOnset and set burstTruncated). Compute smoothed gamma-power TS = movmean(ridgePower or abs(hilbert(25-58 FIR))^2, ~50 ms). Per trial find PEAK in (0,3000] ms. Build cross-trial peak distribution; threshold = 75th percentile of that distribution. Burst START = first up-crossing of threshold, STOP = subsequent down-crossing, searching ONLY (0,3000] ms post-onset. length = stop-start. Return per-trial [start stop length peakLat peakVal burstTruncated] and summary {median, IQR, p90 burst length; median peak gamma SNR in dB -> feeds harness snrDb; for dual-plausible coexistence, also the within-burst time the smoothed power spends in its upper tertile as a proxy ceiling on achievable overlap}.",
+          "measure_burst_lengths CONFIRM-AGAINST-HARNESS: run on a few O15 and cueTask sessions (bestMac), feed median/IQR burst length into chirp_phase0_harness burstLenSampler and median SNR into snrDb, so the synthetic regime matches reality (spec 5 deliverable 5). This closes the loop: the harness specificity/sensitivity tables are then valid for THIS data's regime."
+        ],
+        "params": [
+          {
+            "name": "fs",
+            "value": "500",
+            "rationale": "Fixed by pipeline (spec App.); 2 ms/sample; gamma 25-58 Hz well within Nyquist."
+          },
+          {
+            "name": "overlapGrid (ms)",
+            "value": "[50 100 200 500 1000 2000]",
+            "rationale": "Primary sweep axis = coexistence duration (spec 0.3/5). 50 ms is sub-beat-cycle (hardest); 2000 ms = 10-40 beat cycles (beat must recover). 1/Df ranges 100-333 ms, so the grid straddles the 1/Df boundary where bias vanishes."
+          },
+          {
+            "name": "DfGrid (Hz)",
+            "value": "[3 5 7 10]",
+            "rationale": "Empirical hi/lo gap is ~5-10 Hz (spec 0.3); 3 Hz is the sub-regime stressor (Rayleigh-marginal at short windows), 10 Hz the easy end."
+          },
+          {
+            "name": "ampRatioGrid",
+            "value": "{[1 1],[2 1],[4 1]}",
+            "rationale": "1:1 = deepest beat nulls but hardest spatial/sequential; 4:1 = one component dominates, beat shallow, single-bias strongest. Maps the whole identifiability surface (spec 5)."
+          },
+          {
+            "name": "fLo (Hz)",
+            "value": "30 (default; also sweep 28,35)",
+            "rationale": "Places fHi=fLo+Df inside 25-58 broadband window for all Df, clamped well inside the [27,56] anchor clamp."
+          },
+          {
+            "name": "snrDb",
+            "value": "from measure_burst_lengths (default ~6-10 dB)",
+            "rationale": "Spec 5 requires matching empirical SNR; set in-band (25-58 Hz) from real peak-gamma-vs-baseline so specificity numbers transfer to real data. Never guessed-only."
+          },
+          {
+            "name": "burstMs / burstLenSampler",
+            "value": "sampler from real median/IQR (range ~300-3000 ms)",
+            "rationale": "Spec 5: match REAL burst lengths; long bursts make non-overlap segments resolvable, so the worst case is brief overlap (the overlapGrid low end), not short bursts."
+          },
+          {
+            "name": "padMs",
+            "value": "600",
+            "rationale": ">= longest FASLT wavelet half-support + FIR group delay at 25 Hz so post-filter/TFR trim to [-1,+3] s is edge-free (mirrors Phase-1 'pad beyond then trim')."
+          },
+          {
+            "name": "fastDropMs (singleNL)",
+            "value": "400",
+            "rationale": "A 3 s sweep is unlikely perfectly linear (spec 5(i)); fast exp drop then plateau is the realistic single shape that forces 2-3 linked atoms — the geometry-not-count stressor."
+          },
+          {
+            "name": "nTrialsPerCell",
+            "value": "60 (>=40, match real 40 cued/session)",
+            "rationale": "Enough to estimate sensitivity/specificity to ~+-0.06 at p~0.8 and to drive the cross-trial decoupling correlation; mirrors real per-session trial count."
+          },
+          {
+            "name": "phase subWinLen",
+            "value": "150 ms",
+            "rationale": "Spec 6.5/App: ~4-8 gamma cycles, short enough that integrated IF-bias << 1 cycle; harness validates this exact value vs the unsegmented control."
+          },
+          {
+            "name": "FASLT range / order",
+            "value": "20-70 Hz, c1~3, order 3-30, df<=1 Hz",
+            "rationale": "Spec 6.2 / App; pad context beyond 25-58; identical kernel set cached across trials in a cell so the harness exercises the real TFR estimator."
+          },
+          {
+            "name": "beat HP cutoff",
+            "value": "none (or <=3 Hz)",
+            "rationale": "Spec 6.6 anti-bias rule (d): a 10 Hz HP would destroy a 5-10 Hz beat; cutoff must be < min Df. Harness asserts the test obeys this."
+          },
+          {
+            "name": "chirplet Q / verbose / Neff",
+            "value": "Q>0 (e.g. 4), verbose='no', Neff=#gamma cycles",
+            "rationale": "Q=0 calls ginput (KEY API FACT); verbose='no' mandatory; structural BIC uses Neff=cycles not samples (spec 6.7 anti-bias rule c). Use mp_adapt_chirplets / mp_act_signal (mle_adapt_chirplets EM branch has a latent bug)."
+          },
+          {
+            "name": "surrogates",
+            "value": "200-1000 FFT phase-randomized, 95th pctile",
+            "rationale": "Spec App / 6.4/6.7; per-trial null for ridge-2 energy, atom significance, beat modSNR threshold."
+          },
+          {
+            "name": "rngSeed",
+            "value": "fixed (e.g. 20260629)",
+            "rationale": "Deterministic per-(cell,trial,family) seeding so sweep is reproducible and re-runnable on lab desktop without drift."
+          }
+        ],
+        "pitfalls": [
+          "dphi/dt CONTAMINATION (spec anti-bias a): if the phase test's f-hat is taken from the broadband Hilbert phase derivative instead of the power-based ridge, the residual is identically 0 and BOTH the test and the harness scoring become vacuous (single-detector reports 100% sensitivity for free). The harness MUST call the same phase-test function the real pipeline uses and assert ifSource=='ridgePower'.",
+          "SHAPE-BASED SELECTION leaking in (spec anti-bias b): synth trials must NOT be filtered for 'clean' beats/chirps before scoring — that would inflate specificity. Only the optional existence check is allowed; a response-free synthetic trial just adds noise.",
+          "BEAT HP at 10 Hz (anti-bias d): a 10 Hz envelope high-pass annihilates a 5-10 Hz beat, so the harness would falsely report the beat test as insensitive at every overlap. Confirm cutoff is none or <=3 Hz and remove onset/offset shape with a LOW-ORDER polynomial (or Model-A reconstruction), not a high-pass.",
+          "CHIRPLET count-vs-geometry confusion (anti-bias c): scoring 'dual' as 'nAtoms>=2' will mislabel the singleNL family (which legitimately needs 2-3 linked atoms) as dual, faking a specificity failure. Score on trajectory CONNECTIVITY (centers chain end-to-end, chirp signs consistent), and use Neff=#cycles for any BIC, never raw sample count (raw-N BIC is wildly overconfident on autocorrelated oscillatory residuals).",
+          "mle_adapt_chirplets EM bug (KEY API FACT): do not call it; use mp_adapt_chirplets / mp_act_signal. Q=0 silently calls ginput and HANGS a headless/WMI-detached MATLAB; always pass Q>0 and verbose='no'.",
+          "FASLT output is POWER, not analytic (KEY API FACT): phase and envelope for the phase/beat tests must come from hilbert() of the 25-58 FIR-bandpassed signal, never from nfaslt. The harness must build the analytic signal the same way the real pipeline does, or it validates the wrong estimator.",
+          "EDGE EFFECTS: synth padMs too small -> FASLT/FIR border artifacts at window edges inflate ridge RMSE and fake phase dispersion. Pad >= longest wavelet half-support + FIR group delay, then trim to [-1,+3] s before any test reads the window — mirror Phase-1 exactly.",
+          "UNDECIDABLE not reported (spec 0.2/0.5/e): the dualLocked degenerate family and short-overlap/small-Df cells WILL be inconclusive for every test; the harness must label these cells 'undecidable/no-teeth' rather than forcing a single/dual call, and these cells define the regime where real-data verdicts must read 'undecidable'.",
+          "WINDOW-FINDING vs TEST error conflation: if the harness only feeds ridge-derived windows, a ridge failure looks like a test failure. Score each test twice — with ground-truth coexistWin/transitionWin (oracle window) AND with the pipeline-derived window — so the deliverables separate estimator error from window error.",
+          "SNR mismatch: defining SNR broadband instead of in-band (25-58 Hz) makes the synthetic noise floor wrong and the sensitivity tables non-transferable. Define SNR after the FIR, and source it from measure_burst_lengths on real trials, not a guess.",
+          "SINGLE-family ampRatio double-counting: single families have one component; sweeping them over ampRatioGrid would triple-count identical trials and bias the aggregate. Fix ampRatio=NaN for single families and de-duplicate in scoring."
+        ],
+        "mapsToHypothesis": "\"The harness produces NO single/dual verdict on real data — it produces the LICENSE to interpret Phase-1 on real data. A positive result = a (test, overlap, Df, ampRatio) cell where sensitivity>=0.8 AND specificity>=0.8: in that regime the test's positive call is trustworthy (beat firing -> reads as evidence FOR dual; phase residual concentrated -> reads as evidence FOR single). A null/failure cell = the test has no teeth there, so on real trials whose measured overlap/Df fall in that cell the test contributes 'inconclusive', NEVER a default to single or dual. The min-coexistence table cross-referenced with the real burst/overlap distribution (measure_burst_lengths) decides, per test, whether the real regime is one where that test can speak at all; where the real overlap sits below every test's minimum (or in the dualLocked-like degenerate zone), the regime itself is marked UNDECIDABLE and Phase-3 must report undecidable. Concretely: confirming the beat-minimum-overlap recovery and the disappearance of the chirplet single-bias once overlap>>1/Df is what permits reading a real beat as dual and a real single-trajectory as single; failing to confirm them voids those reads.\"",
+        "outputs": [
+          "phase0_results.mat (-v7.3): full results struct {sweepCfg, perCell test outcomes, ground truth, sensitivity/specificity tables, all curves, real-data calibration used} — the auditable record gating interpretation.",
+          "phase0_sensitivity.csv: one row per (test, family, overlapMs, Df, ampRatio) with sensitivity, specificity, nTrials, positiveCallRate — maps directly onto spec 7.x asymmetric-test reading and the 0.2 verdict logic.",
+          "beat_min_overlap.csv + curve PNG: minimum overlapMs for >=2 detected beat cycles & modSNR>surrogate, per Df (x ampRatio) — spec 5 deliverable 2; gates which real sessions the beat test may speak on (Phase-3 §8 beat gate).",
+          "chirplet_bias.csv + curve PNG: fraction-classified-single on true-dual vs overlap (must drop past 1/Df) and singleNL one-connected-trajectory fraction with nAtomsSig distribution — spec 5 deliverable 3 (geometry-not-count proof).",
+          "phase_segmentation.csv + panel PNG: segmented vs unsegmented meanRbar on single families, and slip-localization-at-beat-nulls metric on dual — spec 5 deliverable 4 (validates the 150 ms sub-window correction).",
+          "min_coexistence.csv + real-burst overlay PNG: per-test minimum coexistence for sens&spec>=0.8, overlaid on the real burst/overlap-length distribution — spec 5 deliverable 5; the number that bounds the project and flags the undecidable regime.",
+          "burst_lengths_<task>_<sessID>.csv (from measure_burst_lengths): per-trial {start, stop, length, peakLat, peakVal, burstTruncated} + session summary {medianLen, IQR, p90, medianGammaSNR_dB, upperTertileDwellMs} — feeds burstLenSampler/snrDb back into the harness and confirms the real regime against the sweep.",
+          "Console/log assertions: hard checks that ifSource=='ridgePower' (not dphi/dt), beat HP cutoff<=3 Hz or none, chirplet Q>0 & verbose='no' & Neff='cycles' — fail loud (spec: prefer strict over flexible) so an anti-bias violation cannot silently pass."
+        ]
+      }
+    ],
+    "critic": {
+      "risks": [
+        {
+          "component": "chirp_tfr_faslt vs all consumers — pad/trim contract",
+          "risk": "nfaslt does its OWN internal zero-padding (computed from the largest wavelet half-support at 20 Hz, ~hundreds of samples) and returns [Nf x Npoints] at the SAME length as input via 'same' convolution. The designs ALSO require an upstream epoch pad ('pad beyond [-1,+3]s then trim trimSamp'). If chirp_tfr_faslt trims trimSamp off the FASLT output assuming the epoch pad is the only edge protection, the two pads are conflated: trimSamp is the EPOCH pad (chosen so [-1,3] is clean), but nfaslt's internal pad already absorbs wavelet edge effects within the supplied buffer. The real risk is the REVERSE: the spec's ~600ms epoch pad must be >= the longest wavelet half-support at flo=20Hz (with c1=3 the 20Hz Morlet half-support at 2.5 SD is ~3*0.5*(1/20)/2.5*... ≈ hundreds of ms), or the ridge band 25-58 still sees curvature/taper at the trim boundary. Per nfaslt cxmorlet: wl ≈ 6*sd*Fs samples, sd=(Nc/2)/Fc/2.5; at 25 Hz with order up to 30 (Nc=90), sd≈0.72s, half-support ≈2.16s — FAR exceeds padMs=600. The high-order superlets at the LOW end of the ridge band have multi-second support; a 600ms pad is insufficient and the ridge near transition onset will be biased by edge taper.",
+          "fix": "Set epoch padMs from the ACTUAL max wavelet half-support: compute max over the bank of fix(numel(wavelet)/2)/fs after building the cache, and require padMs >= that (likely ~2.2 s at 25 Hz / order 30, not 600 ms). Either raise padMs to ~2.5 s or cap the adaptive order at the low ridge-band edge (e.g. olo→ohi schedule so 25 Hz uses order ~3-8, not 30). Document that nfaslt's internal pad protects the SUPPLIED buffer but the analyst-facing [-1,3] window still needs the epoch pad >= wavelet half-support. Verify in Phase 0 that ridgePower at tStart is flat for a pure tone.",
+          "severity": "high"
+        },
+        {
+          "component": "chirp_ridge anchors vs chirp_phase_test transition window (integration mismatch)",
+          "risk": "chirp_ridge derives transitionWin PER TRIAL from each trial's noisy single-trial ridge (movmedian smoothing of fhat, crossing f_hi-1Hz to f_lo+1Hz). chirp_ridge_anchors derives f_hi/f_lo ONCE from the subject-average meanPower ridge, clamped [27,56], and explicitly INWARD-biased by onset jitter. The phase test consumes BOTH a per-trial transWin AND (via cfg) the subject-average f_hi/f_lo. If the inward-biased average anchors are used to DEFINE per-trial crossing times (tStart=first time fhat<f_hi-1), then on a trial whose true f_hi exceeds the inward-biased average f_hi, tStart is set too late (or never triggers) and the transition window is truncated or empty — biasing the phase test toward FEWER sub-windows on exactly the high-amplitude trials, and silently dropping trials (included=false, reason=tooShort). This couples anchor bias into per-trial inclusion, an uncontrolled selection effect.",
+          "fix": "Decouple: derive each trial's transitionWin SOLELY from that trial's own smoothed fhat extrema (its own max/plateau), NOT from the subject-average anchors. Reserve the clamped average f_hi/f_lo for the THREE uses the spec lists (phase crossing-time ANNOTATION, spatial band centers, figure labels) — never as the per-trial window gate. Add an explicit assert that transitionWin derivation does not read cfg.f_hi/f_lo.",
+          "severity": "high"
+        },
+        {
+          "component": "chirp_phase_test ifSource guard — necessary but insufficient",
+          "risk": "The ifSource=='ridgePower' literal assert prevents the obvious dphi/dt wiring, but a subtler vacuity remains: the PRIMARY ridge fhat is the MAX-energy path of the SAME broadband signal whose Hilbert phase is phiObs. For a clean single oscillator these are near-identical by construction, so a concentrated residual is partly tautological — the test's POWER to discriminate comes only from cases where the ridge and the broadband phase DIVERGE (i.e., true dual / beating). The asymmetric reading (concentrated=single) is therefore only meaningful relative to the permutation null, AND only if the ridge is not itself a smoothed copy of dphi/dt. With NumFrequencyBins~2 and penalty~1, the ridge IS a smoothed energy path, which is acceptable, but the Phase-0 harness MUST verify on dualIndep trials that the residual actually DISPERSES (specificity), not just that singleLin concentrates (sensitivity). If specificity on dualIndep is not demonstrated, the test is vacuous in the discriminating direction even with the guard.",
+          "fix": "In Phase 0, score chirp_phase_test on dualIndep AND dualLocked families and REQUIRE specificity>=0.8 (residual dispersed, perm_z~0) before the phase test may contribute 'single' to any real verdict. Document perm_z's null is the rotation of WITHIN-trial residual structure — confirm the rotation preserves the per-trial subWinResid vector length so n-dependence is truly absorbed. Treat phase-test 'single' as licensed ONLY in (overlap,Df) cells where Phase-0 specificity passed.",
+          "severity": "high"
+        },
+        {
+          "component": "chirp_beat_test / chirp_temporal_decoup / chirp_spatial — power-vs-amplitude envelope inconsistency",
+          "risk": "The beat test builds env=abs(hilbert(bb)) — an AMPLITUDE envelope. The temporal-decoupling and spatial tests build band-limited envelopes by integrating FASLT POWER over [fHi±band]/[fLo±band]. A beat at fBeat=|f_hi-f_lo| appears at fBeat in the AMPLITUDE envelope but at fBeat (and 2*fBeat from the squaring) in the POWER envelope, and modIndex/modSNR scales differ (power roughly doubles the modulation depth and shifts spectral content). If decoupling/spatial latency peaks are read off POWER envelopes while beat is read off AMPLITUDE, the three tests are not on a common footing and Phase-0 calibration of one does not transfer to the others. Worse, the band-limited POWER envelope at fHi from FASLT is geometric-mean-pooled across superlet orders — it is NOT a clean linear power and its AM depth is distorted, contradicting the KEY API FACT that envelope must come from hilbert() of the bandpassed signal.",
+          "fix": "Standardize: derive ALL envelopes (beat, decoupling band-limited, spatial band powers) from hilbert() of NARROW FIR-bandpassed signals (broadband 25-58 for beat; [fHi-band,fHi+band] and [fLo-band,fLo+band] FIR for the band-limited ones), squaring to power only where 'power' is explicitly wanted and documenting amplitude-vs-power per test. Do NOT take band-limited envelopes from FASLT power for the latency/spatial peaks. Reserve FASLT power strictly for the spectrogram display (6.3), ridge tracking, and ridge-power statistics. Add one cfg.envDomain field ('amplitude'|'power') recorded per test so Phase-0 sensitivity tables are interpretable.",
+          "severity": "high"
+        },
+        {
+          "component": "chirp_spatial eligibility — undefined 'on-bulb' / geometry inputs",
+          "risk": "chirp_spatial requires goodMac (QC mask over macBP), contactGeom (numeric pair-position/spacing), and an 'on-bulb' filter to count nGoodContacts. But the codebase selects the OB channel via FOOOF gamma-peak ('bestMac' in cue_fooof_macBP.m), NOT via chanType or any bulb-location/geometry table — and the spec itself lists 'OB contact identification idiom' and 'contact geometry/spacing' as UNCONFIRMED open items. There is currently NO source for contactGeom or an on-bulb membership test. As designed, chirp_spatial cannot compute its eligibility gate or the bipolar-spacing caveat, so it will either error or silently treat all macBP as on-bulb/adequately-spaced — collapsing the 'not assessed' vs 'matched' distinction that spec 8.1 makes load-bearing.",
+          "fix": "Block the spatial build behind resolving the OB-contact/geometry source FIRST (it is a stated user-confirm item). Until contactGeom exists, chirp_spatial must set eligible=false with reason='geometryUnknown' for ALL sessions (never default to eligible), so the group step correctly reads 'spatial: not assessed' everywhere rather than fabricating matched profiles. Single-channel battery (which carries the no-spatial participants per spec §4) must be fully functional without it. Add nGoodContacts/contactSpacing as first-class outputs even when geometryUnknown.",
+          "severity": "high"
+        },
+        {
+          "component": "chirp_beat_test surrogates vs chirp_ridge surrogates vs chirplet surrogates — cost and consistency",
+          "risk": "Three independent surrogate procedures (ridge-2 energy, beat modSNR, chirplet atom energy) each generate 200-1000 per-trial FFT phase-randomized surrogates and push them through FASLT (ridge) or fits (chirplet). With 40 cue trials x ~35 sessions x 3 procedures x up to 1000 surrogates x FASLT kernel rebuild, this is the batch bottleneck; if any procedure forgets the kernel cache (component-1 flags this only for ridge) the runtime is multiplied. Also: the THREE surrogate sets must use the SAME phase-randomization recipe (preserve magnitude spectrum, enforce conjugate symmetry → real, re-hilbert for analytic consumers) or their 95th-percentile thresholds are not mutually comparable, and a trial deemed beat-significant under one recipe but ridge-insignificant under another produces an incoherent verdict vector.",
+          "fix": "Single shared surrogate generator chirp_surrogates(bb, nSurr, rngSeed) returning the real phase-randomized time series; each test re-hilberts/re-FASLTs as needed but draws from the SAME surrogate signals per trial (same rngSeed → identical surrogate set across tests for a given trial). Share the cached FASLT kernel bank (keyed on fs,flo,fhi,Nf,c1,olo,ohi,mult) across ridge AND any FASLT-based surrogate path. Fix nSurr=200 for the batch, 1000 only for the one profiled Phase-0 session, recorded in cfg.",
+          "severity": "medium"
+        },
+        {
+          "component": "chirp_chirplet analytic-input reconstruction for errA/errB BIC",
+          "risk": "The fit feeds hilbert(crop) (analytic, complex) to mp_adapt_chirplets and reconstructs with make_chirplets(N,P,'PeriodEff',true). errA=norm(x-xA)^2 with x analytic. But the Neff=#gamma cycles BIC and the dBIC sign depend on errA/errB being on the analytic signal consistently — and make_chirplets default PeriodEff=true periodizes with rep=5 and unit-normalizes each atom, while em_chirplets (the fit) ALSO uses PeriodEff=true (confirmed). The risk is the dBIC structural test is only LICENSED where Phase-0 says so, yet the design computes it unconditionally; on a true-single nonlinear sweep forced into Model-B (2 flat atoms), errB can be spuriously low (2 atoms fit anything better) and dBIC>0 even though geometry says single. dBIC is a count-flavored statistic sneaking back in.",
+          "fix": "Compute dBIC but GATE its interpretation exactly as spec 6.7 says ('only as corroboration', 'where Phase 0 licenses it'). The PRIMARY chirplet output must be trajConnectivity/classification (geometry), and the driver must NOT let dBIC override a 'single' geometry call. In Phase 0, verify on singleNL that dBIC does NOT favor Model-B (specificity); if it does at the real overlap regime, drop dBIC from the verdict entirely. Confirm errA/errB both computed on the analytic x with identical PeriodEff=true.",
+          "severity": "medium"
+        },
+        {
+          "component": "Phase-0 harness ground-truth window vs pipeline-derived window scoring",
+          "risk": "If the harness feeds only ridge-derived transition/coexistence windows to the tests, a ridge-extraction failure (penalty mis-calibration, edge bias) is indistinguishable from a test failure, and the min-coexistence table that BOUNDS the whole project will be pessimistic for the wrong reason. Component-5 names this but the per-test scoring tables (phase0_sensitivity.csv keyed on test x cell x family) do not obviously carry the oracle-vs-derived axis.",
+          "fix": "Add a windowSource column ('oracle'|'pipeline') to phase0_sensitivity.csv and run every test TWICE per trial (ground-truth coexistWin/transitionWin from gt, and pipeline-derived). Report both surfaces; the gap is the window-finding error budget. The project-bounding min-coexistence number must be reported for BOTH so the user sees whether ridge tracking or the test itself is the limiter.",
+          "severity": "medium"
+        },
+        {
+          "component": "chirp_ridge powerDipStat flank definition vs transition window",
+          "risk": "powerDipStat = min(ridgePower in transitionWin) / mean(flanking maxima). Flanks are ~150ms windows just before tStart and after tEnd. But tStart/tEnd are derived from fhat crossings, and the PRE-transition flank (before tStart) may fall in the pre-onset BASELINE where gamma is absent → flank max ~0 → ratio explodes → false 'no dip' (reads single) OR div-by-0. Component-1 flags the div-by-0 but the deeper issue is the pre-transition flank for a sniff-locked burst that RISES at onset has no high-gamma plateau before the descent begins, so a genuine sequential handover's dip cannot be normalized against a pre-flank that never had power.",
+          "fix": "Define flanks RELATIVE TO THE BURST ENVELOPE, not the transition crossings: pre-flank = the first ~150ms where ridgePower exceeds a burst-present threshold (post-onset gamma rise), post-flank = last ~150ms still above threshold before burst decay. Guard: if either flank max < burstThreshold, set powerDipStat=NaN and mark not-included for the dip read (do NOT let it read as single). Validate the statistic only on Phase-0 dualIndep (true handover) vs singleLin (no dip).",
+          "severity": "medium"
+        },
+        {
+          "component": "Cross-component transition vs coexistence window naming",
+          "risk": "Phase and chirplet use transitionWin (frequency-changing span, excludes stationary tail). Beat uses coexistWin (full two-component overlap span). chirp_ridge outputs transitionWin per trial and a separate coexistWin; chirp_temporal_decoup finds latencies 'within the transition window'; chirp_spatial uses earlyWin/lateWin at 20th/80th transition percentiles. If any consumer silently substitutes one window for the other (e.g. beat reads transitionWin instead of coexistWin), it will undercount beat cycles in a long overlap with a stationary tail → biases beat toward 'not enough cycles' → inconclusive → unwarranted lean to single. The two windows are genuinely different and must both be plumbed.",
+          "fix": "chirp_ridge must emit BOTH transitionWin and coexistWin per trial as named fields; every downstream function takes its window as an explicit named argument (transWin vs coexistWin) — never a generic 'win'. Add asserts that beat receives coexistWin and phase/chirplet receive transitionWin. Document in the unified config which test consumes which.",
+          "severity": "medium"
+        },
+        {
+          "component": "chirp_phase_test slip-vs-beat-null cross-reference creates a hidden p-value coupling",
+          "risk": "The phase test records whether slips coincide with chirp_beating's beatNullTimes and treats coincidence as 'leans dual'. This reuses the beat test's output INSIDE the phase test, so the two tests are no longer independent views — and if a downstream verdict counts both 'beat present' AND 'phase slips at beat nulls' as separate dual evidence, that is exactly the p-value multiplication spec 0.2 forbids (same data, same beat structure, counted twice).",
+          "fix": "Keep slip-at-null tagging as a DESCRIPTIVE annotation only (for figures / localization), explicitly NOT a separate verdict-vector element. The verdict vector gets ONE beat element and ONE phase element; slip-localization may corroborate a beat call qualitatively but must not add an independent dual vote. Document this in the convergence-logic so the group script does not double-count.",
+          "severity": "low"
+        },
+        {
+          "component": "chirp_chirplet [22 62] Hz atom band-filter vs ridge band 25-58",
+          "risk": "Atoms are filtered to fc in [22,62] Hz, wider than the 25-58 ridge/filter band. Since seg is FIR-bandpassed 25-58 before hilbert, no real signal energy exists at 22-25 or 58-62, so atoms there are fit artifacts/edge leakage. Keeping them (22-62) admits skirt-band artifact atoms into the trajectory-geometry read, potentially creating spurious 'parallel' edges near the band edges that bias toward dual.",
+          "fix": "Tighten the atom-keep band to match the analysis band where signal actually lives (e.g. [25,58] or a hair inside, [26,57]) so no atom can be placed in the FIR transition skirt. If a margin is wanted for fit slop, make it small (±1 Hz) and document that no real energy exists beyond 25-58.",
+          "severity": "low"
+        }
+      ],
+      "unifiedConfig": [
+        {
+          "param": "fs",
+          "value": "500",
+          "usedBy": "ALL (fixed by pipeline)"
+        },
+        {
+          "param": "filtBand (broadband gamma)",
+          "value": "[25 58] Hz, ft_preproc_bandpassfilter 'firws', zero-phase",
+          "usedBy": "phase, beat, chirplet, decoup, spatial (all hilbert envelopes/phase)"
+        },
+        {
+          "param": "FASLT flo/fhi",
+          "value": "20 / 70 Hz",
+          "usedBy": "chirp_tfr_faslt (TFR), ridge, spectrogram display only"
+        },
+        {
+          "param": "FASLT Nf / df",
+          "value": "51 / 1 Hz (linspace 20-70)",
+          "usedBy": "chirp_tfr_faslt; kernel-cache key"
+        },
+        {
+          "param": "FASLT c1 / order [olo ohi] / mult",
+          "value": "3 / [3 30] / 1 — but CAP order at low ridge-band edge so 25 Hz half-support < padMs",
+          "usedBy": "chirp_tfr_faslt; kernel-cache key"
+        },
+        {
+          "param": "ridgeBand",
+          "value": "[25 58] Hz (bandMask)",
+          "usedBy": "chirp_ridge, anchors"
+        },
+        {
+          "param": "tfridge penalty / NumFrequencyBins",
+          "value": "~1 (calibrate Phase 0) / 2 bins",
+          "usedBy": "chirp_ridge (primary + peeled)"
+        },
+        {
+          "param": "peelHz (half-width)",
+          "value": "4 Hz (full notch ~8 Hz < min Df)",
+          "usedBy": "chirp_ridge second-ridge peeling"
+        },
+        {
+          "param": "anchor percentiles / clamp",
+          "value": "f_hi@20th, f_lo@80th transition pctile; clamp [27 56] Hz",
+          "usedBy": "chirp_ridge_anchors → phase crossing ANNOTATION, spatial band centers, figures ONLY (never per-trial window gate, never chirplet)"
+        },
+        {
+          "param": "epoch window / padMs",
+          "value": "[-1.0 +3.0] s around finalOnset; padMs >= max FASLT wavelet half-support (likely ~2.2-2.5 s at 25 Hz, NOT 600 ms) — derive from built kernel bank",
+          "usedBy": "epoching (all); trim trimSamp after transform/hilbert"
+        },
+        {
+          "param": "subWinSec",
+          "value": "0.15 s (~4-8 gamma cycles)",
+          "usedBy": "chirp_phase_test segmentation"
+        },
+        {
+          "param": "minTransSec / minTransSamp",
+          "value": "0.30 s (phase, >=2 subwin) / 75 samp=0.15 s (chirplet length guard)",
+          "usedBy": "phase, chirplet"
+        },
+        {
+          "param": "envDomain (NEW, per test)",
+          "value": "amplitude (beat) vs power (decoup/spatial band) — all from hilbert(narrow-FIR), never from FASLT",
+          "usedBy": "beat, decoup, spatial"
+        },
+        {
+          "param": "envFitOrder / hpCutoff",
+          "value": "2-3 poly / NaN (no HP; if any, <=3 Hz, NEVER 10)",
+          "usedBy": "chirp_beat_test (rule d)"
+        },
+        {
+          "param": "minBeatCycles",
+          "value": "2 within coexistWin",
+          "usedBy": "chirp_beat_test"
+        },
+        {
+          "param": "band (band-limited envelope)",
+          "value": "fHi±2-3 Hz, fLo±2-3 Hz / smoothMs ~30-50",
+          "usedBy": "decoup, spatial"
+        },
+        {
+          "param": "earlyWin / lateWin",
+          "value": "20th / 80th pctile of transitionWin",
+          "usedBy": "spatial (and anchor read)"
+        },
+        {
+          "param": "spatial eligibility",
+          "value": ">=2 well-separated good macBP (>=3 preferred); UNTIL contactGeom source exists, eligible=false reason='geometryUnknown' for all",
+          "usedBy": "chirp_spatial gate"
+        },
+        {
+          "param": "chirplet Q / verbose / refine / PType",
+          "value": "3 / 'no' (mandatory) / 'expectmax' (NOT mle) / 'Oneill'",
+          "usedBy": "chirp_chirplet (mp_adapt_chirplets direct, analytic hilbert input)"
+        },
+        {
+          "param": "chirplet M/D/i0/radix/mnits/level",
+          "value": "64 / 5 / 1 / 2 / 5 / 2 (MPACT defaults)",
+          "usedBy": "chirp_chirplet"
+        },
+        {
+          "param": "reconstruct PeriodEff",
+          "value": "true (match em_chirplets fit)",
+          "usedBy": "chirplet errA/errB BIC"
+        },
+        {
+          "param": "atom keep band",
+          "value": "[26 57] Hz (inside FIR band; NOT [22 62])",
+          "usedBy": "chirp_chirplet geometry filter"
+        },
+        {
+          "param": "unit maps (Oneill)",
+          "value": "fc_Hz=fc*fs/2/pi; chirp_Hz_per_s=cr*fs^2/2/pi; tc_s=(tc-1)/fs+transWin(1); sigma_s=d/fs",
+          "usedBy": "chirp_chirplet"
+        },
+        {
+          "param": "c_tol / crMin / dualDf / dfMin / trajThiSingle / chainGap",
+          "value": "10 Hz/s / 5 Hz/s / 3 Hz / 1 Hz / 0.66 / 1.5*median(sigma_s)",
+          "usedBy": "chirp_chirplet trajectory geometry"
+        },
+        {
+          "param": "Neff (BIC)",
+          "value": "#gamma cycles = meanFc_Hz*Ntrans/fs (NOT raw samples)",
+          "usedBy": "chirp_chirplet dBIC"
+        },
+        {
+          "param": "nSurr / threshold",
+          "value": "200 batch / 1000 Phase-0; 95th pctile; SHARED generator + rngSeed",
+          "usedBy": "ridge ridge-2, beat modSNR, chirplet atom, phase (none — phase uses rotation perm)"
+        },
+        {
+          "param": "nPerm (phase rotation null)",
+          "value": "1000",
+          "usedBy": "chirp_phase_test perm_z/perm_p"
+        },
+        {
+          "param": "rngSeed",
+          "value": "fixed 20260629; per-(session,trial) deterministic",
+          "usedBy": "surrogates, phase rotation, Phase-0 synth"
+        },
+        {
+          "param": "Phase-0 sweep grids",
+          "value": "overlap [50 100 200 500 1000 2000] ms; Df [3 5 7 10] Hz; ampRatio {1:1,2:1,4:1} (NaN for single families)",
+          "usedBy": "chirp_phase0_harness"
+        },
+        {
+          "param": "snrDb / burstLenSampler",
+          "value": "from measure_burst_lengths (in-band 25-58 Hz SNR; real median/IQR burst length)",
+          "usedBy": "chirp_synth_trial / harness"
+        },
+        {
+          "param": "windowSource (NEW Phase-0 axis)",
+          "value": "'oracle' (gt window) and 'pipeline' (ridge-derived) — score every test on both",
+          "usedBy": "chirp_phase0_harness scoring tables"
+        }
+      ],
+      "sharedSubstrateNotes": "All five components must agree on a SINGLE shared cfg struct and three shared data objects, plus one task-shared / task-specific split mirroring the existing pipeline. (1) CONFIG: one chirpCfg struct built once per run (setup_chirpAnalysis_paths.m registers Superlets/MPACT/mpact paths for both machines; labPaths block adds GitHub roots). Every function takes cfg and reads its params by name — no function hard-codes fs, bands, or windows. The unifiedConfig table above is that struct. (2) EPOCH TENSOR: epochs are built ONCE per channel as a real [nSamp x nTrial] matrix around behDat.finalOnset (behDat is a TABLE, index by name; cueTask sniffLabel=='cued' & wiTriali==1; O15 selected sniff config, truncate at next finalOnset → burstTruncated). The PADDED tensor (padMs derived from the actual max FASLT wavelet half-support, NOT 600 ms) is the shared substrate; trimSamp/trimming is applied consistently downstream. Channels selected by contains(label,'macBP') and bestMac (FOOOF gamma-peak, as in cue_fooof_macBP.m) — never row index; rows 1-32 EEG excluded from spatial. (3) CACHED TFR: chirp_tfr_faslt produces the FASLT POWER tensor [Nf x nT x nTrial] + meanPower ONCE per channel, with the wavelet bank memoized (persistent, keyed on fs,flo,fhi,Nf,c1,olo,ohi,mult). This single TFR is consumed by ridge (6.4), spectrogram display (6.3), and is the ONLY licensed use of FASLT power. CRITICAL: phase/envelope for beat/phase/decoup/spatial come from hilbert() of FIR-bandpassed signal, NEVER from this power TFR (KEY API FACT). (4) SHARED WINDOWS: chirp_ridge emits per-trial transitionWin AND coexistWin AND the anchors; downstream functions receive the correct window by explicit named arg (phase/chirplet←transitionWin, beat←coexistWin, spatial early/late←transition percentiles). (5) SHARED SURROGATES: one chirp_surrogates(bb,nSurr,rngSeed) generator feeds ridge-2, beat, and chirplet so their 95th-pctile thresholds are mutually comparable; phase uses a DIFFERENT (rotation) null and emits no surrogate p. Verdict vector has ONE element per test (phase, beat, spatial, decoup, chirplet) — slip-at-null and dBIC are corroborative annotations, not extra votes (no p-value multiplication, spec 0.2).",
+      "goAhead": "Conditional go. Build order: (0) setup_chirpAnalysis_paths.m + the unified chirpCfg struct + measure_burst_lengths.m on a few real O15/cue sessions FIRST — this sets padMs (from real burst length AND the FASLT wavelet half-support, which the 600 ms default badly underestimates) and snrDb, and surfaces the OB-contact/geometry open item. (1) chirp_tfr_faslt with kernel cache + chirp_ridge (primary, peeling, anchors, transition/coexist windows, dip stat) — the substrate everything else needs; calibrate tfridge penalty here. (2) chirp_phase0_harness + chirp_synth_trial, scoring on BOTH oracle and pipeline windows; this GATES interpretation, so it must precede any real-data verdict. (3) chirp_phase_test (primary single-channel test) and chirp_chirplet (geometry) in parallel — both consume transitionWin. (4) chirp_beat_test + chirp_temporal_decoup (consume coexistWin / band envelopes from FIR-hilbert). (5) chirp_spatial LAST and only after the OB-contact geometry source is confirmed (block as eligible=false='geometryUnknown' until then; the single-channel battery must stand alone per spec §4). (6) run_chirp_analysis_pipeline.m driver + CSVs + group adjudication. Hard blockers before real-data conclusions: padMs must cover the actual wavelet support (high); per-trial transitionWin must NOT be gated by the inward-biased average anchors (high); all envelopes from FIR-hilbert not FASLT power (high); spatial eligibility cannot default to true without a real geometry source (high). Profile ONE session locally, then run the chirplet+surrogate batch on labdesktop (parfor, outputs to E:)."
+    }
+  },
+  "workflowProgress": [
+    {
+      "type": "workflow_phase",
+      "index": 1,
+      "title": "Design"
+    },
+    {
+      "type": "workflow_phase",
+      "index": 2,
+      "title": "Synthesize"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 1,
+      "label": "design:tfr_ridge",
+      "phaseIndex": 1,
+      "phaseTitle": "Design",
+      "agentId": "aaa893e5813c462f3",
+      "model": "claude-opus-4-8",
+      "state": "done",
+      "startedAt": 1782787624955,
+      "queuedAt": 1782787624891,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "TFR + ridge extraction: chirp_tfr_faslt.m (FASLT power TFR …",
+      "promptPreview": "SHARED CONTEXT — chirp analysis (cueTask). Read the spec FIRST:\n  C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\cueAnalysis\\chirpAnalysis.md\nGoal: decide if OB sniff-locked gamma is ONE downchirping oscillator or TWO (hi-early / lo-late)\nwhose sum LOOKS like a chirp. Decidable reframing (spec 0.1): during the transition, is there ONE\nmoving spectral component or TWO simultaneous slowly-varying o…",
+      "lastProgressAt": 1782787744328,
+      "tokens": 65592,
+      "toolCalls": 7,
+      "durationMs": 119372,
+      "resultPreview": "{\"component\":\"TFR + ridge extraction: chirp_tfr_faslt.m (FASLT power TFR 20-70 Hz) and chirp_ridge.m (tfridge ridge tracking on 25-58 Hz with iterative surrogate-gated peeling, transition-window derivation, ridge-power-dip statistic, and subject-average f_hi/f_lo anchors)\",\"functionSignature\":\"function tfr = chirp_tfr_faslt(epochs, fs, cfg)  % and  function R = chirp_ridge(tfr, cfg)  -- where cfg …"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 2,
+      "label": "design:phase",
+      "phaseIndex": 1,
+      "phaseTitle": "Design",
+      "agentId": "a0baa942a041d7b7e",
+      "model": "claude-opus-4-8",
+      "state": "done",
+      "startedAt": 1782787624960,
+      "queuedAt": 1782787624891,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "chirp_phase_test.m — segmented phase-continuity test (spec …",
+      "promptPreview": "SHARED CONTEXT — chirp analysis (cueTask). Read the spec FIRST:\n  C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\cueAnalysis\\chirpAnalysis.md\nGoal: decide if OB sniff-locked gamma is ONE downchirping oscillator or TWO (hi-early / lo-late)\nwhose sum LOOKS like a chirp. Decidable reframing (spec 0.1): during the transition, is there ONE\nmoving spectral component or TWO simultaneous slowly-varying o…",
+      "lastProgressAt": 1782787723709,
+      "tokens": 63945,
+      "toolCalls": 7,
+      "durationMs": 98749,
+      "resultPreview": "{\"component\":\"chirp_phase_test.m — segmented phase-continuity test (spec 6.5), the PRIMARY single-channel discriminator. Per OB-channel (bestMac), per-trial: compare the broadband-gamma Hilbert phase increment against the ridge-IF-predicted increment over short consecutive sub-windows of the transition window; concentrated near-zero residual across trials => strong-for-single, dispersed => inconcl…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 3,
+      "label": "design:beat_temporal_spatial",
+      "phaseIndex": 1,
+      "phaseTitle": "Design",
+      "agentId": "a4e989e403f50fa5f",
+      "model": "claude-opus-4-8",
+      "state": "done",
+      "startedAt": 1782787723710,
+      "queuedAt": 1782787624891,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "chirp_beat_test.m / chirp_temporal_decoup.m / chirp_spatial…",
+      "promptPreview": "SHARED CONTEXT — chirp analysis (cueTask). Read the spec FIRST:\n  C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\cueAnalysis\\chirpAnalysis.md\nGoal: decide if OB sniff-locked gamma is ONE downchirping oscillator or TWO (hi-early / lo-late)\nwhose sum LOOKS like a chirp. Decidable reframing (spec 0.1): during the transition, is there ONE\nmoving spectral component or TWO simultaneous slowly-varying o…",
+      "lastProgressAt": 1782787830370,
+      "tokens": 60654,
+      "toolCalls": 9,
+      "durationMs": 106659,
+      "resultPreview": "{\"component\":\"chirp_beat_test.m / chirp_temporal_decoup.m / chirp_spatial.m (cueTask, fs=500). Three new functions under helperFuncs\\\\. Designed against spec sections 6.6 (envelope beating), 6.9 (temporal decoupling), 6.8 (spatial profile), output contract 7.1, anti-bias rules (a)-(e). Engines: nfaslt(input[buf x samp],Fs,[flo fhi],Nf,c1,[olo ohi],mult)->POWER[F x T]; phase/envelope from hilbert()…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 4,
+      "label": "design:chirplet",
+      "phaseIndex": 1,
+      "phaseTitle": "Design",
+      "agentId": "a85337d35fb9273a2",
+      "model": "claude-opus-4-8",
+      "state": "done",
+      "startedAt": 1782787744328,
+      "queuedAt": 1782787624891,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "MPACT chirplet trajectory-geometry discriminator (spec 6.7)…",
+      "promptPreview": "SHARED CONTEXT — chirp analysis (cueTask). Read the spec FIRST:\n  C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\cueAnalysis\\chirpAnalysis.md\nGoal: decide if OB sniff-locked gamma is ONE downchirping oscillator or TWO (hi-early / lo-late)\nwhose sum LOOKS like a chirp. Decidable reframing (spec 0.1): during the transition, is there ONE\nmoving spectral component or TWO simultaneous slowly-varying o…",
+      "lastProgressAt": 1782787866921,
+      "tokens": 66013,
+      "toolCalls": 9,
+      "durationMs": 122592,
+      "resultPreview": "{\"component\":\"MPACT chirplet trajectory-geometry discriminator (spec 6.7) — chirp_chirplet.m\",\"functionSignature\":\"function out = chirp_chirplet(seg, fs, transWin, cfg)\\n% seg      : real 1xN broadband-gamma epoch (25-58 Hz FIR-bandpassed, demeaned/detrended), fs=500\\n% transWin : [t0 t1] in seconds rel. epoch start = the TRANSITION window from ridge (spec 6.4/6.0); chirplet runs ONLY here\\n% cfg …"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 5,
+      "label": "design:phase0_harness",
+      "phaseIndex": 1,
+      "phaseTitle": "Design",
+      "agentId": "a530494b679e6b586",
+      "model": "claude-opus-4-8",
+      "state": "done",
+      "startedAt": 1782787830371,
+      "queuedAt": 1782787624891,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "Phase-0 validation harness (spec 5) — chirp_synth_trial.m (…",
+      "promptPreview": "SHARED CONTEXT — chirp analysis (cueTask). Read the spec FIRST:\n  C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\cueAnalysis\\chirpAnalysis.md\nGoal: decide if OB sniff-locked gamma is ONE downchirping oscillator or TWO (hi-early / lo-late)\nwhose sum LOOKS like a chirp. Decidable reframing (spec 0.1): during the transition, is there ONE\nmoving spectral component or TWO simultaneous slowly-varying o…",
+      "lastProgressAt": 1782787976449,
+      "tokens": 62184,
+      "toolCalls": 8,
+      "durationMs": 146077,
+      "resultPreview": "{\"component\":\"Phase-0 validation harness (spec 5) — chirp_synth_trial.m (synthesizer) + chirp_phase0_harness.m (sweep driver + per-test sensitivity/specificity/curve emitter), plus the REAL-DATA burst-length measurement (measure_burst_lengths.m). Gates all interpretation of the Phase-1 battery. New files under helperFuncs\\\\; outputs to a new chirpAnalysis\\\\phase0\\\\ dir. Synth signals are pushed th…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 6,
+      "label": "critic:integrate",
+      "phaseIndex": 2,
+      "phaseTitle": "Synthesize",
+      "agentId": "a5ea232f11a37c487",
+      "model": "claude-opus-4-8",
+      "state": "done",
+      "startedAt": 1782787976507,
+      "queuedAt": 1782787976458,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "All five components must agree on a SINGLE shared cfg struc…",
+      "promptPreview": "SHARED CONTEXT — chirp analysis (cueTask). Read the spec FIRST:\n  C:\\Users\\Adam\\Documents\\GitHub\\ZelanoLabScripts\\cueAnalysis\\chirpAnalysis.md\nGoal: decide if OB sniff-locked gamma is ONE downchirping oscillator or TWO (hi-early / lo-late)\nwhose sum LOOKS like a chirp. Decidable reframing (spec 0.1): during the transition, is there ONE\nmoving spectral component or TWO simultaneous slowly-varying o…",
+      "lastProgressAt": 1782788185489,
+      "tokens": 103806,
+      "toolCalls": 9,
+      "durationMs": 208981,
+      "resultPreview": "{\"risks\":[{\"component\":\"chirp_tfr_faslt vs all consumers — pad/trim contract\",\"risk\":\"nfaslt does its OWN internal zero-padding (computed from the largest wavelet half-support at 20 Hz, ~hundreds of samples) and returns [Nf x Npoints] at the SAME length as input via 'same' convolution. The designs ALSO require an upstream epoch pad ('pad beyond [-1,+3]s then trim trimSamp'). If chirp_tfr_faslt tri…"
+    }
+  ],
+  "totalTokens": 422194,
+  "totalToolCalls": 49
+}

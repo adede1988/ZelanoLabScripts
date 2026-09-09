@@ -1,0 +1,13 @@
+task,sessNum,n
+O15,1,12
+O15,2,11
+O15,3,5
+breathingTask,1,12
+breathingTask,2,11
+breathingTask,3,6
+cueTask,1,12
+cueTask,2,12
+cueTask,3,6
+threshTask,1,12
+threshTask,2,12
+threshTask,3,6

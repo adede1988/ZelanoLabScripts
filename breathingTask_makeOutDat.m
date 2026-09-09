@@ -2,22 +2,20 @@
 
 
 %custom function to stitch together breathing recordings into one file
+%
+% TASK-SPECIFIC ingestion (raw Neuralynx + photodiode/TTL + behavior CSV ->
+% <id>_breathingPreProc.mat). The whole body below is breathing-specific; for a
+% new task write a new <task>_makeOutDat.m. Only the header (labPaths + the
+% applyParams 'makeOutDat' cfg block) is shared boilerplate.
 
 clear
-
-codePre = 'C:\Users\Adam\Documents\GitHub\';
-% addpath([codePre 'HpcAccConnectivityProject/helperFuncs'])
-% addpath(genpath([codePre 'myFrequentUse']))
-% addpath([codePre 'myFrequentUse/export_fig_repo'])
-
-addpath(genpath('C:\Users\Adam\Documents\eeglab2026.0.0'))
-% addpath([codePre 'fieldtrip-20230118'])
-% addpath([codePre 'emotionDecoding'])
-addpath([codePre 'slowBreathing'])
-addpath([codePre 'ZelanoLabScripts'])
-
-% set(0, 'defaultfigurewindowstyle', 'docked')
-% ft_defaults
+% ---- machine paths (everything machine-specific comes from labPaths) ----
+addpath(fileparts(mfilename('fullpath')));   % ensure labPaths() is reachable
+L       = labPaths();
+codePre = L.codePre;
+addpath(genpath(L.repo))
+addpath(genpath(L.slowBreathing))
+addpath(genpath(L.eeglab))
 
 cfg        = applyParams('breathingTask','makeOutDat');
 sessionIDs = cfg.sessionIDs;
@@ -35,7 +33,7 @@ try
 %% custom import for different participants: 
 disp(sessi)
 %check for pre existing processing: 
-if ~exist([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\redoAGAIN' ...
+if ~exist([datPre{datPrei(sessi)} sessionIDs{sessi} '\preProc\' ...
                 sessionIDs{sessi} '_breathingPreProc.mat'], 'file')
 
 

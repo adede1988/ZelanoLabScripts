@@ -1,0 +1,501 @@
+
+
+########################################################
+# TASK: breathingTask   (final file suffix: <id>_breathingPreproc.mat)
+########################################################
+  55 sessions listed for this task.
+  41 sessions have a final file on disk.
+
+  -- field presence across sessions (field : #sessions with it) --
+     CSClist                : 2
+     EEGCleaning            : 38
+     EEGInterpolation       : 38
+     OGdataDir              : 2
+     TTL                    : 41
+     badChans               : 38
+     baseEmotion            : 39
+     behDat                 : 41
+     blinkRemoval           : 38
+     bmObj                  : 39
+     data                   : 41
+     dataLap                : 38
+     downsampled            : 39
+     eegLocs                : 38
+     figs                   : 39
+     fs                     : 41
+     heartBeats             : 39
+     labels                 : 41
+     loadFile               : 2
+     moreThan1              : 39
+     origFS                 : 39
+     preProcScript          : 2
+     rspFlip                : 39
+     rspIDX                 : 39
+     sessID                 : 41
+     spikeRemoval           : 18
+     task                   : 41
+     tim                    : 2
+     type                   : 41
+
+  -- DEEP DUMP of rich session: 250623_Dupi_NMH_KS_2 --
+chanDat : struct  (24 fields)
+  behDat : table  [389 rows x 33 vars]
+     sniffOnset       double     [389x1] min=1750 max=8.931e+05
+     finalOnset       double     [389x1] min=1750 max=8.931e+05
+     condition        double     [389x1] min=1 max=6  uniq=[1 2 3 4 5 6]
+     Yonset           double     [389x1] min=-0.8883 max=2.456
+     inhaleMax        double     [389x1] min=0.1336 max=16.08
+     inMaxTim         double     [389x1] min=1921 max=8.932e+05
+     Yend             double     [389x1] min=-0.8883 max=2.456
+     endTim           double     [389x1] min=3920 max=8.956e+05
+     length           double     [389x1] min=1.6 max=12.48
+     amp              double     [389x1] min=-0.2748 max=16
+     exhaleMin        double     [389x1] min=-7.638 max=-0.2187
+     exMinTim         double     [389x1] min=2290 max=8.938e+05
+     index            double     [389x1] min=1 max=392
+     task             cell       [389x1 cell] e.g. 'audio'
+     noseMouth        cell       [389x1 cell] e.g. 'nose'
+     shadowFile       cell       [389x1 cell] e.g. 'NA'
+     warp             double     [389x1] min=0.66 max=1.33  uniq=[0.66 1 1.33]
+     calm_affective   double     [389x1] min=3.965 max=4  uniq=[3.965 3.9675 3.98 3.9825 4]
+     content_affective double     [389x1] min=3.96 max=4  uniq=[3.96 3.9625 3.965 3.97 3.9875 4]
+     emoAware_mindfulness double     [389x1] min=1.315 max=3.038  uniq=[1.315 1.3725 1.4425 1.4875 1.9975 3.0375]
+     emo_come_go_mindfulness double     [389x1] min=1.19 max=3.022  uniq=[1.19 1.2475 1.4875 1.6375 1.84 3.0225]
+     pl_up_emo_mindfulness double     [389x1] min=1.202 max=2.882  uniq=[1.2025 1.23 1.455 1.5025 1.575 2.8825]
+     pl_up_thoughts_mindfulness double     [389x1] min=1.373 max=2.143  uniq=[1.3725 1.4525 1.6375 1.6875 2.0675 2.1425]
+     relaxed_affective double     [389x1] min=3.96 max=4  uniq=[3.96 3.9625 3.965 3.9875 3.995 4]
+     tense_affective  double     [389x1] min=1.002 max=1.032  uniq=[1.0025 1.005 1.01 1.0125 1.0325]
+     thtPat_mindfulness double     [389x1] min=1.637 max=3.385  uniq=[1.6375 1.8225 1.9175 1.985 2.0025 3.385]
+     tht_come_go_mindfulness double     [389x1] min=1.067 max=3.38  uniq=[1.0675 1.95 2.04 2.915 3.16 3.38]
+     upset_affective  double     [389x1] min=1 max=1.032  uniq=[1 1.015 1.0325]
+     worried_affective double     [389x1] min=1 max=1.035  uniq=[1 1.005 1.0325 1.035]
+     goodBreath       double     [389x1] min=0 max=1  uniq=[0 1]
+     maxRR            double     [389x1] min=0 max=1.2
+     minRR            double     [389x1] min=0 max=1.074
+     RR_max_min       double     [389x1] min=0 max=0.408
+     first 3 row(s):
+           <strong>sniffOnset</strong>    <strong>finalOnset</strong>    <strong>condition</strong>     <strong>Yonset</strong>      <strong>inhaleMax</strong>    <strong>inMaxTim</strong>     <strong>Yend</strong>     <strong>endTim</strong>    <strong>length</strong>      <strong>amp</strong>       <strong>exhaleMin</strong>    <strong>exMinTim</strong>    <strong>index</strong>      <strong>task</strong>       <strong>noseMouth</strong>    <strong>shadowFile</strong>    <strong>warp</strong>    <strong>calm_affective</strong>    <strong>content_affective</strong>    <strong>emoAware_mindfulness</strong>    <strong>emo_come_go_mindfulness</strong>    <strong>pl_up_emo_mindfulness</strong>    <strong>pl_up_thoughts_mindfulness</strong>    <strong>relaxed_affective</strong>    <strong>tense_affective</strong>    <strong>thtPat_mindfulness</strong>    <strong>tht_come_go_mindfulness</strong>    <strong>upset_affective</strong>    <strong>worried_affective</strong>    <strong>goodBreath</strong>    <strong>maxRR</strong>     <strong>minRR</strong>     <strong>RR_max_min</strong>
+           <strong>__________</strong>    <strong>__________</strong>    <strong>_________</strong>    <strong>_________</strong>    <strong>_________</strong>    <strong>________</strong>    <strong>______</strong>    <strong>______</strong>    <strong>______</strong>    <strong>________</strong>    <strong>_________</strong>    <strong>________</strong>    <strong>_____</strong>    <strong>_________</strong>    <strong>_________</strong>    <strong>__________</strong>    <strong>____</strong>    <strong>______________</strong>    <strong>_________________</strong>    <strong>____________________</strong>    <strong>_______________________</strong>    <strong>_____________________</strong>    <strong>__________________________</strong>    <strong>_________________</strong>    <strong>_______________</strong>    <strong>__________________</strong>    <strong>_______________________</strong>    <strong>_______________</strong>    <strong>_________________</strong>    <strong>__________</strong>    <strong>_____</strong>    <strong>_______</strong>    <strong>__________</strong>
+       
+              1750          1750           1        -0.040571      1.019        1921       2.456     3920      4.34     -0.18872     -1.0082       2290        1      {'audio'}    {'nose'}       {'NA'}      NaN         3.9675             3.9875                 3.0375                   3.0225                     1.575                      2.0675                   3.9875               1.005               3.385                    3.16                     1                 1.005              0          0.99      0.894       0.096  
+              3920          3920           1            2.456     13.788        4020      1.7914     6810      5.78       11.664     -6.0531       4200        2      {'audio'}    {'nose'}       {'NA'}      NaN         3.9675             3.9875                 3.0375                   3.0225                     1.575                      2.0675                   3.9875               1.005               3.385                    3.16                     1                 1.005              1         0.868    0.72825     0.13975  
+              6810          6810           1           1.7914     13.809        6930      0.2384     8890      4.16       12.794     -5.7956       7160        3      {'audio'}    {'nose'}       {'NA'}      NaN         3.9675             3.9875                 3.0375                   3.0225                     1.575                      2.0675                   3.9875               1.005               3.385                    3.16                     1                 1.005              1         0.844      0.716       0.128  
+       
+       
+  labels : cell [1 56]
+       {'Fp1', 'Fz', 'F3', 'F7', 'FT9', 'FC5', 'FC1', 'C3', 'T7', 'TP9', 'CP5', 'CP1', ...}
+  fs : double [1 1]  min=500 max=500  vals=500
+  data : double [56 900000]  min=-5862 max=5449, 2292 NaN
+  sessID : char  '250623_DUPI_NMH_KS_2'
+  task : char  'breathingTask'
+  figs : char  'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\250623_DUPI_NMH_KS_2\...'
+  type : char  'Dupi'
+  TTL : double [1 6]  min=0 max=7.5e+05  vals=[0 1.5e+05 3e+05 4.5e+05 6e+05 7.5e+05]
+  rspIDX : double [1 1]  min=3 max=3  vals=3
+  rspFlip : double [1 1]  min=-1 max=-1  vals=-1
+  origFS : double [1 1]  min=2000 max=2000  vals=2000
+  downsampled : double [1 1]  min=1 max=1  vals=1
+  eegLocs : table  [32 rows x 8 vars]
+     labels           string     uniq={C3,C4,CP1,CP2,CP5,CP6,Cz,F3}
+     X                double     [32x1] min=-0.1125 max=0.08314
+     Y                double     [32x1] min=-0.08438 max=0.08385
+     Z                double     [32x1] min=-0.04949 max=0.09817
+     theta            double     [32x1] min=-3.141 max=2.886
+     phi              double     [32x1] min=-0.5347 max=1.48
+     X_flat           double     [32x1] min=-0.08536 max=0.08544
+     Y_flat           double     [32x1] min=-0.06467 max=0.08986
+     first 3 row(s):
+           <strong>labels</strong>       <strong>X</strong>             <strong>Y</strong>             <strong>Z</strong>           <strong>theta</strong>         <strong>phi</strong>         <strong>X_flat</strong>       <strong>Y_flat</strong> 
+           <strong>______</strong>    <strong>________</strong>    <strong>___________</strong>    <strong>__________</strong>    <strong>__________</strong>    <strong>________</strong>    <strong>__________</strong>    <strong>________</strong>
+       
+           "Fp1"     0.082179       0.028827    -0.0068453       0.33737    -0.07844     -0.024535    0.088879
+           "Fz"        0.0573    -0.00030574      0.065086    -0.0053356     0.84892    0.00018811    0.058515
+           "F3"      0.052011       0.049203      0.041318       0.75766     0.52341     -0.035352    0.056018
+       
+       
+  badChans : cell [1 27]
+       {'F3', 'F7', 'FT9', 'FC5', 'C3', 'T7', 'TP9', 'CP5', 'Pz', 'P3', 'P7', 'O1', ...}
+  dataLap : double [32 900000]  min=-1.687e+04 max=2.446e+04
+  EEGInterpolation : double [1 1]  min=1 max=1  vals=1
+  EEGCleaning : double [1 1]  min=1 max=1  vals=1
+  blinkRemoval : double [1 1]  min=1 max=1  vals=1
+  spikeRemoval : double [1 1]  min=1 max=1  vals=1
+  bmObj : double [389 14]  min=-7.638 max=8.932e+04
+  moreThan1 : double [1 1]  min=1 max=1  vals=1
+  baseEmotion : table  [1 rows x 16 vars]
+     task             cell       [1x1 cell] e.g. 'pre'
+     noseMouth        cell       [1x1 cell] e.g. 'NA'
+     shadowFile       cell       [1x1 cell] e.g. 'NA'
+     warp             double     [1x1]
+     calm_affective   double     [1x1] min=3.958 max=3.958  uniq=3.9575
+     content_affective double     [1x1] min=3.987 max=3.987  uniq=3.9875
+     emoAware_mindfulness double     [1x1] min=3.96 max=3.96  uniq=3.96
+     emo_come_go_mindfulness double     [1x1] min=3.29 max=3.29  uniq=3.29
+     pl_up_emo_mindfulness double     [1x1] min=3.272 max=3.272  uniq=3.2725
+     pl_up_thoughts_mindfulness double     [1x1] min=3.96 max=3.96  uniq=3.96
+     relaxed_affective double     [1x1] min=3.98 max=3.98  uniq=3.98
+     tense_affective  double     [1x1] min=1 max=1  uniq=1
+     thtPat_mindfulness double     [1x1] min=3.405 max=3.405  uniq=3.405
+     tht_come_go_mindfulness double     [1x1] min=2.97 max=2.97  uniq=2.97
+     upset_affective  double     [1x1] min=1 max=1  uniq=1
+     worried_affective double     [1x1] min=1 max=1  uniq=1
+     first 1 row(s):
+            <strong>task</strong>      <strong>noseMouth</strong>    <strong>shadowFile</strong>    <strong>warp</strong>    <strong>calm_affective</strong>    <strong>content_affective</strong>    <strong>emoAware_mindfulness</strong>    <strong>emo_come_go_mindfulness</strong>    <strong>pl_up_emo_mindfulness</strong>    <strong>pl_up_thoughts_mindfulness</strong>    <strong>relaxed_affective</strong>    <strong>tense_affective</strong>    <strong>thtPat_mindfulness</strong>    <strong>tht_come_go_mindfulness</strong>    <strong>upset_affective</strong>    <strong>worried_affective</strong>
+           <strong>_______</strong>    <strong>_________</strong>    <strong>__________</strong>    <strong>____</strong>    <strong>______________</strong>    <strong>_________________</strong>    <strong>____________________</strong>    <strong>_______________________</strong>    <strong>_____________________</strong>    <strong>__________________________</strong>    <strong>_________________</strong>    <strong>_______________</strong>    <strong>__________________</strong>    <strong>_______________________</strong>    <strong>_______________</strong>    <strong>_________________</strong>
+       
+           {'pre'}     {'NA'}        {'NA'}      NaN         3.9575             3.9875                  3.96                     3.29                     3.2725                       3.96                     3.98                  1                 3.405                    2.97                     1                   1        
+       
+       
+  heartBeats : double [1 1664]  min=122 max=8.991e+05
+
+
+########################################################
+# TASK: cueTask   (final file suffix: <id>_cueTaskPreproc.mat)
+########################################################
+  36 sessions listed for this task.
+  35 sessions have a final file on disk.
+
+  -- field presence across sessions (field : #sessions with it) --
+     CSClist                : 2
+     EEGCleaning            : 27
+     EEGInterpolation       : 27
+     OGdataDir              : 2
+     TTL                    : 35
+     badChans               : 27
+     behDat                 : 35
+     blinkRemoval           : 27
+     data                   : 35
+     dataLap                : 27
+     dataLapFromInterp      : 27
+     downsampled            : 33
+     eegLocs                : 27
+     figs                   : 33
+     fs                     : 35
+     labels                 : 35
+     loadFile               : 2
+     moreThan1              : 33
+     origFS                 : 33
+     preProcScript          : 2
+     rspFlip                : 33
+     rspIDX                 : 33
+     sessID                 : 35
+     spikeRemoval           : 33
+     task                   : 35
+     type                   : 35
+
+  -- DEEP DUMP of rich session: 250623_Dupi_NMH_KS_2 --
+outDat : struct  (22 fields)
+  behDat : table  [40 rows x 13 vars]
+     sniffOnset       double     [40x1] min=3.261e+04 max=4.85e+05
+     n                double     [40x1] min=1 max=40
+     wiTriali         double     [40x1] min=1 max=1  uniq=1
+     TTLoffSet        double     [40x1] min=-264 max=308
+     sniffType        double     [40x1] min=1 max=1  uniq=1
+     sniffLabel       string     uniq={cued}
+     cue              double     [40x1] min=1 max=10
+     odor             double     [40x1] min=1 max=10
+     response         double     [40x1] min=1 max=2  uniq=[1 2]
+     respString       string     uniq={No,Yes}
+     type             string     uniq={cr,fa,hit,miss}
+     adjust           double     [40x1] min=132 max=510
+     finalOnset       double     [40x1] min=3.28e+04 max=4.852e+05
+     first 3 row(s):
+           <strong>sniffOnset</strong>    <strong>n</strong>    <strong>wiTriali</strong>    <strong>TTLoffSet</strong>    <strong>sniffType</strong>    <strong>sniffLabel</strong>    <strong>cue</strong>    <strong>odor</strong>    <strong>response</strong>    <strong>respString</strong>    <strong>type</strong>     <strong>adjust</strong>    <strong>finalOnset</strong>
+           <strong>__________</strong>    <strong>_</strong>    <strong>________</strong>    <strong>_________</strong>    <strong>_________</strong>    <strong>__________</strong>    <strong>___</strong>    <strong>____</strong>    <strong>________</strong>    <strong>__________</strong>    <strong>_____</strong>    <strong>______</strong>    <strong>__________</strong>
+       
+             32614       1       1            20           1          "cued"       2       2        2          "Yes"       "hit"     181        32795   
+             44040       2       1          -159           1          "cued"      10      10        2          "Yes"       "hit"     275        44315   
+             54582       3       1          -213           1          "cued"       4       4        2          "Yes"       "hit"     138        54720   
+       
+       
+  labels : cell [1 53]
+       {'Fp1', 'Fz', 'F3', 'F7', 'FT9', 'FC5', 'FC1', 'C3', 'T7', 'TP9', 'CP5', 'CP1', ...}
+  fs : double [1 1]  min=500 max=500  vals=500
+  data : double [53 504064]  min=-6473 max=5668
+  sessID : char  '250623_Dupi_NMH_KS_2'
+  task : char  'cueTask'
+  type : char  'Dupi'
+  figs : char  'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\250623_Dupi_NMH_KS_2\...'
+  rspIDX : double [1 1]  min=1 max=1  vals=1
+  rspFlip : double [1 1]  min=1 max=1  vals=1
+  TTL : table  [40 rows x 3 vars]
+     trialStart       double     [40x1] min=2.978e+04 max=4.821e+05
+     response         double     [40x1] min=3.459e+04 max=4.868e+05
+     sniff            double     [40x1] min=3.259e+04 max=4.849e+05
+     first 3 row(s):
+           <strong>trialStart</strong>    <strong>response</strong>    <strong>sniff</strong>
+           <strong>__________</strong>    <strong>________</strong>    <strong>_____</strong>
+       
+             29785        34586      32594
+             41430        45931      44199
+             52054        56430      54795
+       
+       
+  origFS : double [1 1]  min=2000 max=2000  vals=2000
+  downsampled : double [1 1]  min=1 max=1  vals=1
+  eegLocs : table  [32 rows x 8 vars]
+     labels           string     uniq={C3,C4,CP1,CP2,CP5,CP6,Cz,F3}
+     X                double     [32x1] min=-0.1125 max=0.08314
+     Y                double     [32x1] min=-0.08438 max=0.08385
+     Z                double     [32x1] min=-0.04949 max=0.09817
+     theta            double     [32x1] min=-3.141 max=2.886
+     phi              double     [32x1] min=-0.5347 max=1.48
+     X_flat           double     [32x1] min=-0.08536 max=0.08544
+     Y_flat           double     [32x1] min=-0.06467 max=0.08986
+     first 3 row(s):
+           <strong>labels</strong>       <strong>X</strong>             <strong>Y</strong>             <strong>Z</strong>           <strong>theta</strong>         <strong>phi</strong>         <strong>X_flat</strong>       <strong>Y_flat</strong> 
+           <strong>______</strong>    <strong>________</strong>    <strong>___________</strong>    <strong>__________</strong>    <strong>__________</strong>    <strong>________</strong>    <strong>__________</strong>    <strong>________</strong>
+       
+           "Fp1"     0.082179       0.028827    -0.0068453       0.33737    -0.07844     -0.024535    0.088879
+           "Fz"        0.0573    -0.00030574      0.065086    -0.0053356     0.84892    0.00018811    0.058515
+           "F3"      0.052011       0.049203      0.041318       0.75766     0.52341     -0.035352    0.056018
+       
+       
+  badChans : cell [1 29]
+       {'F3', 'F7', 'FT9', 'FC5', 'FC1', 'C3', 'T7', 'TP9', 'CP5', 'CP1', 'Pz', 'P3', ...}
+  dataLap : double [0 0]  all NaN/Inf  vals=[]
+  dataLapFromInterp : double [1 1]  min=0 max=0  vals=0
+  EEGInterpolation : double [1 1]  min=1 max=1  vals=1
+  EEGCleaning : double [1 1]  min=1 max=1  vals=1
+  blinkRemoval : double [1 1]  min=0 max=0  vals=0
+  spikeRemoval : double [1 1]  min=1 max=1  vals=1
+  moreThan1 : double [1 1]  min=0 max=0  vals=0
+
+
+########################################################
+# TASK: threshTask   (final file suffix: <id>_PEA_threshold_preproc.mat)
+########################################################
+  30 sessions listed for this task.
+  29 sessions have a final file on disk.
+
+  -- field presence across sessions (field : #sessions with it) --
+     EEGCleaning            : 17
+     EEGInterpolation       : 17
+     TTL                    : 29
+     badChans               : 17
+     behDat                 : 29
+     blinkRemoval           : 17
+     data                   : 29
+     dataLap                : 17
+     dataLapFromInterp      : 17
+     downsampled            : 29
+     eegLocs                : 17
+     figs                   : 29
+     fs                     : 29
+     labels                 : 29
+     moreThan1              : 29
+     origFS                 : 29
+     rspFlip                : 29
+     rspIDX                 : 29
+     sessID                 : 29
+     spikeRemoval           : 29
+     task                   : 29
+     type                   : 29
+
+  -- DEEP DUMP of rich session: 250623_Dupi_NMH_KS_2 --
+outDat : struct  (22 fields)
+  behDat : table  [45 rows x 12 vars]
+     sniffOnset       double     [45x1] min=7296 max=3.836e+05
+     n                double     [45x1] min=1 max=45
+     wiTriali         double     [45x1] min=1 max=1  uniq=1
+     TTLoffSet        double     [45x1] min=-298 max=401
+     sniffType        double     [45x1] min=1 max=1  uniq=1
+     sniffLabel       string     uniq={cued}
+     odor             double     [45x1] min=1 max=3  uniq=[1 2 3]
+     pleasantness     double     [45x1] min=669.1 max=901.6
+     intensity        double     [45x1] min=335 max=735
+     type             string     uniq={air,low,med}
+     adjust           double     [45x1] min=166 max=308
+     finalOnset       double     [45x1] min=7476 max=3.839e+05
+     first 3 row(s):
+           <strong>sniffOnset</strong>    <strong>n</strong>    <strong>wiTriali</strong>    <strong>TTLoffSet</strong>    <strong>sniffType</strong>    <strong>sniffLabel</strong>    <strong>odor</strong>    <strong>pleasantness</strong>    <strong>intensity</strong>    <strong>type</strong>     <strong>adjust</strong>    <strong>finalOnset</strong>
+           <strong>__________</strong>    <strong>_</strong>    <strong>________</strong>    <strong>_________</strong>    <strong>_________</strong>    <strong>__________</strong>    <strong>____</strong>    <strong>____________</strong>    <strong>_________</strong>    <strong>_____</strong>    <strong>______</strong>    <strong>__________</strong>
+       
+              7296       1       1           136           1          "cued"       1         767.69           355      "air"     180         7476   
+             15694       2       1          -298           1          "cued"       3         901.64        422.75      "med"     166        15860   
+             24748       3       1           182           1          "cued"       2         742.65        357.67      "low"     219        24967   
+       
+       
+  labels : cell [1 53]
+       {'Fp1', 'Fz', 'F3', 'F7', 'FT9', 'FC5', 'FC1', 'C3', 'T7', 'TP9', 'CP5', 'CP1', ...}
+  fs : double [1 1]  min=500 max=500  vals=500
+  data : double [53 399104]  min=-6049 max=6011
+  sessID : char  '250623_Dupi_NMH_KS_2'
+  task : char  'threshTask'
+  type : char  'Dupi'
+  figs : char  'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\250623_Dupi_NMH_KS_2\...'
+  rspIDX : double [1 1]  min=1 max=1  vals=1
+  rspFlip : double [1 1]  min=1 max=1  vals=1
+  TTL : table  [45 rows x 3 vars]
+     start            double     [45x1] min=6160 max=3.825e+05
+     trial            double     [45x1] min=1 max=45
+     sniff            double     [45x1] min=7160 max=3.835e+05
+     first 3 row(s):
+           <strong>start</strong>    <strong>trial</strong>    <strong>sniff</strong>
+           <strong>_____</strong>    <strong>_____</strong>    <strong>_____</strong>
+       
+            6160      1       7160
+           14992      2      15992
+           23566      3      24566
+       
+       
+  origFS : double [1 1]  min=2000 max=2000  vals=2000
+  downsampled : double [1 1]  min=1 max=1  vals=1
+  eegLocs : table  [32 rows x 8 vars]
+     labels           string     uniq={C3,C4,CP1,CP2,CP5,CP6,Cz,F3}
+     X                double     [32x1] min=-0.1125 max=0.08314
+     Y                double     [32x1] min=-0.08438 max=0.08385
+     Z                double     [32x1] min=-0.04949 max=0.09817
+     theta            double     [32x1] min=-3.141 max=2.886
+     phi              double     [32x1] min=-0.5347 max=1.48
+     X_flat           double     [32x1] min=-0.08536 max=0.08544
+     Y_flat           double     [32x1] min=-0.06467 max=0.08986
+     first 3 row(s):
+           <strong>labels</strong>       <strong>X</strong>             <strong>Y</strong>             <strong>Z</strong>           <strong>theta</strong>         <strong>phi</strong>         <strong>X_flat</strong>       <strong>Y_flat</strong> 
+           <strong>______</strong>    <strong>________</strong>    <strong>___________</strong>    <strong>__________</strong>    <strong>__________</strong>    <strong>________</strong>    <strong>__________</strong>    <strong>________</strong>
+       
+           "Fp1"     0.082179       0.028827    -0.0068453       0.33737    -0.07844     -0.024535    0.088879
+           "Fz"        0.0573    -0.00030574      0.065086    -0.0053356     0.84892    0.00018811    0.058515
+           "F3"      0.052011       0.049203      0.041318       0.75766     0.52341     -0.035352    0.056018
+       
+       
+  badChans : cell [1 29]
+       {'F3', 'F7', 'FT9', 'FC5', 'FC1', 'C3', 'T7', 'TP9', 'CP5', 'CP1', 'Pz', 'P3', ...}
+  dataLap : double [0 0]  all NaN/Inf  vals=[]
+  dataLapFromInterp : double [1 1]  min=0 max=0  vals=0
+  EEGInterpolation : double [1 1]  min=1 max=1  vals=1
+  EEGCleaning : double [1 1]  min=1 max=1  vals=1
+  blinkRemoval : double [1 1]  min=0 max=0  vals=0
+  spikeRemoval : double [1 1]  min=1 max=1  vals=1
+  moreThan1 : double [1 1]  min=0 max=0  vals=0
+
+
+########################################################
+# TASK: O15   (final file suffix: <id>_O15preproc.mat)
+########################################################
+  39 sessions listed for this task.
+  22 sessions have a final file on disk.
+
+  -- field presence across sessions (field : #sessions with it) --
+     CSClist                : 22
+     EEGCleaning            : 19
+     EEGInterpolation       : 19
+     OGdataDir              : 22
+     TTL                    : 22
+     badChans               : 19
+     behDat                 : 22
+     blinkRemoval           : 19
+     data                   : 22
+     dataLap                : 19
+     downsampled            : 22
+     eegLocs                : 19
+     figs                   : 22
+     fs                     : 22
+     labels                 : 22
+     loadFile               : 22
+     moreThan1              : 22
+     origFS                 : 22
+     preProcScript          : 22
+     rspFlip                : 22
+     rspIDX                 : 22
+     sessID                 : 22
+     spikeRemoval           : 22
+     task                   : 22
+     type                   : 22
+
+  -- DEEP DUMP of rich session: 250623_Dupi_NMH_KS_2 --
+outDat : struct  (25 fields)
+  behDat : table  [81 rows x 11 vars]
+     sniffOnset       double     [81x1] min=2.223e+05 max=7.921e+05
+     n                double     [81x1] min=1 max=15
+     wiTriali         double     [81x1] min=1 max=8  uniq=[1 2 3 4 5 6 7 8]
+     TTLoffSet        double     [81x1] min=-954 max=416
+     sniffType        double     [81x1] min=1 max=3  uniq=[1 2 3]
+     sniffLabel       string     uniq={confirm,free,start}
+     target           string     uniq={anise,banana,beer,cinnamon,coffee,garlic,lemon,marker}
+     response         string     uniq={bubble gum,chemical,chemical gasoline,chocolate or vanilla,coffee,fruit,fruity,garlic}
+     expScore         double     [81x1] min=0 max=1  uniq=[0 0.5 1]
+     adjust           double     [81x1] min=-342 max=859
+     finalOnset       double     [81x1] min=2.224e+05 max=7.923e+05
+     first 3 row(s):
+           <strong>sniffOnset</strong>    <strong>n</strong>    <strong>wiTriali</strong>    <strong>TTLoffSet</strong>    <strong>sniffType</strong>    <strong>sniffLabel</strong>     <strong>target</strong>     <strong>response</strong>    <strong>expScore</strong>    <strong>adjust</strong>    <strong>finalOnset</strong>
+           <strong>__________</strong>    <strong>_</strong>    <strong>________</strong>    <strong>_________</strong>    <strong>_________</strong>    <strong>__________</strong>    <strong>________</strong>    <strong>________</strong>    <strong>________</strong>    <strong>______</strong>    <strong>__________</strong>
+       
+           2.2225e+05    1       1          -322           1         "start"      "coffee"    "coffee"       1         174      2.2243e+05
+           2.2495e+05    1       2          -341           2         "free"       "coffee"    "coffee"       1         211      2.2516e+05
+           2.2719e+05    1       3          -276           2         "free"       "coffee"    "coffee"       1         310       2.275e+05
+       
+       
+  labels : cell [1 54]
+       {'Fp1', 'Fz', 'F3', 'F7', 'FT9', 'FC5', 'FC1', 'C3', 'T7', 'TP9', 'CP5', 'CP1', ...}
+  fs : double [1 1]  min=500 max=500  vals=500
+  data : double [54 809216]  min=-5357 max=5292
+  sessID : char  '250623_Dupi_NMH_KS_2'
+  task : char  'O15'
+  type : char  'Dupi'
+  figs : char  'R:\Neurology\Zelano_Lab\Lab_Common\Adam\Dupi_processing\250623_Dupi_NMH_KS_2\O15'
+  rspIDX : double [1 1]  min=1 max=1  vals=1
+  rspFlip : double [1 1]  min=1 max=1  vals=1
+  CSClist : cell [1 45]
+       {'CSC33_0002', 'CSC34_0002', 'CSC35_0002', 'CSC36_0002', 'CSC37_0002', 'CSC38_0002', 'CSC39_0002', 'CSC40_0002', 'CSC41_0002', 'CSC42_0002', 'CSC43_0002', 'CSC44_0002', ...}
+  OGdataDir : char  'R:\Neurology\Zelano_Lab\Lab_Common\Dupi\250623_Dupi_NMH_KS_2'
+  loadFile : char  'LoadData_250623_Dupi_NMH_KS_2.m'
+  preProcScript : char  'O15PreProc.m'
+  TTL : table  [15 rows x 20 vars]
+     trialStart       double     [15x1] min=2.182e+05 max=7.636e+05
+     buttonPress      double     [15x1] min=2.296e+05 max=7.788e+05
+     confirmSniff     double     [15x1] min=2.441e+05 max=7.92e+05
+     free1            double     [15x1] min=2.226e+05 max=7.675e+05
+     free2            double     [15x1] min=2.253e+05 max=7.711e+05
+     free3            double     [15x1] min=2.275e+05 max=7.718e+05
+     free4            double     [15x1] min=2.722e+05 max=7.73e+05
+     free5            double     [15x1] min=2.75e+05 max=7.75e+05
+     free6            double     [15x1] min=4.056e+05 max=7.352e+05  uniq=[4.0564e+05 5.1823e+05 6.3279e+05 7.3518e+05]
+     free7            double     [15x1] min=5.205e+05 max=6.342e+05  uniq=[5.205e+05 6.3417e+05]
+     free8            double     [15x1] min=6.355e+05 max=6.355e+05  uniq=6.355e+05
+     free9            double     [15x1]
+     free10           double     [15x1]
+     free11           double     [15x1]
+     free12           double     [15x1]
+     free13           double     [15x1]
+     free14           double     [15x1]
+     free15           double     [15x1]
+     free16           double     [15x1]
+     free17           double     [15x1]
+     first 3 row(s):
+           <strong>trialStart</strong>    <strong>buttonPress</strong>    <strong>confirmSniff</strong>      <strong>free1</strong>         <strong>free2</strong>         <strong>free3</strong>         <strong>free4</strong>         <strong>free5</strong>       <strong>free6</strong>    <strong>free7</strong>    <strong>free8</strong>    <strong>free9</strong>    <strong>free10</strong>    <strong>free11</strong>    <strong>free12</strong>    <strong>free13</strong>    <strong>free14</strong>    <strong>free15</strong>    <strong>free16</strong>    <strong>free17</strong>
+           <strong>__________</strong>    <strong>___________</strong>    <strong>____________</strong>    <strong>__________</strong>    <strong>__________</strong>    <strong>__________</strong>    <strong>__________</strong>    <strong>__________</strong>    <strong>_____</strong>    <strong>_____</strong>    <strong>_____</strong>    <strong>_____</strong>    <strong>______</strong>    <strong>______</strong>    <strong>______</strong>    <strong>______</strong>    <strong>______</strong>    <strong>______</strong>    <strong>______</strong>    <strong>______</strong>
+       
+           2.1818e+05    2.2965e+05      2.4407e+05     2.2258e+05    2.2529e+05    2.2747e+05           NaN           NaN     NaN      NaN      NaN      NaN      NaN       NaN       NaN       NaN       NaN       NaN       NaN       NaN  
+           2.5989e+05    2.7966e+05      2.8678e+05     2.6386e+05    2.6684e+05    2.6903e+05    2.7222e+05    2.7497e+05     NaN      NaN      NaN      NaN      NaN       NaN       NaN       NaN       NaN       NaN       NaN       NaN  
+           2.9874e+05    3.1308e+05      3.2126e+05     3.0304e+05    3.0563e+05    3.0794e+05    3.1003e+05           NaN     NaN      NaN      NaN      NaN      NaN       NaN       NaN       NaN       NaN       NaN       NaN       NaN  
+       
+       
+  origFS : double [1 1]  min=2000 max=2000  vals=2000
+  downsampled : double [1 1]  min=1 max=1  vals=1
+  eegLocs : table  [32 rows x 8 vars]
+     labels           string     uniq={C3,C4,CP1,CP2,CP5,CP6,Cz,F3}
+     X                double     [32x1] min=-0.1125 max=0.08314
+     Y                double     [32x1] min=-0.08438 max=0.08385
+     Z                double     [32x1] min=-0.04949 max=0.09817
+     theta            double     [32x1] min=-3.141 max=2.886
+     phi              double     [32x1] min=-0.5347 max=1.48
+     X_flat           double     [32x1] min=-0.08536 max=0.08544
+     Y_flat           double     [32x1] min=-0.06467 max=0.08986
+     first 3 row(s):
+           <strong>labels</strong>       <strong>X</strong>             <strong>Y</strong>             <strong>Z</strong>           <strong>theta</strong>         <strong>phi</strong>         <strong>X_flat</strong>       <strong>Y_flat</strong> 
+           <strong>______</strong>    <strong>________</strong>    <strong>___________</strong>    <strong>__________</strong>    <strong>__________</strong>    <strong>________</strong>    <strong>__________</strong>    <strong>________</strong>
+       
+           "Fp1"     0.082179       0.028827    -0.0068453       0.33737    -0.07844     -0.024535    0.088879
+           "Fz"        0.0573    -0.00030574      0.065086    -0.0053356     0.84892    0.00018811    0.058515
+           "F3"      0.052011       0.049203      0.041318       0.75766     0.52341     -0.035352    0.056018
+       
+       
+  badChans : cell [1 30]
+       {'Fz', 'F3', 'F7', 'FT9', 'FC5', 'FC1', 'C3', 'T7', 'TP9', 'CP5', 'CP1', 'Pz', ...}
+  dataLap : double [32 809216]  min=-1.234e+04 max=1.642e+04
+  EEGInterpolation : double [1 1]  min=1 max=1  vals=1
+  EEGCleaning : double [1 1]  min=1 max=1  vals=1
+  blinkRemoval : double [1 1]  min=1 max=1  vals=1
+  spikeRemoval : double [1 1]  min=1 max=1  vals=1
+  moreThan1 : double [1 1]  min=1 max=1  vals=1

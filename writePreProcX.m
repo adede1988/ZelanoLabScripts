@@ -66,12 +66,11 @@ end
 % ============================ helpers ============================
 
 function xlsxPath = resolveDefaultXlsx()
-    adminP = 'R:\Neurology\Zelano_Lab\Lab_Common\Admin\dataTracking.xlsx';
-    localP = fullfile(fileparts(mfilename('fullpath')), 'dataTracking.xlsx');
-    if exist(adminP, 'file') == 2
-        xlsxPath = adminP;
+    L = labPaths();
+    if exist(L.adminXlsx, 'file') == 2
+        xlsxPath = L.adminXlsx;
     else
-        xlsxPath = localP;
+        xlsxPath = fullfile(L.repo, 'dataTracking.xlsx');
     end
 end
 
@@ -118,7 +117,7 @@ function k = taskKey(task)   % P.task -> key
 end
 
 function k = canonTask(t)    % sheet Task cell -> key
-    if isempty(t) || (isnumeric(t) && all(isnan(t(:)))) || ismissing(t)
+    if isBlank(t)
         k = ''; return;
     end
     s = lower(char(string(t)));
@@ -135,4 +134,12 @@ function k = canonTask(t)    % sheet Task cell -> key
         otherwise
             k = '';
     end
+end
+
+function tf = isBlank(v)
+    if isa(v, 'missing'), tf = true; return; end
+    if isnumeric(v) && (isempty(v) || all(isnan(v(:)))), tf = true; return; end
+    if (ischar(v) || isstring(v)) && strlength(strtrim(string(v))) == 0, tf = true; return; end
+    if iscell(v) && isempty(v), tf = true; return; end
+    tf = false;
 end

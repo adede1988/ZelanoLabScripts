@@ -85,4 +85,7 @@ function outDat = refine_onsets_with_phase(outDat, R, P)
         outDat.behDat.adjust(sniffi)     = delta;
         outDat.behDat.finalOnset(sniffi) = max(1, min(T, s0 + delta));
     end
+
+    % Manual-onset placeholder column: NaN here, filled in by hand during later QC.
+    outDat.behDat.manOnset = nan(nSniffs, 1);
 end

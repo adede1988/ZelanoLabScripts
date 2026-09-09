@@ -1,0 +1,5 @@
+measure,n,mean_audiobook,mean_focus,mean_diff,dz,t_p,p_fdr,wilcox_p,wilcox_fdr,rayleigh_p,vtest_p,mean_shift_rad,resultant_len,direction,note
+coup_MI,6,2.5714845585250577e-4,2.5714845585250577e-4,0,NA,NA,NA,NA,NA,NA,NA,NA,NA,n/a,identical audiobook/focus values in source (no condition contrast)
+coup_resultantLen,6,0.1732570334124545,0.1732570334124545,0,NA,NA,NA,NA,NA,NA,NA,NA,NA,n/a,identical audiobook/focus values in source (no condition contrast)
+coup_inhExhRatio,6,0.9814478776462308,0.9814478776462308,0,NA,NA,NA,NA,NA,NA,NA,NA,NA,n/a,identical audiobook/focus values in source (no condition contrast)
+coup_prefPhaseRad,6,-1.5066294947009697,-1.5066294947009697,0,NA,NA,NA,NA,NA,NA,NA,0,1,n/a,identical audiobook/focus prefPhase in source (all shifts=0; Rayleigh/V undefined)

@@ -43,6 +43,9 @@ function outDat = build_behavior_table_breathingTask(outDat, bmObj)
     outDat.behDat.sniffOnset = idx;
     outDat.behDat.finalOnset = idx;
 
+    % Manual-onset placeholder column: NaN here, filled in by hand during later QC.
+    outDat.behDat.manOnset = nan(size(idx));
+
     % Column 12: condition
     outDat.behDat.condition = bmObj(:, 12);
 

@@ -45,24 +45,9 @@ function outDat = downsample_data(outDat, fs_new)
             sig = resample(sig, p, q);
             sig = filtfilt(highd, sig);
             sig = filtfilt(lowd, sig);
-            
-            % X: channels x time, fs: sampling rate (Hz)
-            wo = 60/(fs_new/2);                 % normalized center freq
-            bw = wo/35;                     % Q=35 ~ 1.7 Hz 3-dB bandwidth at 60 Hz
-            [b,a] = iirnotch(wo, bw);
-            sig = filtfilt(b, a, double(sig));   % transpose to filter along time
-    
-            wo = 120/(fs_new/2);                 % normalized center freq
-            bw = wo/35;                     % Q=35 ~ 1.7 Hz 3-dB bandwidth at 120 Hz
-            [b,a] = iirnotch(wo, bw);
-            sig = filtfilt(b, a, double(sig));   % transpose to filter along time
-    
-            wo = 180/(fs_new/2);                 % normalized center freq
-            bw = wo/35;                     % Q=35 ~ 1.7 Hz 3-dB bandwidth at 180 Hz
-            [b,a] = iirnotch(wo, bw);
-            sig = filtfilt(b, a, double(sig));   % transpose to filter along time
 
-
+            % NOTE: line-noise notch filtering (60/120/180 Hz) intentionally
+            % removed -- downstream analyses handle line noise themselves.
 
             data_ds(ii,:,jj) = sig;
         end

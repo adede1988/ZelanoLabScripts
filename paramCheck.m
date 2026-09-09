@@ -31,6 +31,9 @@ function [outDat, P] = paramCheck(outDat, P)
             userData = 1; 
         end
         ii = ii+1;
+        if ii == 4
+            ii = 1; 
+        end
     end
 
 
