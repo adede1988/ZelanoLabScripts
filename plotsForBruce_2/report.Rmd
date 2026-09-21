@@ -234,7 +234,20 @@ kt(rd("breathing_deficit_summary.csv"), "Highlighted breathing measures: control
 
 **Periodic peak rate is ceiling-limited.** The fraction of breaths with a detectable periodic gamma bump rises toward control across sessions, but most Dupi are already **near ceiling at S1** (0.95–1.0), so the measure has little room to move and is hard to interpret as recovery.
 
-**Net.** A **gamma-bursting deficit** (Dupi < control, clearest in focused breathing) and a **chirp-slope recovery** (audiobook, early S1→S2) are the two coherent breathing-task signals — a *separation* marker and a *tracking* marker that live in different tasks. Neither is confirmed (bursting doesn't track; chirp doesn't survive correction; S3 is n = 6), but both are direction-consistent and worth powering up.
+## Within-trial gamma-frequency modulation — a control-specific focused-breathing effect
+
+Beyond the *level* of the ridge (chirp slope), the within-breath *variability* of the tracked ridge frequency — **`freqJitter`**, the SD of the 25–58 Hz ridge over 0–1000 ms post-inhale — dissociates the groups by task. In **controls**, freqJitter is **higher in focused breathing than audiobook** (Δ = +0.43 Hz, d~z~ = +1.12, paired *p* = 0.041; AD_2, 72 h fasted, excluded); in **Dupi session 1** it moves the other way (Δ = −0.22 Hz, d~z~ = −0.55, *p* = 0.096). The **group × condition interaction** — tested as a two-sample *t* on the per-session condition effect (focused − audiobook), since condition is within-session and an ordinary two-way ANOVA would mistreat a session's two blocks as independent — is **t(10.6) = 3.30, *p* = 0.0075** (Mann–Whitney *p* = 0.010). Controls *increase* within-breath frequency modulation when they attend to their breathing; Dupi patients at S1 do not.
+
+The participant-mean ridges make the shape explicit. Centering each participant-condition trajectory on its own −100…+1000 ms mean (so only *shape* survives, with no baseline-frequency offset — every curve is zero-mean and must cross 0), the **control focused ridge sweeps up ~2 Hz across the first ~400 ms while the audiobook ridge stays flat**; Dupi S1 shows a flat, incoherent trajectory in both conditions. Pixel-wise *t*-maps of gamma **z-power** for the same contrasts (control focus vs audiobook; control vs Dupi S1) yield **0 / 18 183 pixels surviving BH-FDR** — no detectable *amplitude* difference. The dissociation is specifically in **ridge-frequency dynamics**, not power, and belongs to the same ridge-sweep family as the chirp-slope recovery.
+
+*Exploratory:* control n = 6 sessions, the Dupi within-condition effect only trends, and this is one measure among the breathing-task family (not family-corrected). A lead consistent with the chirp story, not a confirmed effect.
+
+```{r ridge-mod-fig, out.width="100%", results="asis"}
+for(p in c("grant_freqJitter_interaction.png","grant_ridge_overlay_centered.png")){
+  fp <- file.path(proj,"out",p); if(file.exists(fp)) cat(sprintf("\n\n![](%s)\n\n", fp)) }
+```
+
+**Net.** A **gamma-bursting deficit** (Dupi < control, clearest in focused breathing), a **chirp-slope recovery** (audiobook, early S1→S2), and a **within-trial frequency-modulation** dissociation (controls raise ridge-frequency SD in focused breathing, Dupi S1 do not; interaction *p* = 0.008) are the coherent breathing-task signals — a *separation* marker, a *tracking* marker, and a task×group *modulation* marker, all in the ridge-sweep family and pointing the same way. None is confirmed (bursting doesn't track; chirp doesn't survive correction; modulation is exploratory and n = 6 controls; S3 is n = 6), but all three are direction-consistent and worth powering up.
 
 ---
 
