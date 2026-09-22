@@ -33,9 +33,20 @@ xlabel('Session','FontSize',FS+2,'FontWeight','bold');
 ylabel('Olfactory Function (z)','FontSize',FS+2,'FontWeight','bold');
 exportgraphics(f, fullfile(figDir,'FIG1_olfactory_recovery.png'), 'Resolution', 300);
 
-%% ---------------- FIGURE 2: vagal outflow vs olfaction ----------------
+%% ---------------- FIGURE 2: depth slope vs olfaction ----------------
+% Plotted in ms per z of breath depth (see ohrv_depth_msz), not the log-outcome
+% coefficient rsa_analyze stores as b_vol - the two agree at r = 0.95 across
+% these 7 subjects, but only the linear one is honestly labelled "ms/z".
+M = ohrv_depth_msz();
+dmsz = nan(height(Q),1);
+for i = 1:height(Q)
+    a = M.msz(M.subj==Q.subj(i) & M.sess==Q.from(i));
+    b = M.msz(M.subj==Q.subj(i) & M.sess==Q.to(i));
+    if ~isempty(a) && ~isempty(b), dmsz(i) = b - a; end
+end
+
 f = figure('Position',[60 60 760 640],'Color','w'); hold on
-x = Q.dOlf; y = Q.d_b_vol;
+x = Q.dOlf; y = dmsz;
 p = polyfit(x,y,1); xx = linspace(-0.85,1.75,20);
 plot(xx, polyval(p,xx), '-', 'Color', [.42 .48 .46], 'LineWidth', LW-0.7);
 for k = 1:numel(subs)
@@ -48,12 +59,13 @@ yline(0,':','Color',[.55 .58 .57],'LineWidth',2);
 xline(0,':','Color',[.55 .58 .57],'LineWidth',2);
 set(gca,'FontSize',FS,'LineWidth',AXLW,'Box','off','TickDir','out', ...
     'XColor',[.12 .14 .13],'YColor',[.12 .14 .13]);
-xlabel('Change in Olfactory Function','FontSize',FS+2,'FontWeight','bold');
-ylabel('Change in Vagal Outflow','FontSize',FS+2,'FontWeight','bold');
-xlim([-0.85 1.8]); ylim([-0.30 0.30]);
-text(-0.78, 0.265, sprintf('n = %d', height(Q)), 'FontSize',FS,'FontWeight','bold');
-text(-0.78, 0.205, sprintf('r = %.2f', corr(x,y)), 'FontSize',FS,'FontWeight','bold');
-text(-0.78, 0.145, sprintf('\\rho = %.2f', corr(x,y,'Type','Spearman')), ...
+xlabel('\Delta olfactory function (z)','FontSize',FS+2,'FontWeight','bold');
+ylabel('\Delta respHRV-depth slope (ms/z)','FontSize',FS+2,'FontWeight','bold');
+xlim([-0.85 1.8]); ylim([-17 29]);
+text(-0.78, 26.5, sprintf('n = %d', sum(isfinite(y))), 'FontSize',FS,'FontWeight','bold');
+text(-0.78, 22.5, sprintf('r = %.2f', corr(x,y,'Rows','complete')), ...
+    'FontSize',FS,'FontWeight','bold');
+text(-0.78, 18.5, sprintf('\\rho = %.2f', corr(x,y,'Type','Spearman','Rows','complete')), ...
     'FontSize',FS,'FontWeight','bold');
 exportgraphics(f, fullfile(figDir,'FIG2_vagal_vs_olfaction.png'), 'Resolution', 300);
 
