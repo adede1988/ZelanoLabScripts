@@ -242,6 +242,8 @@ The participant-mean ridges make the shape explicit. Centering each participant-
 
 *Exploratory:* control n = 6 sessions, the Dupi within-condition effect only trends, and this is one measure among the breathing-task family (not family-corrected). A lead consistent with the chirp story, not a confirmed effect.
 
+> **Moved (2026-09-24):** this analysis (scripts, live figures, cluster statistics) now lives in `breathingBulbCompare/freqModulation/`; the two figures below are the versions committed with this report.
+
 ```{r ridge-mod-fig, out.width="100%", results="asis"}
 for(p in c("grant_freqJitter_interaction.png","grant_ridge_overlay_centered.png")){
   fp <- file.path(proj,"out",p); if(file.exists(fp)) cat(sprintf("\n\n![](%s)\n\n", fp)) }
