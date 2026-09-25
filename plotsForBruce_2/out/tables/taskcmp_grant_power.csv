@@ -1,5 +1,0 @@
-measure,test,effect,effect_type,n_now,power_now,n_for_80
-peakLatMs,control baseline-vs-ATB (paired),1.61,dz,7,0.94,6
-peakLatMs,interaction Control x DupiS1 (two-sample on ATB-baseline),-0.39,d,7 vs 8,0.1,104
-earlyBandMax,control baseline-vs-ATB (paired),-0.48,dz,8,0.22,36
-earlyBandMax,interaction Control x DupiS1 (two-sample on ATB-baseline),0.63,d,8 vs 10,0.24,41

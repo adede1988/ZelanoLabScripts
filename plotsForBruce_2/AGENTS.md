@@ -13,7 +13,7 @@ Branch: `dupi-gamma-analysis`. Paths below are relative to `plotsForBruce_2/` un
 | Area | Owner | Report / main output |
 |---|---|---|
 | Main integrated report + gamma pipeline | **main-report agent** | `report.Rmd` → `out/report.html` |
-| Audiobook(=baseline)-vs-focusedBreathing(=ATB) comparison | **taskcmp agent** | `taskcmp_report.Rmd` → `taskcmp_report.html` (**project root**, not `out/`) |
+| Control task/condition comparisons (audiobook-vs-focus, olfactory-vs-non-olfactory) | **taskcmp agent** | **MOVED OUT → `breathingBulbCompare/taskCompare/` (2026-09-24)** — no longer in this repo |
 | Olfactory HRV ↔ respiration coupling | **olfactoryHRV agent** | `../olfactoryHRV/reports/{rsa,grant}_report.html` (repo-root dir; no shared upstream) |
 | **Shared upstream** | serialize edits | `code/extract_gamma_session.m`, `code/extract_spectro_session.m`, produced data tables |
 
@@ -51,55 +51,24 @@ All work through commit `9d87f69` is committed & pushed.
 
 ---
 
-## taskcmp agent
+## taskcmp agent — MOVED OUT (2026-09-24)
 
-Owns the control **audiobook (=baseline) vs focusedBreathing (=ATB)** comparison, paired
-within OBE controls. **Fully committed & pushed at `0346bf9`; currently holds zero
-uncommitted files.**
+**The entire control task/condition-comparison sub-project (audiobook-vs-focus, olfactory-vs-non-olfactory)
+was spun out of this repo into `breathingBulbCompare/taskCompare/`** (own git remote:
+`github.com/adede1988/breathingBulbCompare`). All `code/taskcmp_*`, `code/{scratch_ridge_bandmax,
+scratch_theta_pac,cluster_perm_audio_focus,integrate_new_controls,driver_rerun}.m`,
+`out/figs/taskcmp/*`, `out/tables/{taskcmp_*,scratch_*,breathing_blocks,superlet_FWHM}.*`, and
+`taskcmp_report.{Rmd,html}` were **removed from `plotsForBruce_2`** in the same commit as this note.
+Do not recreate them here — that work continues in the new repo.
 
-**Report lives at the PROJECT ROOT, not `out/`:** `taskcmp_report.Rmd` → `taskcmp_report.html`
-(self-contained, figures embedded). The old `out/taskcmp_report.html` + `out/taskcmp_synthesis.md`
-were stale pre-correction copies and were **deleted 2026-09-09** — don't recreate them.
-
-**Owns (don't edit):**
-- `code/taskcmp_*.{R,m}` — incl. `taskcmp_ridge_gated.m`, `taskcmp_theta_early.m`,
-  `taskcmp_superlet_blocks.m`, `taskcmp_ridge_diff.m`, `taskcmp_ridge_extrema.m`,
-  `taskcmp_ampratio.m`, `taskcmp_bandmetrics.m`, `taskcmp_groups_gamma.m`, `taskcmp_latency.m`,
-  `taskcmp_bandz.m`, `taskcmp_envoverlay.m`, `taskcmp_grantfigs.R`, `taskcmp_C2_decoding.R`,
-  `taskcmp_D_analysis.R`, `taskcmp_D_coupling.R`, `taskcmp_E_airflow.R`, `taskcmp_power.R`,
-  `taskcmp_B_report.R`, `taskcmp_verify.R`
-- `code/cluster_perm_audio_focus.m`, `code/scratch_ridge_bandmax.m`, `code/scratch_theta_pac.m`,
-  `code/integrate_new_controls.m`, `code/driver_rerun.m`
-- `taskcmp_report.Rmd`, `taskcmp_report.html`
-- `out/figs/taskcmp/*`
-- `out/tables/{taskcmp_*, scratch_*, breathing_blocks.csv, superlet_FWHM.csv}`
-- `.gitignore` rule `out/tables/*.mat` (my regenerable per-breath/ridge caches; CSV summaries ARE tracked)
-
-**Consumes (read-only):** `out/tables/{gamma_session_level.csv, responder_table.csv,
-session_scores.csv}` (main-report agent). Note: taskcmp otherwise reads the preprocessed finals
-**directly from R:** for its own superlet/ridge extraction — it does NOT go through the main
-gamma aggregators, so most taskcmp reruns don't need the main pipeline.
-
-**Shared files it edits — COORDINATE:**
-1. `code/extract_gamma_session.m` + `code/extract_spectro_session.m` — in `0346bf9` I extended
-   **only the breathing task-label matcher** (added the separatepreproc control labels
-   `audiobook` and `focusedBreathing`, alongside the existing `audio` / `focus|naturalFocus|slowFocus`).
-   This is a matcher change, **not** a new-metric change. Effect: separatepreproc-named control
-   finals (e.g. HM_2, SP_2) now yield audiobook/focusedBreathing breaths that were previously
-   dropped → the `out/gamma/perbreath` CSVs for those sessions change. Ping the main-report agent
-   and re-run its aggregators after any further edit here.
-2. **`out/tables/macbp_best.csv` — SHARED, IMPORTANT.** This is a main-pipeline product
-   (`run_scores.m`), but I **appended two control rows** (HM_2, SP_2 `breathingTask` best-macBP)
-   in `0346bf9`. **If the main pipeline regenerates `macbp_best.csv`, it must include HM_2 and SP_2,
-   or my appended rows are lost.** The taskcmp report + grant figs depend on those two rows for the
-   8-session control set.
-
-**Scientific note (for cross-report consistency):** the per-session gamma **peak-latency "timing"
-effect is a confirmed argmax artifact** — block grand-mean trajectories show *baseline* peaking
-first (~530 ms vs ATB ~1090 ms), and both the raw & z>3-gated ridge-frequency sweeps and the
-early-window (0–500 ms) theta ITPC/power are null. The **multivariate decoder** (5/6 subjects,
-Fisher p=7e-7, survives detrend) is the sole robust condition difference. Please don't cite
-"focus gamma is earlier" as a finding in any shared write-up.
+**Two threads it left behind in THIS repo (kept, still shared):**
+1. `code/extract_gamma_session.m` + `code/extract_spectro_session.m` — the breathing task-label
+   matcher extension (separatepreproc `audiobook`/`focusedBreathing` labels) stays; it benefits the
+   main pipeline. `code/slt_power_cont.m` + `code/ridge_track.m` also stay (shared methods; a copy
+   was vendored into the new repo).
+2. **`out/tables/macbp_best.csv`** still carries the two appended control rows (HM_2, SP_2
+   `breathingTask` best-macBP). If the main pipeline regenerates it, keep those rows — the new repo
+   consumes a *snapshot* of this file, but the main report's control set also relies on them.
 
 ---
 
