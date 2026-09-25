@@ -143,7 +143,7 @@ sharedUp=prctile(allv,99.5);
 fprintf('\nshared clim upper=%.2f (floor 4)\n', sharedUp);
 
 % ---------- render 8 ----------
-xlab='Time from +200 ms (ms)';
+xlab='Time from inhale (ms)';
 for g=1:numel(groups), for t=1:2
   gg=groups{g}; tag=tasks{t};
   mp=fullfile(T,sprintf('grant_group_meanZ_%s_%s.mat',gg,tag));

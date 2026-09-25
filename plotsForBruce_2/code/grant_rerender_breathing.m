@@ -7,7 +7,7 @@ codeDir=fileparts(mfilename('fullpath')); proj=fileparts(codeDir); T=fullfile(pr
 groups={'all','control','dupiS1','dupiS23'}; tasks={'audiobook','focusedBreathing'};
 for g=1:numel(groups), for t=1:numel(tasks)
   mp=fullfile(T,sprintf('grant_group_meanZ_%s_%s.mat',groups{g},tasks{t}));
-  grant_group_render(mp, tasks{t}, [100 1000], [], [25 60], 57, climUp, 4, groups{g}, 'Time from +200 ms (ms)');
+  grant_group_render(mp, tasks{t}, [100 1000], [], [25 60], 57, climUp, 4, groups{g}, 'Time from inhale (ms)');
 end, end
 fprintf('re-rendered 8 breathing heatmaps at clim [4 %.2f]\n', climUp);
 end

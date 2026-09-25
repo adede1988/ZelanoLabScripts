@@ -57,7 +57,7 @@ imagesc(ax,tb,Fb,t,[-cmax cmax]); axis(ax,'xy'); colormap(ax,rb()); hold(ax,'on'
 if any(sig(:)), contour(ax,tb,Fb,double(sig),[0.5 0.5],'k','LineWidth',3); end
 xline(ax,0,'k--','LineWidth',2);
 set(ax,'FontSize',30,'LineWidth',3.5); ylabel(ax,'Hz','FontWeight','bold','FontSize',42);
-xlabel(ax,'Time from +200 ms (ms)','FontWeight','bold','FontSize',38);
+xlabel(ax,'Time from inhale (ms)','FontWeight','bold','FontSize',38);
 cb=colorbar(ax); ax.Position=[0.15 0.26 0.68 0.60]; cb.Position=[0.845 0.26 0.024 0.60];
 cb.LineWidth=3; cb.FontSize=26; cb.Label.String='t'; cb.Label.FontSize=32;
 title(ax,ttl,'FontSize',24,'FontWeight','bold','Interpreter','none');
